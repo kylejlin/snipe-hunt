@@ -2,15 +2,21 @@ import React from "react";
 import { option } from "rusty-ts";
 import "./App.css";
 import CardComponent from "./components/CardComponent";
-import { getRandomState, tryCapture } from "./game";
+import { getRandomState, tryCapture, tryMove } from "./game";
 import stateSaver from "./stateSaver";
-import { AppState, Card, Player, CardType } from "./types";
+import { AppState, Card, Player, CardType, Row } from "./types";
 
 export default class App extends React.Component<{}, AppState> {
   constructor(props: {}) {
     super(props);
 
     this.state = loadState();
+
+    this.bindMethods();
+  }
+
+  bindMethods() {
+    this.onResetClicked = this.onResetClicked.bind(this);
   }
 
   saveState(newState: Partial<AppState>): void {
@@ -29,7 +35,7 @@ export default class App extends React.Component<{}, AppState> {
                 <td>{this.renderCards(gameState.alpha.reserve)}</td>
               </tr>
               <tr>
-                <td>1</td>
+                <td onClick={() => this.onRowNumberClicked(1)}>1</td>
                 <td>
                   {this.renderCards(gameState.alpha.backRow.filter(isBeta))}
                 </td>
@@ -38,7 +44,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
               </tr>
               <tr>
-                <td>2</td>
+                <td onClick={() => this.onRowNumberClicked(2)}>2</td>
                 <td>
                   {this.renderCards(gameState.alpha.frontRow.filter(isBeta))}
                 </td>
@@ -47,7 +53,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
               </tr>
               <tr>
-                <td>3</td>
+                <td onClick={() => this.onRowNumberClicked(3)}>3</td>
                 <td>
                   {this.renderCards(gameState.beta.frontRow.filter(isBeta))}
                 </td>
@@ -56,7 +62,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
               </tr>{" "}
               <tr>
-                <td>4</td>
+                <td onClick={() => this.onRowNumberClicked(4)}>4</td>
                 <td>
                   {this.renderCards(gameState.beta.backRow.filter(isBeta))}
                 </td>
@@ -71,6 +77,7 @@ export default class App extends React.Component<{}, AppState> {
           </table>
         </div>
         <div className="Moves"></div>
+        <button onClick={this.onResetClicked}>Reset</button>
       </div>
     );
   }
@@ -107,12 +114,42 @@ export default class App extends React.Component<{}, AppState> {
   tryCapture(attacker: CardType, target: CardType): void {
     tryCapture(this.state.gameState, attacker, target).match({
       ok: (newGameState) => {
-        this.saveState({ gameState: newGameState });
+        this.saveState({
+          gameState: newGameState,
+          selectedCard: option.none(),
+        });
       },
       err: (e) => {
         alert(e);
       },
     });
+  }
+
+  onRowNumberClicked(row: Row): void {
+    this.state.selectedCard.ifSome((selectedCard) => {
+      this.tryMove(selectedCard, row);
+    });
+  }
+
+  tryMove(selectedCard: CardType, row: Row): void {
+    tryMove(this.state.gameState, selectedCard, row).match({
+      ok: (newGameState) => {
+        this.saveState({
+          gameState: newGameState,
+          selectedCard: option.none(),
+        });
+      },
+      err: (e) => {
+        alert(e);
+      },
+    });
+  }
+
+  onResetClicked(): void {
+    if (window.confirm("Are you sure you want to reset?")) {
+      const state = getRandomState();
+      this.saveState(state);
+    }
   }
 }
 

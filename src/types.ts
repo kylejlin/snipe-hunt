@@ -5,7 +5,7 @@ import { Option } from "rusty-ts";
  * to state interfaces to ensure seralized state
  * compatibility detection will continue to work.
  */
-export const STATE_VERSION = 5;
+export const STATE_VERSION = 7;
 
 export interface AppState {
   stateVersion: typeof STATE_VERSION;

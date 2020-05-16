@@ -6,3 +6,10 @@
   -ms-user-select: none;
   user-select: none;
 }
+
+table,
+td {
+  border: 1px solid black;
+  vertical-align: top;
+  border-collapse: collapse;
+}

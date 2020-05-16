@@ -13,12 +13,12 @@ import {
   SubPlyType,
 } from "./types";
 
-export enum IllegalCapture {
+export enum IllegalMove {
   NotYourCard,
   AlreadyMoved,
   AttackerInReserve,
   TargetInReserve,
-  TargetOutOfRange,
+  DestinationOutOfRange,
   InsufficientElements,
 }
 
@@ -271,12 +271,12 @@ export function tryCapture(
   state: GameState,
   attackerType: CardType,
   targetType: CardType
-): Result<GameState, IllegalCapture> {
+): Result<GameState, IllegalMove> {
   const attacker = getCard(state, attackerType);
   const target = getCard(state, targetType);
 
   if (attacker.allegiance !== state.turn) {
-    return result.err(IllegalCapture.NotYourCard);
+    return result.err(IllegalMove.NotYourCard);
   }
 
   const alreadyMoved = state.pendingSubPly.match({
@@ -285,17 +285,17 @@ export function tryCapture(
   });
 
   if (alreadyMoved) {
-    return result.err(IllegalCapture.AlreadyMoved);
+    return result.err(IllegalMove.AlreadyMoved);
   }
 
   const optAttackerRow = getRow(state, attackerType);
   const optTargetRow = getRow(state, targetType);
 
   if (optAttackerRow.isNone()) {
-    return result.err(IllegalCapture.AttackerInReserve);
+    return result.err(IllegalMove.AttackerInReserve);
   }
   if (optTargetRow.isNone()) {
-    return result.err(IllegalCapture.TargetInReserve);
+    return result.err(IllegalMove.TargetInReserve);
   }
 
   const attackerRow = optAttackerRow.unwrap();
@@ -308,31 +308,37 @@ export function tryCapture(
         attackerRow + backward(attacker) === targetRow)
     )
   ) {
-    return result.err(IllegalCapture.TargetOutOfRange);
+    return result.err(IllegalMove.DestinationOutOfRange);
   }
 
   if (!doAttackerElementsTrumpTargetElements(attacker, target)) {
-    return result.err(IllegalCapture.InsufficientElements);
+    return result.err(IllegalMove.InsufficientElements);
   }
 
   const newState = cloneGameState(state);
   let capturedCards: Card[];
 
-  const mutRow = getMutRow(newState, targetRow);
-  if (hasTriplet(mutRow.concat([attacker]))) {
-    capturedCards = mutRow.map(demoteIfNeeded);
+  const mutAttackerRow = getMutRow(newState, attackerRow);
+  mutAttackerRow.splice(
+    mutAttackerRow.findIndex((c) => c.cardType === attacker.cardType),
+    1
+  );
 
-    mutRow.splice(0, mutRow.length);
+  const mutTargetRow = getMutRow(newState, targetRow);
+  if (hasTriplet(mutTargetRow.concat([attacker]))) {
+    capturedCards = mutTargetRow.map(demoteIfNeeded);
+
+    mutTargetRow.splice(0, mutTargetRow.length);
   } else {
     capturedCards = [demoteIfNeeded(target)];
-    mutRow.splice(
-      mutRow.findIndex((c) => c.cardType === target.cardType),
+    mutTargetRow.splice(
+      mutTargetRow.findIndex((c) => c.cardType === target.cardType),
       1
     );
   }
 
   newState[getPlayerKey(attacker.allegiance)].reserve.push(...capturedCards);
-  mutRow.push(attacker);
+  mutTargetRow.push(attacker);
   newState.pendingSubPly = option.some({
     subPlyType: SubPlyType.Move,
     moved: attacker.cardType,
@@ -443,7 +449,7 @@ function getMutRow(state: GameState, row: Row): Card[] {
     state.alpha.frontRow,
     state.beta.frontRow,
     state.beta.backRow,
-  ][row];
+  ][row - 1];
 }
 
 function hasTriplet(cards: Card[]): boolean {
@@ -490,4 +496,73 @@ function getPlayerKey(player: Player): "alpha" | "beta" {
 
 function demoteIfNeeded(card: Card): Card {
   return { ...card, isPromoted: false };
+}
+
+export function tryMove(
+  state: GameState,
+  attackerType: CardType,
+  destinationRow: Row
+): Result<GameState, IllegalMove> {
+  const attacker = getCard(state, attackerType);
+
+  if (attacker.allegiance !== state.turn) {
+    return result.err(IllegalMove.NotYourCard);
+  }
+
+  const alreadyMoved = state.pendingSubPly.match({
+    none: () => false,
+    some: (sub) => sub.subPlyType === SubPlyType.Move,
+  });
+
+  if (alreadyMoved) {
+    return result.err(IllegalMove.AlreadyMoved);
+  }
+
+  const optAttackerRow = getRow(state, attackerType);
+
+  if (optAttackerRow.isNone()) {
+    return result.err(IllegalMove.AttackerInReserve);
+  }
+
+  const attackerRow = optAttackerRow.unwrap();
+
+  if (
+    !(
+      attackerRow + forward(attacker) === destinationRow ||
+      (canMoveBackward(attacker) &&
+        attackerRow + backward(attacker) === destinationRow)
+    )
+  ) {
+    return result.err(IllegalMove.DestinationOutOfRange);
+  }
+
+  const newState = cloneGameState(state);
+  let capturedCards: Card[];
+
+  const mutAttackerRow = getMutRow(newState, attackerRow);
+  console.log(mutAttackerRow, newState, attackerRow);
+  mutAttackerRow.splice(
+    mutAttackerRow.findIndex((c) => c.cardType === attacker.cardType),
+    1
+  );
+
+  const mutTargetRow = getMutRow(newState, destinationRow);
+  if (hasTriplet(mutTargetRow.concat([attacker]))) {
+    capturedCards = mutTargetRow.map(demoteIfNeeded);
+
+    mutTargetRow.splice(0, mutTargetRow.length);
+  } else {
+    capturedCards = [];
+  }
+
+  newState[getPlayerKey(attacker.allegiance)].reserve.push(...capturedCards);
+  mutTargetRow.push(attacker);
+  newState.pendingSubPly = option.some({
+    subPlyType: SubPlyType.Move,
+    moved: attacker.cardType,
+    destination: destinationRow,
+    captures: capturedCards.map((c) => c.cardType),
+  });
+
+  return result.ok(newState);
 }

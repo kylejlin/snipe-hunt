@@ -18,6 +18,7 @@ export enum IllegalMove {
   AlreadyMoved,
   AttackerInReserve,
   TargetInReserve,
+  CannotEmptyRow,
   DestinationOutOfRange,
   InsufficientElements,
 }
@@ -301,6 +302,10 @@ export function tryCapture(
   const attackerRow = optAttackerRow.unwrap();
   const targetRow = optTargetRow.unwrap();
 
+  if (getMutRow(state, attackerRow).length === 1) {
+    return result.err(IllegalMove.CannotEmptyRow);
+  }
+
   if (
     !(
       attackerRow + forward(attacker) === targetRow ||
@@ -525,6 +530,10 @@ export function tryMove(
   }
 
   const attackerRow = optAttackerRow.unwrap();
+
+  if (getMutRow(state, attackerRow).length === 1) {
+    return result.err(IllegalMove.CannotEmptyRow);
+  }
 
   if (
     !(

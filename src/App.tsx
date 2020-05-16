@@ -2,7 +2,7 @@ import React from "react";
 import { option } from "rusty-ts";
 import "./App.css";
 import CardComponent from "./components/CardComponent";
-import { getRandomState, tryCapture, tryMove } from "./game";
+import { getRandomState, tryCapture, tryMove, getRow, tryToggle } from "./game";
 import stateSaver from "./stateSaver";
 import { AppState, Card, Player, CardType, Row } from "./types";
 
@@ -32,6 +32,12 @@ export default class App extends React.Component<{}, AppState> {
           <table>
             <tbody>
               <tr>
+                <td>Reserve</td>
+                <td
+                  className={
+                    gameState.turn === Player.Alpha ? "TurnIndicatorLight" : ""
+                  }
+                />
                 <td>{this.renderCards(gameState.alpha.reserve)}</td>
               </tr>
               <tr>
@@ -71,6 +77,12 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
               </tr>
               <tr>
+                <td>Reserve</td>
+                <td
+                  className={
+                    gameState.turn === Player.Beta ? "TurnIndicatorLight" : ""
+                  }
+                />
                 <td>{this.renderCards(gameState.beta.reserve)}</td>
               </tr>
             </tbody>
@@ -121,13 +133,25 @@ export default class App extends React.Component<{}, AppState> {
       },
       err: (e) => {
         alert(e);
+        this.saveState({ selectedCard: option.none() });
       },
     });
   }
 
   onRowNumberClicked(row: Row): void {
     this.state.selectedCard.ifSome((selectedCard) => {
-      this.tryMove(selectedCard, row);
+      getRow(this.state.gameState, selectedCard).match({
+        none: () => {
+          this.tryDrop(selectedCard, row);
+        },
+        some: (selectedCardRow) => {
+          if (selectedCardRow === row) {
+            this.tryToggle(selectedCard);
+          } else {
+            this.tryMove(selectedCard, row);
+          }
+        },
+      });
     });
   }
 
@@ -141,6 +165,24 @@ export default class App extends React.Component<{}, AppState> {
       },
       err: (e) => {
         alert(e);
+        this.saveState({ selectedCard: option.none() });
+      },
+    });
+  }
+
+  tryDrop(selectedCard: CardType, row: Row): void {}
+
+  tryToggle(selectedCard: CardType): void {
+    tryToggle(this.state.gameState, selectedCard).match({
+      ok: (newGameState) => {
+        this.saveState({
+          gameState: newGameState,
+          selectedCard: option.none(),
+        });
+      },
+      err: (e) => {
+        alert(e);
+        this.saveState({ selectedCard: option.none() });
       },
     });
   }

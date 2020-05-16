@@ -2,15 +2,20 @@ import { option, Option, Result, result } from "rusty-ts";
 import {
   AppState,
   Card,
+  CardPropertyMap,
   CardType,
   Element,
   GameState,
+  MutCard,
+  MutGameState,
   Player,
   Position,
   Row,
   STATE_VERSION,
-  CardPropertyMap,
   SubPlyType,
+  PlyType,
+  MoveSubPly,
+  DemoteSubPly,
 } from "./types";
 
 export enum IllegalMove {
@@ -21,6 +26,13 @@ export enum IllegalMove {
   CannotEmptyRow,
   DestinationOutOfRange,
   InsufficientElements,
+}
+
+export enum IllegalToggle {
+  NotYourCard,
+  SnipeIsUnpromotable,
+  AlreadyMadeSubPly,
+  CannotPromoteUntilMoveIsMade,
 }
 
 interface ElementCountTable {
@@ -280,12 +292,7 @@ export function tryCapture(
     return result.err(IllegalMove.NotYourCard);
   }
 
-  const alreadyMoved = state.pendingSubPly.match({
-    none: () => false,
-    some: (sub) => sub.subPlyType === SubPlyType.Move,
-  });
-
-  if (alreadyMoved) {
+  if (hasAlreadyMoved(state)) {
     return result.err(IllegalMove.AlreadyMoved);
   }
 
@@ -320,7 +327,7 @@ export function tryCapture(
     return result.err(IllegalMove.InsufficientElements);
   }
 
-  const newState = cloneGameState(state);
+  const newState = cloneGameStateAsMut(state);
   let capturedCards: Card[];
 
   const mutAttackerRow = getMutRow(newState, attackerRow);
@@ -331,30 +338,53 @@ export function tryCapture(
 
   const mutTargetRow = getMutRow(newState, targetRow);
   if (hasTriplet(mutTargetRow.concat([attacker]))) {
-    capturedCards = mutTargetRow.map(demoteIfNeeded);
+    capturedCards = mutTargetRow;
 
     mutTargetRow.splice(0, mutTargetRow.length);
   } else {
-    capturedCards = [demoteIfNeeded(target)];
+    capturedCards = [target];
     mutTargetRow.splice(
       mutTargetRow.findIndex((c) => c.cardType === target.cardType),
       1
     );
   }
 
-  newState[getPlayerKey(attacker.allegiance)].reserve.push(...capturedCards);
+  newState[getPlayerKey(attacker.allegiance)].reserve.push(
+    ...capturedCards.map(toReserved(attacker.allegiance))
+  );
   mutTargetRow.push(attacker);
-  newState.pendingSubPly = option.some({
-    subPlyType: SubPlyType.Move,
-    moved: attacker.cardType,
-    destination: targetRow,
-    captures: capturedCards.map((c) => c.cardType),
-  });
+
+  if (newState.pendingSubPly.isSome()) {
+    const demotion = newState.pendingSubPly.unwrap() as DemoteSubPly;
+    newState.plies.push({
+      plyType: PlyType.DemoteMove,
+      demoted: demotion.demoted,
+      moved: attacker.cardType,
+      destination: targetRow,
+      captures: capturedCards.map((c) => c.cardType),
+    });
+    newState.turn = opponentOf(newState.turn);
+    newState.pendingSubPly = option.none();
+  } else {
+    newState.pendingSubPly = option.some({
+      subPlyType: SubPlyType.Move,
+      moved: attacker.cardType,
+      destination: targetRow,
+      captures: capturedCards.map((c) => c.cardType),
+    });
+  }
 
   return result.ok(newState);
 }
 
-function getRow(state: GameState, cardType: CardType): Option<Row> {
+function hasAlreadyMoved(state: GameState): boolean {
+  return state.pendingSubPly.match({
+    none: () => false,
+    some: (sub) => sub.subPlyType === SubPlyType.Move,
+  });
+}
+
+export function getRow(state: GameState, cardType: CardType): Option<Row> {
   if (state.alpha.backRow.some((card) => card.cardType === cardType)) {
     return option.some(1);
   }
@@ -370,17 +400,8 @@ function getRow(state: GameState, cardType: CardType): Option<Row> {
   return option.none();
 }
 
-function getCard(state: GameState, cardType: CardType): Card {
-  function matchesType(card: Card): boolean {
-    return card.cardType === cardType;
-  }
-
-  return (state.alpha.reserve.find(matchesType) ||
-    state.alpha.backRow.find(matchesType) ||
-    state.alpha.frontRow.find(matchesType) ||
-    state.beta.frontRow.find(matchesType) ||
-    state.beta.backRow.find(matchesType) ||
-    state.beta.reserve.find(matchesType))!;
+function getCard(state: GameState, cardType: CardType): Readonly<Card> {
+  return getMutCard(state, cardType);
 }
 
 function forward(card: Card): number {
@@ -433,7 +454,7 @@ function doesTrump(a: Element, b: Element): boolean {
   );
 }
 
-function cloneGameState(state: GameState): GameState {
+function cloneGameStateAsMut(state: GameState): MutGameState {
   const str = JSON.stringify(state, (_k, v) => {
     if (v !== null && "object" === typeof v && "function" === typeof v.unwrap) {
       return v.unwrapOr(null);
@@ -499,8 +520,10 @@ function getPlayerKey(player: Player): "alpha" | "beta" {
   }
 }
 
-function demoteIfNeeded(card: Card): Card {
-  return { ...card, isPromoted: false };
+function toReserved(owner: Player): (card: Card) => Card {
+  return function toReserved(card: Card): Card {
+    return { ...card, allegiance: owner, isPromoted: false };
+  };
 }
 
 export function tryMove(
@@ -514,12 +537,7 @@ export function tryMove(
     return result.err(IllegalMove.NotYourCard);
   }
 
-  const alreadyMoved = state.pendingSubPly.match({
-    none: () => false,
-    some: (sub) => sub.subPlyType === SubPlyType.Move,
-  });
-
-  if (alreadyMoved) {
+  if (hasAlreadyMoved(state)) {
     return result.err(IllegalMove.AlreadyMoved);
   }
 
@@ -545,7 +563,7 @@ export function tryMove(
     return result.err(IllegalMove.DestinationOutOfRange);
   }
 
-  const newState = cloneGameState(state);
+  const newState = cloneGameStateAsMut(state);
   let capturedCards: Card[];
 
   const mutAttackerRow = getMutRow(newState, attackerRow);
@@ -557,21 +575,110 @@ export function tryMove(
 
   const mutTargetRow = getMutRow(newState, destinationRow);
   if (hasTriplet(mutTargetRow.concat([attacker]))) {
-    capturedCards = mutTargetRow.map(demoteIfNeeded);
+    capturedCards = mutTargetRow;
 
     mutTargetRow.splice(0, mutTargetRow.length);
   } else {
     capturedCards = [];
   }
 
-  newState[getPlayerKey(attacker.allegiance)].reserve.push(...capturedCards);
+  newState[getPlayerKey(attacker.allegiance)].reserve.push(
+    ...capturedCards.map(toReserved(attacker.allegiance))
+  );
   mutTargetRow.push(attacker);
-  newState.pendingSubPly = option.some({
-    subPlyType: SubPlyType.Move,
-    moved: attacker.cardType,
-    destination: destinationRow,
-    captures: capturedCards.map((c) => c.cardType),
-  });
+
+  if (newState.pendingSubPly.isSome()) {
+    const demotion = newState.pendingSubPly.unwrap() as DemoteSubPly;
+    newState.plies.push({
+      plyType: PlyType.DemoteMove,
+      demoted: demotion.demoted,
+      moved: attacker.cardType,
+      destination: destinationRow,
+      captures: capturedCards.map((c) => c.cardType),
+    });
+    newState.turn = opponentOf(newState.turn);
+    newState.pendingSubPly = option.none();
+  } else {
+    newState.pendingSubPly = option.some({
+      subPlyType: SubPlyType.Move,
+      moved: attacker.cardType,
+      destination: destinationRow,
+      captures: capturedCards.map((c) => c.cardType),
+    });
+  }
 
   return result.ok(newState);
+}
+
+export function tryToggle(
+  state: GameState,
+  cardType: CardType
+): Result<GameState, IllegalToggle> {
+  const card = getCard(state, cardType);
+
+  if (state.turn !== card.allegiance) {
+    return result.err(IllegalToggle.NotYourCard);
+  }
+
+  if (isSnipe(card.cardType)) {
+    return result.err(IllegalToggle.SnipeIsUnpromotable);
+  }
+
+  if (card.isPromoted) {
+    if (state.pendingSubPly.isSome()) {
+      return result.err(IllegalToggle.AlreadyMadeSubPly);
+    }
+
+    const newState = cloneGameStateAsMut(state);
+    getMutCard(newState, cardType).isPromoted = false;
+    newState.pendingSubPly = option.some({
+      subPlyType: SubPlyType.Demote,
+      demoted: card.cardType,
+    });
+    return result.ok(newState);
+  } else {
+    if (!hasAlreadyMoved(state)) {
+      return result.err(IllegalToggle.CannotPromoteUntilMoveIsMade);
+    }
+
+    const newState = cloneGameStateAsMut(state);
+    getMutCard(newState, cardType).isPromoted = true;
+    const move = newState.pendingSubPly.unwrap() as MoveSubPly;
+    newState.plies.push({
+      plyType: PlyType.MovePromote,
+      moved: move.moved,
+      destination: move.destination,
+      captures: move.captures,
+      promoted: card.cardType,
+    });
+    newState.turn = opponentOf(newState.turn);
+    newState.pendingSubPly = option.none();
+    return result.ok(newState);
+  }
+}
+
+function isSnipe(cardType: CardType): boolean {
+  return cardType === CardType.AlphaSnipe || cardType === CardType.BetaSnipe;
+}
+
+function getMutCard(state: GameState, cardType: CardType): MutCard {
+  function matchesType(card: Card): boolean {
+    return card.cardType === cardType;
+  }
+
+  return (state.alpha.reserve.find(matchesType) ||
+    state.alpha.backRow.find(matchesType) ||
+    state.alpha.frontRow.find(matchesType) ||
+    state.beta.frontRow.find(matchesType) ||
+    state.beta.backRow.find(matchesType) ||
+    state.beta.reserve.find(matchesType))!;
+}
+
+function opponentOf(player: Player): Player {
+  switch (player) {
+    case Player.Alpha:
+      return Player.Beta;
+    case Player.Beta:
+      return Player.Alpha;
+  }
 }

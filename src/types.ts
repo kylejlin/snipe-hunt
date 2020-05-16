@@ -5,7 +5,7 @@ import { Option } from "rusty-ts";
  * to state interfaces to ensure seralized state
  * compatibility detection will continue to work.
  */
-export const STATE_VERSION = 7;
+export const STATE_VERSION = 8;
 
 export interface AppState {
   stateVersion: typeof STATE_VERSION;
@@ -13,7 +13,9 @@ export interface AppState {
   selectedCard: Option<CardType>;
 }
 
-export interface GameState {
+export type GameState = Readonly<MutGameState>;
+
+export interface MutGameState {
   turn: Player;
   alpha: Position;
   beta: Position;
@@ -34,7 +36,9 @@ export interface Position {
   frontRow: Card[];
 }
 
-export interface Card {
+export type Card = Readonly<MutCard>;
+
+export interface MutCard {
   cardType: CardType;
   allegiance: Player;
   isPromoted: boolean;
@@ -93,19 +97,19 @@ export interface Drop {
   destination: Row;
 }
 
-export type SubPly = Demote | Move;
+export type SubPly = DemoteSubPly | MoveSubPly;
 
 export enum SubPlyType {
   Demote,
   Move,
 }
 
-export interface Demote {
+export interface DemoteSubPly {
   subPlyType: SubPlyType.Demote;
   demoted: CardType;
 }
 
-export interface Move {
+export interface MoveSubPly {
   subPlyType: SubPlyType.Move;
   moved: CardType;
   destination: Row;

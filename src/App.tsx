@@ -2,14 +2,15 @@ import React from "react";
 import { option } from "rusty-ts";
 import "./App.css";
 import CardComponent from "./components/CardComponent";
+import ElementMatrix from "./components/ElementMatrix";
 import {
   getRandomState,
   getRow,
-  isGameOver,
   tryCapture,
   tryDrop,
   tryMove,
   tryToggle,
+  isGameOver,
 } from "./game";
 import stateSaver from "./stateSaver";
 import { AppState, Card, CardType, Player, Row } from "./types";
@@ -33,6 +34,10 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   render(): React.ReactElement {
+    return this.renderMatrixView();
+  }
+
+  renderMatrixView(): React.ReactElement {
     const { gameState } = this.state;
     return (
       <div className="SnipeHunt">
@@ -41,65 +46,93 @@ export default class App extends React.Component<{}, AppState> {
             <tbody>
               <tr>
                 <td>Reserve</td>
-                <td
-                  className={
-                    isGameOver(gameState)
-                      ? ""
-                      : gameState.turn === Player.Alpha
-                      ? "TurnIndicatorLight"
-                      : ""
-                  }
-                />
-                <td>{this.renderCards(gameState.alpha.reserve)}</td>
-              </tr>
-              <tr>
-                <td onClick={() => this.onRowNumberClicked(1)}>1</td>
                 <td>
-                  {this.renderCards(gameState.alpha.backRow.filter(isBeta))}
+                  <ElementMatrix
+                    cards={gameState.alpha.reserve}
+                    showInactiveElements={false}
+                  />
                 </td>
                 <td>
-                  {this.renderCards(gameState.alpha.backRow.filter(isAlpha))}
+                  <ElementMatrix
+                    cards={gameState.alpha.reserve}
+                    showInactiveElements={true}
+                  />
                 </td>
               </tr>
               <tr>
-                <td onClick={() => this.onRowNumberClicked(2)}>2</td>
+                <td>1</td>
                 <td>
-                  {this.renderCards(gameState.alpha.frontRow.filter(isBeta))}
+                  <ElementMatrix
+                    cards={gameState.alpha.backRow}
+                    showInactiveElements={false}
+                  />
                 </td>
                 <td>
-                  {this.renderCards(gameState.alpha.frontRow.filter(isAlpha))}
+                  <ElementMatrix
+                    cards={gameState.alpha.backRow}
+                    showInactiveElements={true}
+                  />
                 </td>
               </tr>
               <tr>
-                <td onClick={() => this.onRowNumberClicked(3)}>3</td>
+                <td>2</td>
                 <td>
-                  {this.renderCards(gameState.beta.frontRow.filter(isBeta))}
+                  <ElementMatrix
+                    cards={gameState.alpha.frontRow}
+                    showInactiveElements={false}
+                  />
                 </td>
                 <td>
-                  {this.renderCards(gameState.beta.frontRow.filter(isAlpha))}
+                  <ElementMatrix
+                    cards={gameState.alpha.frontRow}
+                    showInactiveElements={true}
+                  />
                 </td>
-              </tr>{" "}
+              </tr>
               <tr>
-                <td onClick={() => this.onRowNumberClicked(4)}>4</td>
+                <td>3</td>
                 <td>
-                  {this.renderCards(gameState.beta.backRow.filter(isBeta))}
+                  <ElementMatrix
+                    cards={gameState.beta.frontRow}
+                    showInactiveElements={false}
+                  />
                 </td>
                 <td>
-                  {this.renderCards(gameState.beta.backRow.filter(isAlpha))}
+                  <ElementMatrix
+                    cards={gameState.beta.frontRow}
+                    showInactiveElements={true}
+                  />
+                </td>
+              </tr>
+              <tr>
+                <td>4</td>
+                <td>
+                  <ElementMatrix
+                    cards={gameState.beta.backRow}
+                    showInactiveElements={false}
+                  />
+                </td>
+                <td>
+                  <ElementMatrix
+                    cards={gameState.beta.backRow}
+                    showInactiveElements={true}
+                  />
                 </td>
               </tr>
               <tr>
                 <td>Reserve</td>
-                <td
-                  className={
-                    isGameOver(gameState)
-                      ? ""
-                      : gameState.turn === Player.Beta
-                      ? "TurnIndicatorLight"
-                      : ""
-                  }
-                />
-                <td>{this.renderCards(gameState.beta.reserve)}</td>
+                <td>
+                  <ElementMatrix
+                    cards={gameState.beta.reserve}
+                    showInactiveElements={false}
+                  />
+                </td>
+                <td>
+                  <ElementMatrix
+                    cards={gameState.beta.reserve}
+                    showInactiveElements={true}
+                  />
+                </td>
               </tr>
             </tbody>
           </table>
@@ -107,6 +140,64 @@ export default class App extends React.Component<{}, AppState> {
         <div className="Moves"></div>
         <button onClick={this.onResetClicked}>Reset</button>
       </div>
+    );
+  }
+
+  renderTraditionalView(): React.ReactElement {
+    const { gameState } = this.state;
+    return (
+      <table>
+        <tbody>
+          <tr>
+            <td>Reserve</td>
+            <td
+              className={
+                isGameOver(gameState)
+                  ? ""
+                  : gameState.turn === Player.Alpha
+                  ? "TurnIndicatorLight"
+                  : ""
+              }
+            />
+            <td>{this.renderCards(gameState.alpha.reserve)}</td>
+          </tr>
+          <tr>
+            <td onClick={() => this.onRowNumberClicked(1)}>1</td>
+            <td>{this.renderCards(gameState.alpha.backRow.filter(isBeta))}</td>
+            <td>{this.renderCards(gameState.alpha.backRow.filter(isAlpha))}</td>
+          </tr>
+          <tr>
+            <td onClick={() => this.onRowNumberClicked(2)}>2</td>
+            <td>{this.renderCards(gameState.alpha.frontRow.filter(isBeta))}</td>
+            <td>
+              {this.renderCards(gameState.alpha.frontRow.filter(isAlpha))}
+            </td>
+          </tr>
+          <tr>
+            <td onClick={() => this.onRowNumberClicked(3)}>3</td>
+            <td>{this.renderCards(gameState.beta.frontRow.filter(isBeta))}</td>
+            <td>{this.renderCards(gameState.beta.frontRow.filter(isAlpha))}</td>
+          </tr>{" "}
+          <tr>
+            <td onClick={() => this.onRowNumberClicked(4)}>4</td>
+            <td>{this.renderCards(gameState.beta.backRow.filter(isBeta))}</td>
+            <td>{this.renderCards(gameState.beta.backRow.filter(isAlpha))}</td>
+          </tr>
+          <tr>
+            <td>Reserve</td>
+            <td
+              className={
+                isGameOver(gameState)
+                  ? ""
+                  : gameState.turn === Player.Beta
+                  ? "TurnIndicatorLight"
+                  : ""
+              }
+            />
+            <td>{this.renderCards(gameState.beta.reserve)}</td>
+          </tr>
+        </tbody>
+      </table>
     );
   }
 

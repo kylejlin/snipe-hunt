@@ -132,26 +132,28 @@ export interface CardPropertyDefinition {
   canPromotedMoveBackward: boolean;
 }
 
-export interface CardPropertyMap {
-  [CardType.AlphaSnipe]: CardPropertyDefinition;
-  [CardType.BetaSnipe]: CardPropertyDefinition;
-  [CardType.Mouse]: CardPropertyDefinition;
-  [CardType.Ox]: CardPropertyDefinition;
-  [CardType.Tiger]: CardPropertyDefinition;
-  [CardType.Rabbit]: CardPropertyDefinition;
-  [CardType.Dragon]: CardPropertyDefinition;
-  [CardType.Snake]: CardPropertyDefinition;
-  [CardType.Horse]: CardPropertyDefinition;
-  [CardType.Ram]: CardPropertyDefinition;
-  [CardType.Monkey]: CardPropertyDefinition;
-  [CardType.Rooster]: CardPropertyDefinition;
-  [CardType.Dog]: CardPropertyDefinition;
-  [CardType.Boar]: CardPropertyDefinition;
-  [CardType.Fish]: CardPropertyDefinition;
-  [CardType.Elephant]: CardPropertyDefinition;
-  [CardType.Squid]: CardPropertyDefinition;
-  [CardType.Frog]: CardPropertyDefinition;
+export interface CardMap<T> {
+  [CardType.AlphaSnipe]: T;
+  [CardType.BetaSnipe]: T;
+  [CardType.Mouse]: T;
+  [CardType.Ox]: T;
+  [CardType.Tiger]: T;
+  [CardType.Rabbit]: T;
+  [CardType.Dragon]: T;
+  [CardType.Snake]: T;
+  [CardType.Horse]: T;
+  [CardType.Ram]: T;
+  [CardType.Monkey]: T;
+  [CardType.Rooster]: T;
+  [CardType.Dog]: T;
+  [CardType.Boar]: T;
+  [CardType.Fish]: T;
+  [CardType.Elephant]: T;
+  [CardType.Squid]: T;
+  [CardType.Frog]: T;
 }
+
+export type CardPropertyMap = CardMap<CardPropertyDefinition>;
 
 export enum Element {
   Fire,

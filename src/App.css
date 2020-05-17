@@ -9,15 +9,6 @@
   background-color: bisque;
 }
 
-.CardComponent--promoted {
-  color: red;
-
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  user-select: none;
-}
-
 table,
 td {
   border: 1px solid black;

@@ -1,0 +1,24 @@
+.ElementMatrixCell {
+  width: calc(0.07 * var(--minor-axis));
+  height: calc(0.07 * var(--minor-axis));
+}
+
+.CardComponent {
+  display: inline;
+}
+
+.CardComponent--alpha {
+  background-color: #043175;
+}
+
+.CardComponent--alpha.CardComponent--promoted {
+  color: #5f92df;
+}
+
+.CardComponent--beta {
+  background-color: #7e0202;
+}
+
+.CardComponent--beta.CardComponent--promoted {
+  color: #e64f4f;
+}

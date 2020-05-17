@@ -1,5 +1,5 @@
 import { option, Option, Result, result } from "rusty-ts";
-import cardProperties from "./cardProperties";
+import { cardProperties } from "./cardMaps";
 import {
   AppState,
   Card,
@@ -326,17 +326,29 @@ function doAttackerElementsTrumpTargetElements(
   attacker: Card,
   target: Card
 ): boolean {
-  return option.all([getElements(attacker), getElements(target)]).match({
-    none: () => false,
-    some: ([attackerElements, targetElements]) =>
-      doesTrump(attackerElements.double, targetElements.double) &&
-      doesTrump(attackerElements.single, targetElements.single),
-  });
+  return option
+    .all([getActiveElements(attacker), getActiveElements(target)])
+    .match({
+      none: () => false,
+      some: ([attackerElements, targetElements]) =>
+        doesTrump(attackerElements.double, targetElements.double) &&
+        doesTrump(attackerElements.single, targetElements.single),
+    });
 }
 
-function getElements(card: Card): Option<{ double: Element; single: Element }> {
+function getActiveElements(
+  card: Card
+): Option<{ double: Element; single: Element }> {
   return cardProperties[card.cardType].elements.map((elements) =>
     card.isPromoted ? elements.promoted : elements.unpromoted
+  );
+}
+
+function getInactiveElements(
+  card: Card
+): Option<{ double: Element; single: Element }> {
+  return cardProperties[card.cardType].elements.map((elements) =>
+    card.isPromoted ? elements.unpromoted : elements.promoted
   );
 }
 
@@ -388,7 +400,7 @@ function doesEnteringRowActivateTriplet(
   const newCards = currentCards.concat([enteringCard]);
 
   for (const card of newCards) {
-    getElements(card).ifSome((elements) => {
+    getActiveElements(card).ifSome((elements) => {
       if (elements.double === elements.single) {
         table[elements.double][2] = true;
       } else {
@@ -398,7 +410,7 @@ function doesEnteringRowActivateTriplet(
     });
   }
 
-  const activatedElements: Element[] = getElements(enteringCard).match({
+  const activatedElements: Element[] = getActiveElements(enteringCard).match({
     none: () => [],
     some: ({ double, single }) => [double, single],
   });
@@ -670,4 +682,48 @@ export function tryDrop(
   });
   newState.turn = opponentOf(newState.turn);
   return result.ok(newState);
+}
+
+export function getCardsWithActiveElements(
+  cards: Card[],
+  amount: 1 | 2 | 3,
+  element: Element
+): Card[] {
+  return cards.filter((card) =>
+    getActiveElements(card).match({
+      none: () => false,
+      some: ({ double, single }) => {
+        if (double === single) {
+          return amount === 3 && double === element;
+        }
+
+        return (
+          (double === element && amount === 2) ||
+          (single === element && amount === 1)
+        );
+      },
+    })
+  );
+}
+
+export function getCardsWithInactiveElements(
+  cards: Card[],
+  amount: 1 | 2 | 3,
+  element: Element
+): Card[] {
+  return cards.filter((card) =>
+    getInactiveElements(card).match({
+      none: () => false,
+      some: ({ double, single }) => {
+        if (double === single) {
+          return amount === 3 && double === element;
+        }
+
+        return (
+          (double === element && amount === 2) ||
+          (single === element && amount === 1)
+        );
+      },
+    })
+  );
 }

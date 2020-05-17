@@ -1,7 +1,7 @@
 import { option } from "rusty-ts";
-import { CardPropertyMap, CardType, Element } from "./types";
+import { CardPropertyMap, CardType, Element, CardMap } from "./types";
 
-const cardPropertiesImpl: CardPropertyMap = {
+export const cardProperties: CardPropertyMap = {
   [CardType.AlphaSnipe]: {
     elements: option.none(),
     canUnpromotedMoveBackward: false,
@@ -144,4 +144,23 @@ const cardPropertiesImpl: CardPropertyMap = {
   },
 };
 
-export default cardPropertiesImpl;
+export const cardEmojis: CardMap<string> = {
+  [CardType.AlphaSnipe]: "α",
+  [CardType.BetaSnipe]: "β",
+  [CardType.Mouse]: "🐀",
+  [CardType.Ox]: "🐮",
+  [CardType.Tiger]: "🐯",
+  [CardType.Rabbit]: "🐇",
+  [CardType.Dragon]: "🐉 ",
+  [CardType.Snake]: "🐍",
+  [CardType.Horse]: "🐴",
+  [CardType.Ram]: "🐏",
+  [CardType.Monkey]: "🐵",
+  [CardType.Rooster]: "🐓",
+  [CardType.Dog]: "🐶",
+  [CardType.Boar]: "🐗",
+  [CardType.Fish]: "🐟",
+  [CardType.Elephant]: "🐘",
+  [CardType.Squid]: "🦑",
+  [CardType.Frog]: "🐸",
+};

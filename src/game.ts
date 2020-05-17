@@ -312,7 +312,7 @@ function backward(card: Card): number {
   return -forward(card);
 }
 
-function canMoveBackward(card: Card): boolean {
+export function canMoveBackward(card: Card): boolean {
   const props = cardProperties[card.cardType];
 
   if (card.isPromoted) {

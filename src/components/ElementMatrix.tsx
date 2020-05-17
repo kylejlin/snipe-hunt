@@ -4,6 +4,7 @@ import { cardEmojis } from "../cardMaps";
 import {
   getCardsWithActiveElements,
   getCardsWithInactiveElements,
+  canMoveBackward,
 } from "../game";
 import { Card, CardType, Element, Player } from "../types";
 import "./styles/ElementMatrix.css";
@@ -82,7 +83,8 @@ export default function ElementMatrix({
             ? " CardComponent--alpha"
             : " CardComponent--beta") +
           (card.isPromoted ? " CardComponent--promoted" : "") +
-          (isSelected ? " CardComponent--selected" : "")
+          (isSelected ? " CardComponent--selected" : "") +
+          (canMoveBackward(card) ? " CardComponent--canMoveBackward" : "")
         }
         onClick={() => onCardClicked(card)}
       >

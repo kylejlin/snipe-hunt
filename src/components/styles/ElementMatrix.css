@@ -30,3 +30,11 @@
 .CardComponent--selected {
   border: 2px solid goldenrod;
 }
+
+.CardComponent--alpha.CardComponent--canMoveBackward {
+  border-top: 3px solid #00b400;
+}
+
+.CardComponent--beta.CardComponent--canMoveBackward {
+  border-bottom: 3px solid #00b400;
+}

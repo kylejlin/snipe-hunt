@@ -204,7 +204,7 @@ export function tryCapture(
   removeCardByType(mutAttackerRow, attacker.cardType);
 
   const mutTargetRow = getMutRow(newState, targetRow);
-  if (hasTriplet(mutTargetRow.concat([attacker]))) {
+  if (doesEnteringRowActivateTriplet(attacker, mutTargetRow)) {
     capturedCards = mutTargetRow.slice();
 
     mutTargetRow.splice(0, mutTargetRow.length);
@@ -364,7 +364,10 @@ function getMutRow(state: MutGameState, row: Row): Card[] {
   ][row - 1];
 }
 
-function hasTriplet(cards: Card[]): boolean {
+function doesEnteringRowActivateTriplet(
+  enteringCard: Card,
+  cards: Card[]
+): boolean {
   const table: ElementCountTable = {
     [Element.Fire]: [false, false, false],
     [Element.Water]: [false, false, false],
@@ -383,17 +386,28 @@ function hasTriplet(cards: Card[]): boolean {
     });
   }
 
+  const activatedElements: Element[] = getElements(enteringCard).match({
+    none: () => [],
+    some: ({ double, single }) => [double, single],
+  });
+
   return (
     (table[Element.Fire][0] &&
       table[Element.Fire][1] &&
-      table[Element.Fire][2]) ||
+      table[Element.Fire][2] &&
+      activatedElements.includes(Element.Fire)) ||
     (table[Element.Water][0] &&
       table[Element.Water][1] &&
-      table[Element.Water][2]) ||
+      table[Element.Water][2] &&
+      activatedElements.includes(Element.Water)) ||
     (table[Element.Earth][0] &&
       table[Element.Earth][1] &&
-      table[Element.Earth][2]) ||
-    (table[Element.Air][0] && table[Element.Air][1] && table[Element.Air][2])
+      table[Element.Earth][2] &&
+      activatedElements.includes(Element.Earth)) ||
+    (table[Element.Air][0] &&
+      table[Element.Air][1] &&
+      table[Element.Air][2] &&
+      activatedElements.includes(Element.Air))
   );
 }
 
@@ -467,7 +481,7 @@ export function tryMove(
   removeCardByType(mutAttackerRow, attacker.cardType);
 
   const mutTargetRow = getMutRow(newState, destination);
-  if (hasTriplet(mutTargetRow.concat([attacker]))) {
+  if (doesEnteringRowActivateTriplet(attacker, mutTargetRow)) {
     capturedCards = mutTargetRow.slice();
 
     mutTargetRow.splice(0, mutTargetRow.length);

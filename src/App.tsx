@@ -4,14 +4,15 @@ import "./App.css";
 import CardComponent from "./components/CardComponent";
 import {
   getRandomState,
-  tryCapture,
-  tryMove,
   getRow,
-  tryToggle,
+  isGameOver,
+  tryCapture,
   tryDrop,
+  tryMove,
+  tryToggle,
 } from "./game";
 import stateSaver from "./stateSaver";
-import { AppState, Card, Player, CardType, Row } from "./types";
+import { AppState, Card, CardType, Player, Row } from "./types";
 
 export default class App extends React.Component<{}, AppState> {
   constructor(props: {}) {
@@ -42,7 +43,11 @@ export default class App extends React.Component<{}, AppState> {
                 <td>Reserve</td>
                 <td
                   className={
-                    gameState.turn === Player.Alpha ? "TurnIndicatorLight" : ""
+                    isGameOver(gameState)
+                      ? ""
+                      : gameState.turn === Player.Alpha
+                      ? "TurnIndicatorLight"
+                      : ""
                   }
                 />
                 <td>{this.renderCards(gameState.alpha.reserve)}</td>
@@ -87,7 +92,11 @@ export default class App extends React.Component<{}, AppState> {
                 <td>Reserve</td>
                 <td
                   className={
-                    gameState.turn === Player.Beta ? "TurnIndicatorLight" : ""
+                    isGameOver(gameState)
+                      ? ""
+                      : gameState.turn === Player.Beta
+                      ? "TurnIndicatorLight"
+                      : ""
                   }
                 />
                 <td>{this.renderCards(gameState.beta.reserve)}</td>

@@ -1,24 +1,25 @@
 import { option, Option, Result, result } from "rusty-ts";
+import cardProperties from "./cardProperties";
 import {
   AppState,
   Card,
-  CardPropertyMap,
   CardType,
+  DemoteSubPly,
   Element,
   GameState,
+  MoveSubPly,
   MutCard,
   MutGameState,
   Player,
+  PlyType,
   Position,
   Row,
   STATE_VERSION,
   SubPlyType,
-  PlyType,
-  MoveSubPly,
-  DemoteSubPly,
 } from "./types";
 
 export enum IllegalMove {
+  GameAlreadyEnded,
   NotYourCard,
   AlreadyMoved,
   AttackerInReserve,
@@ -29,6 +30,7 @@ export enum IllegalMove {
 }
 
 export enum IllegalToggle {
+  GameAlreadyEnded,
   NotYourCard,
   SnipeIsUnpromotable,
   AlreadyMadeSubPly,
@@ -36,6 +38,7 @@ export enum IllegalToggle {
 }
 
 export enum IllegalDrop {
+  GameAlreadyEnded,
   NotYourCard,
   AlreadyMadeSubPly,
   CannotEmptyReserve,
@@ -47,149 +50,6 @@ interface ElementCountTable {
   [Element.Earth]: [boolean, boolean, boolean];
   [Element.Air]: [boolean, boolean, boolean];
 }
-
-const cardProperties: CardPropertyMap = {
-  [CardType.AlphaSnipe]: {
-    elements: option.none(),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
-  },
-  [CardType.BetaSnipe]: {
-    elements: option.none(),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
-  },
-
-  [CardType.Mouse]: {
-    elements: option.some({
-      unpromoted: { double: Element.Fire, single: Element.Earth },
-      promoted: { double: Element.Earth, single: Element.Water },
-    }),
-    canUnpromotedMoveBackward: true,
-    canPromotedMoveBackward: false,
-  },
-  [CardType.Ox]: {
-    elements: option.some({
-      unpromoted: { double: Element.Earth, single: Element.Water },
-      promoted: { double: Element.Air, single: Element.Earth },
-    }),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
-  },
-  [CardType.Tiger]: {
-    elements: option.some({
-      unpromoted: { double: Element.Fire, single: Element.Fire },
-      promoted: { double: Element.Fire, single: Element.Air },
-    }),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
-  },
-  [CardType.Rabbit]: {
-    elements: option.some({
-      unpromoted: { double: Element.Air, single: Element.Water },
-      promoted: { double: Element.Water, single: Element.Water },
-    }),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
-  },
-  [CardType.Dragon]: {
-    elements: option.some({
-      unpromoted: { double: Element.Air, single: Element.Air },
-      promoted: { double: Element.Air, single: Element.Water },
-    }),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
-  },
-  [CardType.Snake]: {
-    elements: option.some({
-      unpromoted: { double: Element.Water, single: Element.Earth },
-      promoted: { double: Element.Water, single: Element.Earth },
-    }),
-    canUnpromotedMoveBackward: true,
-    canPromotedMoveBackward: false,
-  },
-  [CardType.Horse]: {
-    elements: option.some({
-      unpromoted: { double: Element.Fire, single: Element.Air },
-      promoted: { double: Element.Air, single: Element.Fire },
-    }),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
-  },
-  [CardType.Ram]: {
-    elements: option.some({
-      unpromoted: { double: Element.Earth, single: Element.Air },
-      promoted: { double: Element.Earth, single: Element.Air },
-    }),
-    canUnpromotedMoveBackward: true,
-    canPromotedMoveBackward: false,
-  },
-  [CardType.Monkey]: {
-    elements: option.some({
-      unpromoted: { double: Element.Air, single: Element.Earth },
-      promoted: { double: Element.Earth, single: Element.Fire },
-    }),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
-  },
-  [CardType.Rooster]: {
-    elements: option.some({
-      unpromoted: { double: Element.Air, single: Element.Fire },
-      promoted: { double: Element.Fire, single: Element.Fire },
-    }),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
-  },
-  [CardType.Dog]: {
-    elements: option.some({
-      unpromoted: { double: Element.Fire, single: Element.Water },
-      promoted: { double: Element.Air, single: Element.Air },
-    }),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
-  },
-  [CardType.Boar]: {
-    elements: option.some({
-      unpromoted: { double: Element.Earth, single: Element.Fire },
-      promoted: { double: Element.Fire, single: Element.Earth },
-    }),
-    canUnpromotedMoveBackward: true,
-    canPromotedMoveBackward: false,
-  },
-
-  [CardType.Fish]: {
-    elements: option.some({
-      unpromoted: { double: Element.Water, single: Element.Water },
-      promoted: { double: Element.Water, single: Element.Earth },
-    }),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
-  },
-  [CardType.Elephant]: {
-    elements: option.some({
-      unpromoted: { double: Element.Earth, single: Element.Earth },
-      promoted: { double: Element.Fire, single: Element.Water },
-    }),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
-  },
-  [CardType.Squid]: {
-    elements: option.some({
-      unpromoted: { double: Element.Water, single: Element.Fire },
-      promoted: { double: Element.Earth, single: Element.Earth },
-    }),
-    canUnpromotedMoveBackward: true,
-    canPromotedMoveBackward: false,
-  },
-  [CardType.Frog]: {
-    elements: option.some({
-      unpromoted: { double: Element.Water, single: Element.Air },
-      promoted: { double: Element.Water, single: Element.Fire },
-    }),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
-  },
-};
 
 export function getRandomState(): AppState {
   const cards = getShuffledDeck();
@@ -291,6 +151,10 @@ export function tryCapture(
   attackerType: CardType,
   targetType: CardType
 ): Result<GameState, IllegalMove> {
+  if (isGameOver(state)) {
+    return result.err(IllegalMove.GameAlreadyEnded);
+  }
+
   const attacker = getCard(state, attackerType);
   const target = getCard(state, targetType);
 
@@ -381,6 +245,28 @@ export function tryCapture(
   }
 
   return result.ok(newState);
+}
+
+export function isGameOver(state: GameState): boolean {
+  return getWinner(state).isSome();
+}
+
+function getWinner(state: GameState): Option<Player> {
+  if (
+    state.alpha.reserve.some((card) => card.cardType === CardType.BetaSnipe)
+  ) {
+    return option.some(Player.Alpha);
+  }
+
+  if (
+    state.beta.reserve.some((card) => card.cardType === CardType.AlphaSnipe)
+  ) {
+    return option.some(Player.Beta);
+  }
+
+  // TODO check if player is out of plies/sub-plies
+
+  return option.none();
 }
 
 function hasAlreadyMoved(state: GameState): boolean {
@@ -537,6 +423,10 @@ export function tryMove(
   attackerType: CardType,
   destination: Row
 ): Result<GameState, IllegalMove> {
+  if (isGameOver(state)) {
+    return result.err(IllegalMove.GameAlreadyEnded);
+  }
+
   const attacker = getCard(state, attackerType);
 
   if (attacker.allegiance !== state.turn) {
@@ -620,6 +510,10 @@ export function tryToggle(
   state: GameState,
   cardType: CardType
 ): Result<GameState, IllegalToggle> {
+  if (isGameOver(state)) {
+    return result.err(IllegalToggle.GameAlreadyEnded);
+  }
+
   const card = getCard(state, cardType);
 
   if (state.turn !== card.allegiance) {
@@ -694,6 +588,10 @@ export function tryDrop(
   cardType: CardType,
   destination: Row
 ): Result<GameState, IllegalDrop> {
+  if (isGameOver(state)) {
+    return result.err(IllegalDrop.GameAlreadyEnded);
+  }
+
   const card = getCard(state, cardType);
 
   if (state.turn !== card.allegiance) {
@@ -709,6 +607,7 @@ export function tryDrop(
   }
 
   const newState = cloneGameStateAsMut(state);
+  mutRemove(newState[getPlayerKey(newState.turn)].reserve, card.cardType);
   getMutRow(newState, destination).push(card);
   newState.plies.push({
     plyType: PlyType.Drop,
@@ -717,4 +616,11 @@ export function tryDrop(
   });
   newState.turn = opponentOf(newState.turn);
   return result.ok(newState);
+}
+
+function mutRemove(arr: Card[], cardType: CardType): void {
+  arr.splice(
+    arr.findIndex((card) => card.cardType === cardType),
+    1
+  );
 }

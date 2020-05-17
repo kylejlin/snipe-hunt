@@ -27,6 +27,7 @@ export enum IllegalMove {
   CannotEmptyRow,
   DestinationOutOfRange,
   InsufficientElements,
+  CapturesOwnSnipeWithoutCapturingOpponents,
 }
 
 export enum IllegalToggle {
@@ -238,6 +239,19 @@ export function tryCapture(
     });
   }
 
+  if (
+    containsCardType(
+      newState[getPlayerKey(attacker.allegiance)].reserve,
+      getPlayerSnipe(attacker.allegiance)
+    ) &&
+    !containsCardType(
+      newState[getPlayerKey(attacker.allegiance)].reserve,
+      getPlayerSnipe(opponentOf(attacker.allegiance))
+    )
+  ) {
+    return result.err(IllegalMove.CapturesOwnSnipeWithoutCapturingOpponents);
+  }
+
   return result.ok(newState);
 }
 
@@ -246,15 +260,11 @@ export function isGameOver(state: GameState): boolean {
 }
 
 function getWinner(state: GameState): Option<Player> {
-  if (
-    state.alpha.reserve.some((card) => card.cardType === CardType.BetaSnipe)
-  ) {
+  if (containsCardType(state.alpha.reserve, CardType.BetaSnipe)) {
     return option.some(Player.Alpha);
   }
 
-  if (
-    state.beta.reserve.some((card) => card.cardType === CardType.AlphaSnipe)
-  ) {
+  if (containsCardType(state.beta.reserve, CardType.AlphaSnipe)) {
     return option.some(Player.Beta);
   }
 
@@ -271,16 +281,16 @@ function hasAlreadyMoved(state: GameState): boolean {
 }
 
 export function getRow(state: GameState, cardType: CardType): Option<Row> {
-  if (state.alpha.backRow.some((card) => card.cardType === cardType)) {
+  if (containsCardType(state.alpha.backRow, cardType)) {
     return option.some(1);
   }
-  if (state.alpha.frontRow.some((card) => card.cardType === cardType)) {
+  if (containsCardType(state.alpha.frontRow, cardType)) {
     return option.some(2);
   }
-  if (state.beta.frontRow.some((card) => card.cardType === cardType)) {
+  if (containsCardType(state.beta.frontRow, cardType)) {
     return option.some(3);
   }
-  if (state.beta.backRow.some((card) => card.cardType === cardType)) {
+  if (containsCardType(state.beta.backRow, cardType)) {
     return option.some(4);
   }
   return option.none();
@@ -366,7 +376,7 @@ function getMutRow(state: MutGameState, row: Row): Card[] {
 
 function doesEnteringRowActivateTriplet(
   enteringCard: Card,
-  cards: Card[]
+  currentCards: Card[]
 ): boolean {
   const table: ElementCountTable = {
     [Element.Fire]: [false, false, false],
@@ -375,7 +385,9 @@ function doesEnteringRowActivateTriplet(
     [Element.Air]: [false, false, false],
   };
 
-  for (const card of cards) {
+  const newCards = currentCards.concat([enteringCard]);
+
+  for (const card of newCards) {
     getElements(card).ifSome((elements) => {
       if (elements.double === elements.single) {
         table[elements.double][2] = true;
@@ -431,6 +443,21 @@ function toReserved(owner: Player): (card: Card) => Card {
   return function toReserved(card: Card): Card {
     return { ...card, allegiance: owner, isPromoted: false };
   };
+}
+
+function containsCardType(cards: Card[], cardType: CardType): boolean {
+  return cards.some((card) => card.cardType === cardType);
+}
+
+function getPlayerSnipe(
+  player: Player
+): CardType.AlphaSnipe | CardType.BetaSnipe {
+  switch (player) {
+    case Player.Alpha:
+      return CardType.AlphaSnipe;
+    case Player.Beta:
+      return CardType.BetaSnipe;
+  }
 }
 
 export function tryMove(
@@ -512,6 +539,19 @@ export function tryMove(
       destination,
       captures: capturedCards.map((c) => c.cardType),
     });
+  }
+
+  if (
+    containsCardType(
+      newState[getPlayerKey(attacker.allegiance)].reserve,
+      getPlayerSnipe(attacker.allegiance)
+    ) &&
+    !containsCardType(
+      newState[getPlayerKey(attacker.allegiance)].reserve,
+      getPlayerSnipe(opponentOf(attacker.allegiance))
+    )
+  ) {
+    return result.err(IllegalMove.CapturesOwnSnipeWithoutCapturingOpponents);
   }
 
   return result.ok(newState);

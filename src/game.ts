@@ -24,10 +24,10 @@ export enum IllegalMove {
   AlreadyMoved,
   AttackerInReserve,
   TargetInReserve,
-  CannotEmptyRow,
   DestinationOutOfRange,
   InsufficientElements,
   CapturesOwnSnipeWithoutCapturingOpponents,
+  CannotEmptyRowWithoutEndingGame,
 }
 
 export enum IllegalToggle {
@@ -180,10 +180,6 @@ export function tryCapture(
   const attackerRow = optAttackerRow.unwrap();
   const targetRow = optTargetRow.unwrap();
 
-  if (getMutRow(state, attackerRow).length === 1) {
-    return result.err(IllegalMove.CannotEmptyRow);
-  }
-
   if (
     !(
       attackerRow + forward(attacker) === targetRow ||
@@ -250,6 +246,10 @@ export function tryCapture(
     )
   ) {
     return result.err(IllegalMove.CapturesOwnSnipeWithoutCapturingOpponents);
+  }
+
+  if (getMutRow(newState, attackerRow).length === 0 && !isGameOver(newState)) {
+    return result.err(IllegalMove.CannotEmptyRowWithoutEndingGame);
   }
 
   return result.ok(newState);
@@ -487,10 +487,6 @@ export function tryMove(
 
   const attackerRow = optAttackerRow.unwrap();
 
-  if (getMutRow(state, attackerRow).length === 1) {
-    return result.err(IllegalMove.CannotEmptyRow);
-  }
-
   if (
     !(
       attackerRow + forward(attacker) === destination ||
@@ -552,6 +548,10 @@ export function tryMove(
     )
   ) {
     return result.err(IllegalMove.CapturesOwnSnipeWithoutCapturingOpponents);
+  }
+
+  if (getMutRow(newState, attackerRow).length === 0 && !isGameOver(newState)) {
+    return result.err(IllegalMove.CannotEmptyRowWithoutEndingGame);
   }
 
   return result.ok(newState);

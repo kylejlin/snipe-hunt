@@ -11,6 +11,9 @@ import {
   tryMove,
   tryToggle,
   isGameOver,
+  IllegalMove,
+  IllegalDrop,
+  IllegalToggle,
 } from "./game";
 import stateSaver from "./stateSaver";
 import { AppState, Card, CardType, Player, Row } from "./types";
@@ -264,7 +267,7 @@ export default class App extends React.Component<{}, AppState> {
         });
       },
       err: (e) => {
-        alert(e);
+        alert(IllegalMove[e]);
         this.saveState({ selectedCard: option.none() });
       },
     });
@@ -296,7 +299,7 @@ export default class App extends React.Component<{}, AppState> {
         });
       },
       err: (e) => {
-        alert(e);
+        alert(IllegalMove[e]);
         this.saveState({ selectedCard: option.none() });
       },
     });
@@ -311,7 +314,7 @@ export default class App extends React.Component<{}, AppState> {
         });
       },
       err: (e) => {
-        alert(e);
+        alert(IllegalDrop[e]);
         this.saveState({ selectedCard: option.none() });
       },
     });
@@ -326,7 +329,7 @@ export default class App extends React.Component<{}, AppState> {
         });
       },
       err: (e) => {
-        alert(e);
+        alert(IllegalToggle[e]);
         this.saveState({ selectedCard: option.none() });
       },
     });

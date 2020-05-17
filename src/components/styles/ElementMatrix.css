@@ -16,7 +16,7 @@
 }
 
 .CardComponent--alpha.CardComponent--promoted {
-  color: #5f92df;
+  background-color: #5f92df;
 }
 
 .CardComponent--beta {
@@ -24,7 +24,7 @@
 }
 
 .CardComponent--beta.CardComponent--promoted {
-  color: #e64f4f;
+  background-color: #e64f4f;
 }
 
 .CardComponent--selected {

@@ -35,6 +35,12 @@ export enum IllegalToggle {
   CannotPromoteUntilMoveIsMade,
 }
 
+export enum IllegalDrop {
+  NotYourCard,
+  AlreadyMadeSubPly,
+  CannotEmptyReserve,
+}
+
 interface ElementCountTable {
   [Element.Fire]: [boolean, boolean, boolean];
   [Element.Water]: [boolean, boolean, boolean];
@@ -338,7 +344,7 @@ export function tryCapture(
 
   const mutTargetRow = getMutRow(newState, targetRow);
   if (hasTriplet(mutTargetRow.concat([attacker]))) {
-    capturedCards = mutTargetRow;
+    capturedCards = mutTargetRow.slice();
 
     mutTargetRow.splice(0, mutTargetRow.length);
   } else {
@@ -469,7 +475,7 @@ function cloneGameStateAsMut(state: GameState): MutGameState {
   };
 }
 
-function getMutRow(state: GameState, row: Row): Card[] {
+function getMutRow(state: MutGameState, row: Row): Card[] {
   return [
     state.alpha.backRow,
     state.alpha.frontRow,
@@ -529,7 +535,7 @@ function toReserved(owner: Player): (card: Card) => Card {
 export function tryMove(
   state: GameState,
   attackerType: CardType,
-  destinationRow: Row
+  destination: Row
 ): Result<GameState, IllegalMove> {
   const attacker = getCard(state, attackerType);
 
@@ -555,9 +561,9 @@ export function tryMove(
 
   if (
     !(
-      attackerRow + forward(attacker) === destinationRow ||
+      attackerRow + forward(attacker) === destination ||
       (canMoveBackward(attacker) &&
-        attackerRow + backward(attacker) === destinationRow)
+        attackerRow + backward(attacker) === destination)
     )
   ) {
     return result.err(IllegalMove.DestinationOutOfRange);
@@ -573,9 +579,9 @@ export function tryMove(
     1
   );
 
-  const mutTargetRow = getMutRow(newState, destinationRow);
+  const mutTargetRow = getMutRow(newState, destination);
   if (hasTriplet(mutTargetRow.concat([attacker]))) {
-    capturedCards = mutTargetRow;
+    capturedCards = mutTargetRow.slice();
 
     mutTargetRow.splice(0, mutTargetRow.length);
   } else {
@@ -593,7 +599,7 @@ export function tryMove(
       plyType: PlyType.DemoteMove,
       demoted: demotion.demoted,
       moved: attacker.cardType,
-      destination: destinationRow,
+      destination,
       captures: capturedCards.map((c) => c.cardType),
     });
     newState.turn = opponentOf(newState.turn);
@@ -602,7 +608,7 @@ export function tryMove(
     newState.pendingSubPly = option.some({
       subPlyType: SubPlyType.Move,
       moved: attacker.cardType,
-      destination: destinationRow,
+      destination,
       captures: capturedCards.map((c) => c.cardType),
     });
   }
@@ -681,4 +687,34 @@ function opponentOf(player: Player): Player {
     case Player.Beta:
       return Player.Alpha;
   }
+}
+
+export function tryDrop(
+  state: GameState,
+  cardType: CardType,
+  destination: Row
+): Result<GameState, IllegalDrop> {
+  const card = getCard(state, cardType);
+
+  if (state.turn !== card.allegiance) {
+    return result.err(IllegalDrop.NotYourCard);
+  }
+
+  if (state.pendingSubPly.isSome()) {
+    return result.err(IllegalDrop.AlreadyMadeSubPly);
+  }
+
+  if (state[getPlayerKey(card.allegiance)].reserve.length === 1) {
+    return result.err(IllegalDrop.CannotEmptyReserve);
+  }
+
+  const newState = cloneGameStateAsMut(state);
+  getMutRow(newState, destination).push(card);
+  newState.plies.push({
+    plyType: PlyType.Drop,
+    drop: card.cardType,
+    destination,
+  });
+  newState.turn = opponentOf(newState.turn);
+  return result.ok(newState);
 }

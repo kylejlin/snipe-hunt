@@ -2,7 +2,14 @@ import React from "react";
 import { option } from "rusty-ts";
 import "./App.css";
 import CardComponent from "./components/CardComponent";
-import { getRandomState, tryCapture, tryMove, getRow, tryToggle } from "./game";
+import {
+  getRandomState,
+  tryCapture,
+  tryMove,
+  getRow,
+  tryToggle,
+  tryDrop,
+} from "./game";
 import stateSaver from "./stateSaver";
 import { AppState, Card, Player, CardType, Row } from "./types";
 
@@ -170,7 +177,20 @@ export default class App extends React.Component<{}, AppState> {
     });
   }
 
-  tryDrop(selectedCard: CardType, row: Row): void {}
+  tryDrop(selectedCard: CardType, destination: Row): void {
+    tryDrop(this.state.gameState, selectedCard, destination).match({
+      ok: (newGameState) => {
+        this.saveState({
+          gameState: newGameState,
+          selectedCard: option.none(),
+        });
+      },
+      err: (e) => {
+        alert(e);
+        this.saveState({ selectedCard: option.none() });
+      },
+    });
+  }
 
   tryToggle(selectedCard: CardType): void {
     tryToggle(this.state.gameState, selectedCard).match({

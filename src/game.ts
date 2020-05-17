@@ -201,10 +201,7 @@ export function tryCapture(
   let capturedCards: Card[];
 
   const mutAttackerRow = getMutRow(newState, attackerRow);
-  mutAttackerRow.splice(
-    mutAttackerRow.findIndex((c) => c.cardType === attacker.cardType),
-    1
-  );
+  removeCardByType(mutAttackerRow, attacker.cardType);
 
   const mutTargetRow = getMutRow(newState, targetRow);
   if (hasTriplet(mutTargetRow.concat([attacker]))) {
@@ -213,10 +210,7 @@ export function tryCapture(
     mutTargetRow.splice(0, mutTargetRow.length);
   } else {
     capturedCards = [target];
-    mutTargetRow.splice(
-      mutTargetRow.findIndex((c) => c.cardType === target.cardType),
-      1
-    );
+    removeCardByType(mutTargetRow, target.cardType);
   }
 
   newState[getPlayerKey(attacker.allegiance)].reserve.push(
@@ -403,6 +397,13 @@ function hasTriplet(cards: Card[]): boolean {
   );
 }
 
+function removeCardByType(arr: Card[], cardType: CardType): void {
+  arr.splice(
+    arr.findIndex((card) => card.cardType === cardType),
+    1
+  );
+}
+
 function getPlayerKey(player: Player): "alpha" | "beta" {
   switch (player) {
     case Player.Alpha:
@@ -463,11 +464,7 @@ export function tryMove(
   let capturedCards: Card[];
 
   const mutAttackerRow = getMutRow(newState, attackerRow);
-  console.log(mutAttackerRow, newState, attackerRow);
-  mutAttackerRow.splice(
-    mutAttackerRow.findIndex((c) => c.cardType === attacker.cardType),
-    1
-  );
+  removeCardByType(mutAttackerRow, attacker.cardType);
 
   const mutTargetRow = getMutRow(newState, destination);
   if (hasTriplet(mutTargetRow.concat([attacker]))) {
@@ -607,7 +604,10 @@ export function tryDrop(
   }
 
   const newState = cloneGameStateAsMut(state);
-  mutRemove(newState[getPlayerKey(newState.turn)].reserve, card.cardType);
+  removeCardByType(
+    newState[getPlayerKey(newState.turn)].reserve,
+    card.cardType
+  );
   getMutRow(newState, destination).push(card);
   newState.plies.push({
     plyType: PlyType.Drop,
@@ -616,11 +616,4 @@ export function tryDrop(
   });
   newState.turn = opponentOf(newState.turn);
   return result.ok(newState);
-}
-
-function mutRemove(arr: Card[], cardType: CardType): void {
-  arr.splice(
-    arr.findIndex((card) => card.cardType === cardType),
-    1
-  );
 }

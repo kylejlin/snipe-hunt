@@ -8,6 +8,7 @@ import {
 } from "../game";
 import { Card, CardType, Element, Player } from "../types";
 import "./styles/ElementMatrix.css";
+import CardComponent from "./CardComponent";
 
 interface Props {
   cards: Card[];
@@ -76,20 +77,11 @@ export default function ElementMatrix({
     const isSelected = selectedCard.unwrapOr(null) === card.cardType;
 
     return (
-      <div
-        className={
-          "CardComponent" +
-          (card.allegiance === Player.Alpha
-            ? " CardComponent--alpha"
-            : " CardComponent--beta") +
-          (card.isPromoted ? " CardComponent--promoted" : "") +
-          (isSelected ? " CardComponent--selected" : "") +
-          (canMoveBackward(card) ? " CardComponent--canMoveBackward" : "")
-        }
-        onClick={() => onCardClicked(card)}
-      >
-        {cardEmojis[card.cardType]}
-      </div>
+      <CardComponent
+        card={card}
+        isSelected={isSelected}
+        onCardClicked={onCardClicked}
+      />
     );
   }
 }

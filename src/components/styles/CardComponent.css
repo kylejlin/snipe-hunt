@@ -1,0 +1,36 @@
+.CardComponent {
+  display: inline;
+
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+.CardComponent--alpha {
+  background-color: #043175;
+}
+
+.CardComponent--alpha.CardComponent--promoted {
+  background-color: #5f92df;
+}
+
+.CardComponent--beta {
+  background-color: #7e0202;
+}
+
+.CardComponent--beta.CardComponent--promoted {
+  background-color: #e64f4f;
+}
+
+.CardComponent--selected {
+  border: 2px solid goldenrod;
+}
+
+.CardComponent--alpha.CardComponent--canMoveBackward {
+  border-top: 3px solid #00b400;
+}
+
+.CardComponent--beta.CardComponent--canMoveBackward {
+  border-bottom: 3px solid #00b400;
+}

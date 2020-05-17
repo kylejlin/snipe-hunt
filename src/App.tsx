@@ -45,12 +45,12 @@ export default class App extends React.Component<{}, AppState> {
     const { gameState } = this.state;
     return (
       <div className="SnipeHunt">
-        <div className="Board">
-          <table>
+        <div>
+          <table className="Board">
             <tbody>
               <tr>
-                <td>Reserve</td>
-                <td>
+                <td className="BoardCell">Reserve</td>
+                <td className="BoardCell">
                   <ElementMatrix
                     cards={gameState.alpha.reserve}
                     showInactiveElements={false}
@@ -58,7 +58,7 @@ export default class App extends React.Component<{}, AppState> {
                     onCardClicked={this.onCardClicked}
                   />
                 </td>
-                <td>
+                <td className="BoardCell">
                   <ElementMatrix
                     cards={gameState.alpha.reserve}
                     showInactiveElements={true}
@@ -68,8 +68,13 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
               </tr>
               <tr>
-                <td onClick={() => this.onRowNumberClicked(1)}>1</td>
-                <td>
+                <td
+                  className="BoardCell"
+                  onClick={() => this.onRowNumberClicked(1)}
+                >
+                  1
+                </td>
+                <td className="BoardCell">
                   <ElementMatrix
                     cards={gameState.alpha.backRow}
                     showInactiveElements={false}
@@ -77,7 +82,7 @@ export default class App extends React.Component<{}, AppState> {
                     onCardClicked={this.onCardClicked}
                   />
                 </td>
-                <td>
+                <td className="BoardCell">
                   <ElementMatrix
                     cards={gameState.alpha.backRow}
                     showInactiveElements={true}
@@ -87,8 +92,13 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
               </tr>
               <tr>
-                <td onClick={() => this.onRowNumberClicked(2)}>2</td>
-                <td>
+                <td
+                  className="BoardCell"
+                  onClick={() => this.onRowNumberClicked(2)}
+                >
+                  2
+                </td>
+                <td className="BoardCell">
                   <ElementMatrix
                     cards={gameState.alpha.frontRow}
                     showInactiveElements={false}
@@ -96,7 +106,7 @@ export default class App extends React.Component<{}, AppState> {
                     onCardClicked={this.onCardClicked}
                   />
                 </td>
-                <td>
+                <td className="BoardCell">
                   <ElementMatrix
                     cards={gameState.alpha.frontRow}
                     showInactiveElements={true}
@@ -106,8 +116,13 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
               </tr>
               <tr>
-                <td onClick={() => this.onRowNumberClicked(3)}>3</td>
-                <td>
+                <td
+                  className="BoardCell"
+                  onClick={() => this.onRowNumberClicked(3)}
+                >
+                  3
+                </td>
+                <td className="BoardCell">
                   <ElementMatrix
                     cards={gameState.beta.frontRow}
                     showInactiveElements={false}
@@ -115,7 +130,7 @@ export default class App extends React.Component<{}, AppState> {
                     onCardClicked={this.onCardClicked}
                   />
                 </td>
-                <td>
+                <td className="BoardCell">
                   <ElementMatrix
                     cards={gameState.beta.frontRow}
                     showInactiveElements={true}
@@ -125,8 +140,13 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
               </tr>
               <tr>
-                <td onClick={() => this.onRowNumberClicked(4)}>4</td>
-                <td>
+                <td
+                  className="BoardCell"
+                  onClick={() => this.onRowNumberClicked(4)}
+                >
+                  4
+                </td>
+                <td className="BoardCell">
                   <ElementMatrix
                     cards={gameState.beta.backRow}
                     showInactiveElements={false}
@@ -134,7 +154,7 @@ export default class App extends React.Component<{}, AppState> {
                     onCardClicked={this.onCardClicked}
                   />
                 </td>
-                <td>
+                <td className="BoardCell">
                   <ElementMatrix
                     cards={gameState.beta.backRow}
                     showInactiveElements={true}
@@ -144,8 +164,8 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
               </tr>
               <tr>
-                <td>Reserve</td>
-                <td>
+                <td className="BoardCell">Reserve</td>
+                <td className="BoardCell">
                   <ElementMatrix
                     cards={gameState.beta.reserve}
                     showInactiveElements={false}
@@ -153,7 +173,7 @@ export default class App extends React.Component<{}, AppState> {
                     onCardClicked={this.onCardClicked}
                   />
                 </td>
-                <td>
+                <td className="BoardCell">
                   <ElementMatrix
                     cards={gameState.beta.reserve}
                     showInactiveElements={true}
@@ -238,7 +258,7 @@ export default class App extends React.Component<{}, AppState> {
           none: () => false,
           some: (cardType) => cardType === card.cardType,
         })}
-        onSelect={() => this.onCardClicked(card)}
+        onCardClicked={() => this.onCardClicked(card)}
       />
     ));
   }

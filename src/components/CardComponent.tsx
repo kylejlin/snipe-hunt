@@ -1,35 +1,34 @@
 import React from "react";
-import { Card, CardType } from "../types";
+import { cardEmojis } from "../cardMaps";
+import { canMoveBackward } from "../game";
+import { Card, Player } from "../types";
+import "./styles/CardComponent.css";
 
 interface Props {
   card: Card;
   isSelected: boolean;
-  onSelect(): void;
+  onCardClicked(card: Card): void;
 }
 
 export default function CardComponent({
   card,
   isSelected,
-  onSelect,
+  onCardClicked,
 }: Props): React.ReactElement {
   return (
     <div
       className={
         "CardComponent" +
+        (card.allegiance === Player.Alpha
+          ? " CardComponent--alpha"
+          : " CardComponent--beta") +
+        (card.isPromoted ? " CardComponent--promoted" : "") +
         (isSelected ? " CardComponent--selected" : "") +
-        (card.isPromoted ? " CardComponent--promoted" : "")
+        (canMoveBackward(card) ? " CardComponent--canMoveBackward" : "")
       }
-      onClick={onSelect}
+      onClick={() => onCardClicked(card)}
     >
-      {getCardDisplayName(card)}
+      {cardEmojis[card.cardType]}
     </div>
   );
-}
-function getCardDisplayName(card: Card): string {
-  const { cardType } = card;
-  if (cardType === CardType.AlphaSnipe || cardType === CardType.BetaSnipe) {
-    return "Snipe";
-  } else {
-    return CardType[cardType];
-  }
 }

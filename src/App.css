@@ -1,21 +1,8 @@
-.CardComponent {
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  user-select: none;
-}
-
-.CardComponent--selected {
-  background-color: bisque;
-}
-
-table,
-td {
+.Board {
   border: 1px solid black;
-  vertical-align: top;
   border-collapse: collapse;
 }
 
-.TurnIndicatorLight {
-  background-color: green;
+.BoardCell {
+  border: 1px solid black;
 }

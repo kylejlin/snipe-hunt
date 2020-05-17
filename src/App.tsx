@@ -25,6 +25,7 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   bindMethods() {
+    this.onCardClicked = this.onCardClicked.bind(this);
     this.onResetClicked = this.onResetClicked.bind(this);
   }
 
@@ -50,72 +51,92 @@ export default class App extends React.Component<{}, AppState> {
                   <ElementMatrix
                     cards={gameState.alpha.reserve}
                     showInactiveElements={false}
+                    selectedCard={this.state.selectedCard}
+                    onCardClicked={this.onCardClicked}
                   />
                 </td>
                 <td>
                   <ElementMatrix
                     cards={gameState.alpha.reserve}
                     showInactiveElements={true}
+                    selectedCard={this.state.selectedCard}
+                    onCardClicked={this.onCardClicked}
                   />
                 </td>
               </tr>
               <tr>
-                <td>1</td>
+                <td onClick={() => this.onRowNumberClicked(1)}>1</td>
                 <td>
                   <ElementMatrix
                     cards={gameState.alpha.backRow}
                     showInactiveElements={false}
+                    selectedCard={this.state.selectedCard}
+                    onCardClicked={this.onCardClicked}
                   />
                 </td>
                 <td>
                   <ElementMatrix
                     cards={gameState.alpha.backRow}
                     showInactiveElements={true}
+                    selectedCard={this.state.selectedCard}
+                    onCardClicked={this.onCardClicked}
                   />
                 </td>
               </tr>
               <tr>
-                <td>2</td>
+                <td onClick={() => this.onRowNumberClicked(2)}>2</td>
                 <td>
                   <ElementMatrix
                     cards={gameState.alpha.frontRow}
                     showInactiveElements={false}
+                    selectedCard={this.state.selectedCard}
+                    onCardClicked={this.onCardClicked}
                   />
                 </td>
                 <td>
                   <ElementMatrix
                     cards={gameState.alpha.frontRow}
                     showInactiveElements={true}
+                    selectedCard={this.state.selectedCard}
+                    onCardClicked={this.onCardClicked}
                   />
                 </td>
               </tr>
               <tr>
-                <td>3</td>
+                <td onClick={() => this.onRowNumberClicked(3)}>3</td>
                 <td>
                   <ElementMatrix
                     cards={gameState.beta.frontRow}
                     showInactiveElements={false}
+                    selectedCard={this.state.selectedCard}
+                    onCardClicked={this.onCardClicked}
                   />
                 </td>
                 <td>
                   <ElementMatrix
                     cards={gameState.beta.frontRow}
                     showInactiveElements={true}
+                    selectedCard={this.state.selectedCard}
+                    onCardClicked={this.onCardClicked}
                   />
                 </td>
               </tr>
               <tr>
-                <td>4</td>
+                <td onClick={() => this.onRowNumberClicked(4)}>4</td>
                 <td>
                   <ElementMatrix
                     cards={gameState.beta.backRow}
                     showInactiveElements={false}
+                    selectedCard={this.state.selectedCard}
+                    onCardClicked={this.onCardClicked}
                   />
                 </td>
                 <td>
                   <ElementMatrix
                     cards={gameState.beta.backRow}
                     showInactiveElements={true}
+                    selectedCard={this.state.selectedCard}
+                    onCardClicked={this.onCardClicked}
                   />
                 </td>
               </tr>
@@ -125,12 +146,16 @@ export default class App extends React.Component<{}, AppState> {
                   <ElementMatrix
                     cards={gameState.beta.reserve}
                     showInactiveElements={false}
+                    selectedCard={this.state.selectedCard}
+                    onCardClicked={this.onCardClicked}
                   />
                 </td>
                 <td>
                   <ElementMatrix
                     cards={gameState.beta.reserve}
                     showInactiveElements={true}
+                    selectedCard={this.state.selectedCard}
+                    onCardClicked={this.onCardClicked}
                   />
                 </td>
               </tr>
@@ -210,12 +235,12 @@ export default class App extends React.Component<{}, AppState> {
           none: () => false,
           some: (cardType) => cardType === card.cardType,
         })}
-        onSelect={() => this.onSelectCard(card)}
+        onSelect={() => this.onCardClicked(card)}
       />
     ));
   }
 
-  onSelectCard(card: Card): void {
+  onCardClicked(card: Card): void {
     this.state.selectedCard.match({
       none: () => {
         this.saveState({ selectedCard: option.some(card.cardType) });

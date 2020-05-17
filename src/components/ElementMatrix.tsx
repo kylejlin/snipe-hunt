@@ -1,86 +1,93 @@
 import React from "react";
+import { Option } from "rusty-ts";
 import { cardEmojis } from "../cardMaps";
 import {
   getCardsWithActiveElements,
   getCardsWithInactiveElements,
 } from "../game";
-import { Card, Element, Player } from "../types";
+import { Card, CardType, Element, Player } from "../types";
 import "./styles/ElementMatrix.css";
 
 interface Props {
   cards: Card[];
   showInactiveElements: boolean;
+  selectedCard: Option<CardType>;
+  onCardClicked(card: Card): void;
 }
 
 export default function ElementMatrix({
   cards,
   showInactiveElements,
+  selectedCard,
+  onCardClicked,
 }: Props): React.ReactElement {
-  const getCardsWithElements = showInactiveElements
-    ? getCardsWithInactiveElements
-    : getCardsWithActiveElements;
+  interface ElementMatrixCellProps {
+    amount: 1 | 2 | 3;
+    element: Element;
+  }
+
   return (
     <table className="ElementMatrix">
       <tbody>
         <tr>
-          <td className="ElementMatrixCell">
-            {getCardsWithElements(cards, 1, Element.Fire).map(renderCard)}
-          </td>
-          <td className="ElementMatrixCell">
-            {getCardsWithElements(cards, 1, Element.Water).map(renderCard)}
-          </td>
-          <td className="ElementMatrixCell">
-            {getCardsWithElements(cards, 1, Element.Earth).map(renderCard)}
-          </td>
-          <td className="ElementMatrixCell">
-            {getCardsWithElements(cards, 1, Element.Air).map(renderCard)}
-          </td>
+          <ElementMatrixCell amount={1} element={Element.Fire} />
+          <ElementMatrixCell amount={1} element={Element.Water} />
+          <ElementMatrixCell amount={1} element={Element.Earth} />
+          <ElementMatrixCell amount={1} element={Element.Air} />
         </tr>
         <tr>
-          <td className="ElementMatrixCell">
-            {getCardsWithElements(cards, 2, Element.Fire).map(renderCard)}
-          </td>
-          <td className="ElementMatrixCell">
-            {getCardsWithElements(cards, 2, Element.Water).map(renderCard)}
-          </td>
-          <td className="ElementMatrixCell">
-            {getCardsWithElements(cards, 2, Element.Earth).map(renderCard)}
-          </td>
-          <td className="ElementMatrixCell">
-            {getCardsWithElements(cards, 2, Element.Air).map(renderCard)}
-          </td>
+          <ElementMatrixCell amount={2} element={Element.Fire} />
+          <ElementMatrixCell amount={2} element={Element.Water} />
+          <ElementMatrixCell amount={2} element={Element.Earth} />
+          <ElementMatrixCell amount={2} element={Element.Air} />
         </tr>
         <tr>
-          <td className="ElementMatrixCell">
-            {getCardsWithElements(cards, 3, Element.Fire).map(renderCard)}
-          </td>
-          <td className="ElementMatrixCell">
-            {getCardsWithElements(cards, 3, Element.Water).map(renderCard)}
-          </td>
-          <td className="ElementMatrixCell">
-            {getCardsWithElements(cards, 3, Element.Earth).map(renderCard)}
-          </td>
-          <td className="ElementMatrixCell">
-            {getCardsWithElements(cards, 3, Element.Air).map(renderCard)}
-          </td>
+          <ElementMatrixCell amount={3} element={Element.Fire} />
+          <ElementMatrixCell amount={3} element={Element.Water} />
+          <ElementMatrixCell amount={3} element={Element.Earth} />
+          <ElementMatrixCell amount={3} element={Element.Air} />
         </tr>
       </tbody>
     </table>
   );
-}
 
-function renderCard(card: Card): React.ReactElement {
-  return (
-    <div
-      className={
-        "CardComponent" +
-        (card.allegiance === Player.Alpha
-          ? " CardComponent--alpha"
-          : " CardComponent--beta") +
-        (card.isPromoted ? " CardComponent--promoted" : "")
-      }
-    >
-      {cardEmojis[card.cardType]}
-    </div>
-  );
+  function ElementMatrixCell({
+    amount,
+    element,
+  }: ElementMatrixCellProps): React.ReactElement {
+    const getCardsWithElements = showInactiveElements
+      ? getCardsWithInactiveElements
+      : getCardsWithActiveElements;
+    const cardsWithElements = getCardsWithElements(cards, amount, element);
+    return (
+      <td
+        className={
+          "ElementMatrixCell" +
+          (cardsWithElements.length === 0 ? " ElementMatrixCell--empty" : "")
+        }
+      >
+        {cardsWithElements.map(renderCard)}
+      </td>
+    );
+  }
+
+  function renderCard(card: Card): React.ReactElement {
+    const isSelected = selectedCard.unwrapOr(null) === card.cardType;
+
+    return (
+      <div
+        className={
+          "CardComponent" +
+          (card.allegiance === Player.Alpha
+            ? " CardComponent--alpha"
+            : " CardComponent--beta") +
+          (card.isPromoted ? " CardComponent--promoted" : "") +
+          (isSelected ? " CardComponent--selected" : "")
+        }
+        onClick={() => onCardClicked(card)}
+      >
+        {cardEmojis[card.cardType]}
+      </div>
+    );
+  }
 }

@@ -19,6 +19,7 @@ import {
 import stateSaver from "./stateSaver";
 import { AppState, Card, CardType, Player, Row, PlyType } from "./types";
 import { cardEmojis } from "./cardMaps";
+import PlyComponent from "./components/PlyComponent";
 
 export default class App extends React.Component<{}, AppState> {
   constructor(props: {}) {
@@ -231,43 +232,7 @@ export default class App extends React.Component<{}, AppState> {
 
             {gameState.plies.map((ply, zeroBasedPlyNumber) => {
               const plyNumber = zeroBasedPlyNumber + 3;
-              const plyMakerEmoji =
-                plyNumber % 2 === 0
-                  ? getEmoji(CardType.AlphaSnipe)
-                  : getEmoji(CardType.BetaSnipe);
-              switch (ply.plyType) {
-                case PlyType.DemoteMove:
-                  return (
-                    <li>
-                      <div className="PlyNumber">
-                        {plyMakerEmoji + plyNumber}.
-                      </div>{" "}
-                      -{getEmoji(ply.demoted)}; {getEmoji(ply.moved)}
-                      {ply.destination}
-                      {ply.captures.map(getEmoji)}
-                    </li>
-                  );
-                case PlyType.MovePromote:
-                  return (
-                    <li>
-                      <div className="PlyNumber">
-                        {plyMakerEmoji + plyNumber}.
-                      </div>{" "}
-                      {getEmoji(ply.moved)}
-                      {ply.destination}
-                      {ply.captures.map(getEmoji)}; +{getEmoji(ply.promoted)}
-                    </li>
-                  );
-                case PlyType.Drop:
-                  return (
-                    <li>
-                      <div className="PlyNumber">
-                        {plyMakerEmoji + plyNumber}.
-                      </div>{" "}
-                      !{getEmoji(ply.dropped)}
-                    </li>
-                  );
-              }
+              return <PlyComponent ply={ply} plyNumber={plyNumber} />;
             })}
           </ol>
         </div>

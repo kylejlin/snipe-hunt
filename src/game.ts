@@ -259,6 +259,8 @@ export function tryCapture(
     return result.err(IllegalMove.CannotEmptyRowWithoutEndingGame);
   }
 
+  newState.futurePlyStack = [];
+
   return result.ok(newState);
 }
 
@@ -573,6 +575,8 @@ export function tryMove(
     return result.err(IllegalMove.CannotEmptyRowWithoutEndingGame);
   }
 
+  newState.futurePlyStack = [];
+
   return result.ok(newState);
 }
 
@@ -688,6 +692,7 @@ export function tryDrop(
     destination,
   });
   newState.turn = opponentOf(newState.turn);
+  newState.futurePlyStack = [];
   return result.ok(newState);
 }
 
@@ -758,7 +763,7 @@ export function tryUndoPlyOrSubPly(
   );
 }
 
-function recalculateOutOfSyncGameState(
+export function recalculateOutOfSyncGameState(
   state: GameState
 ): Result<GameState, IllegalToggle | IllegalMove | IllegalDrop> {
   const initState: GameState = {

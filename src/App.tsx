@@ -20,6 +20,7 @@ import {
   tryMove,
   tryToggle,
   tryUndoPlyOrSubPly,
+  recalculateOutOfSyncGameState,
 } from "./game";
 import stateSaver from "./stateSaver";
 import { AppState, Card, CardType, Player, Row } from "./types";
@@ -37,6 +38,7 @@ export default class App extends React.Component<{}, AppState> {
     this.onCardClicked = this.onCardClicked.bind(this);
     this.onResetClicked = this.onResetClicked.bind(this);
     this.onUndoPlyClicked = this.onUndoPlyClicked.bind(this);
+    this.onRedoPlyClicked = this.onRedoPlyClicked.bind(this);
   }
 
   saveState(newState: Partial<AppState>): void {
@@ -250,7 +252,20 @@ export default class App extends React.Component<{}, AppState> {
                 ),
             })}
           </ol>
+          <h4>Future plies</h4>
+          <ol className="Plies">
+            {gameState.futurePlyStack
+              .slice()
+              .reverse()
+              .map((ply, i) => (
+                <PlyComponent
+                  ply={ply}
+                  plyNumber={gameState.plies.length + 3 + i}
+                />
+              ))}
+          </ol>
           <button onClick={this.onUndoPlyClicked}>Back</button>
+          <button onClick={this.onRedoPlyClicked}>Forward</button>
         </div>
         <button onClick={this.onResetClicked}>Reset</button>
       </div>
@@ -448,6 +463,27 @@ export default class App extends React.Component<{}, AppState> {
         this.saveState({ selectedCard: option.none() });
       },
     });
+  }
+
+  onRedoPlyClicked(): void {
+    const { gameState } = this.state;
+    if (gameState.futurePlyStack.length > 0) {
+      recalculateOutOfSyncGameState({
+        ...gameState,
+        plies: gameState.plies.concat(gameState.futurePlyStack.slice(-1)),
+        futurePlyStack: gameState.futurePlyStack.slice(0, -1),
+      }).match({
+        ok: (newGameState) => {
+          this.saveState({
+            gameState: newGameState,
+          });
+        },
+        err: (e) => {
+          alert("Bug: Illegal redo");
+          this.saveState({ selectedCard: option.none() });
+        },
+      });
+    }
   }
 
   onResetClicked(): void {

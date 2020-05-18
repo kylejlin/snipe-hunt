@@ -1,4 +1,5 @@
 .CardComponent {
+  color: white;
   display: inline;
 
   -webkit-user-select: none;

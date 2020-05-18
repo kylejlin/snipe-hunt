@@ -620,7 +620,7 @@ export function tryToggle(
   }
 }
 
-function isSnipe(cardType: CardType): boolean {
+export function isSnipe(cardType: CardType): boolean {
   return cardType === CardType.AlphaSnipe || cardType === CardType.BetaSnipe;
 }
 

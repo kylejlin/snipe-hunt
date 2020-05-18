@@ -14,6 +14,7 @@ import {
   IllegalMove,
   IllegalDrop,
   IllegalToggle,
+  isSnipe,
 } from "./game";
 import stateSaver from "./stateSaver";
 import { AppState, Card, CardType, Player, Row } from "./types";
@@ -49,7 +50,9 @@ export default class App extends React.Component<{}, AppState> {
           <table className="Board">
             <tbody>
               <tr>
-                <td className="BoardCell">Reserve</td>
+                <td className="BoardCell">
+                  Reserve{this.renderSnipesIn(gameState.alpha.reserve)}
+                </td>
                 <td className="BoardCell">
                   <ElementMatrix
                     cards={gameState.alpha.reserve}
@@ -72,7 +75,7 @@ export default class App extends React.Component<{}, AppState> {
                   className="BoardCell"
                   onClick={() => this.onRowNumberClicked(1)}
                 >
-                  1
+                  1{this.renderSnipesIn(gameState.alpha.backRow)}
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
@@ -96,7 +99,7 @@ export default class App extends React.Component<{}, AppState> {
                   className="BoardCell"
                   onClick={() => this.onRowNumberClicked(2)}
                 >
-                  2
+                  2{this.renderSnipesIn(gameState.alpha.frontRow)}
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
@@ -120,7 +123,7 @@ export default class App extends React.Component<{}, AppState> {
                   className="BoardCell"
                   onClick={() => this.onRowNumberClicked(3)}
                 >
-                  3
+                  3{this.renderSnipesIn(gameState.beta.frontRow)}
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
@@ -144,7 +147,7 @@ export default class App extends React.Component<{}, AppState> {
                   className="BoardCell"
                   onClick={() => this.onRowNumberClicked(4)}
                 >
-                  4
+                  4{this.renderSnipesIn(gameState.beta.backRow)}
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
@@ -164,7 +167,9 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
               </tr>
               <tr>
-                <td className="BoardCell">Reserve</td>
+                <td className="BoardCell">
+                  Reserve{this.renderSnipesIn(gameState.beta.reserve)}
+                </td>
                 <td className="BoardCell">
                   <ElementMatrix
                     cards={gameState.beta.reserve}
@@ -189,6 +194,21 @@ export default class App extends React.Component<{}, AppState> {
         <button onClick={this.onResetClicked}>Reset</button>
       </div>
     );
+  }
+
+  renderSnipesIn(cards: Card[]): React.ReactElement[] {
+    const snipes = cards.filter((card) => isSnipe(card.cardType));
+    return snipes.map((card) => {
+      const isSelected =
+        this.state.selectedCard.unwrapOr(null) === card.cardType;
+      return (
+        <CardComponent
+          card={card}
+          isSelected={isSelected}
+          onCardClicked={this.onCardClicked}
+        />
+      );
+    });
   }
 
   renderTraditionalView(): React.ReactElement {

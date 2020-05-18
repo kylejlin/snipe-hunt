@@ -20,6 +20,7 @@ import stateSaver from "./stateSaver";
 import { AppState, Card, CardType, Player, Row, PlyType } from "./types";
 import { cardEmojis } from "./cardMaps";
 import PlyComponent from "./components/PlyComponent";
+import SubPlyComponent from "./components/SubPlyComponent";
 
 export default class App extends React.Component<{}, AppState> {
   constructor(props: {}) {
@@ -233,6 +234,17 @@ export default class App extends React.Component<{}, AppState> {
             {gameState.plies.map((ply, zeroBasedPlyNumber) => {
               const plyNumber = zeroBasedPlyNumber + 3;
               return <PlyComponent ply={ply} plyNumber={plyNumber} />;
+            })}
+
+            {gameState.pendingSubPly.match({
+              none: () => null,
+              some: (pendingSubPly) =>
+                isGameOver(gameState) ? null : (
+                  <SubPlyComponent
+                    subPly={pendingSubPly}
+                    plyNumber={gameState.plies.length + 3}
+                  />
+                ),
             })}
           </ol>
         </div>

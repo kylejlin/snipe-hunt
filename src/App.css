@@ -10,3 +10,8 @@
 .Plies {
   list-style-type: none;
 }
+
+.PlyNumber {
+  display: inline;
+  font-weight: bold;
+}

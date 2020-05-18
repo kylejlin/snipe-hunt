@@ -195,7 +195,10 @@ export default class App extends React.Component<{}, AppState> {
           <h3>Plies</h3>
           <ol className="Plies">
             <li>
-              {getEmoji(CardType.BetaSnipe) + "1"}. =
+              <div className="PlyNumber">
+                {getEmoji(CardType.BetaSnipe) + "1"}.
+              </div>{" "}
+              =
               {gameState.initialPositions.beta.reserve.map((card) =>
                 getEmoji(card.cardType)
               )}
@@ -209,7 +212,10 @@ export default class App extends React.Component<{}, AppState> {
               )}
             </li>
             <li>
-              {getEmoji(CardType.AlphaSnipe) + "2"}. =
+              <div className="PlyNumber">
+                {getEmoji(CardType.AlphaSnipe) + "2"}.
+              </div>{" "}
+              =
               {gameState.initialPositions.alpha.reserve.map((card) =>
                 getEmoji(card.cardType)
               )}
@@ -233,8 +239,10 @@ export default class App extends React.Component<{}, AppState> {
                 case PlyType.DemoteMove:
                   return (
                     <li>
-                      {plyMakerEmoji + plyNumber}. -{getEmoji(ply.demoted)};{" "}
-                      {getEmoji(ply.moved)}
+                      <div className="PlyNumber">
+                        {plyMakerEmoji + plyNumber}.
+                      </div>{" "}
+                      -{getEmoji(ply.demoted)}; {getEmoji(ply.moved)}
                       {ply.destination}
                       {ply.captures.map(getEmoji)}
                     </li>
@@ -242,7 +250,10 @@ export default class App extends React.Component<{}, AppState> {
                 case PlyType.MovePromote:
                   return (
                     <li>
-                      {plyMakerEmoji + plyNumber}. {getEmoji(ply.moved)}
+                      <div className="PlyNumber">
+                        {plyMakerEmoji + plyNumber}.
+                      </div>{" "}
+                      {getEmoji(ply.moved)}
                       {ply.destination}
                       {ply.captures.map(getEmoji)}; +{getEmoji(ply.promoted)}
                     </li>
@@ -250,7 +261,10 @@ export default class App extends React.Component<{}, AppState> {
                 case PlyType.Drop:
                   return (
                     <li>
-                      {plyMakerEmoji + plyNumber}. !{getEmoji(ply.dropped)}
+                      <div className="PlyNumber">
+                        {plyMakerEmoji + plyNumber}.
+                      </div>{" "}
+                      !{getEmoji(ply.dropped)}
                     </li>
                   );
               }

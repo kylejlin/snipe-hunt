@@ -8,7 +8,7 @@ import PlyComponent from "./components/PlyComponent";
 import SubPlyComponent from "./components/SubPlyComponent";
 import {
   getRandomState,
-  getRow,
+  getRowNumber,
   IllegalDrop,
   IllegalMove,
   IllegalToggle,
@@ -405,7 +405,7 @@ export default class App extends React.Component<{}, AppState> {
 
   onRowNumberClicked(row: Row): void {
     this.state.selectedCard.ifSome((selectedCard) => {
-      getRow(this.state.gameState, selectedCard).match({
+      getRowNumber(this.state.gameState, selectedCard).match({
         none: () => {
           this.tryDrop(selectedCard, row);
         },

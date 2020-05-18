@@ -35,6 +35,7 @@ export enum IllegalMove {
 export enum IllegalToggle {
   GameAlreadyEnded,
   NotYourCard,
+  CannotToggleCardInReserve,
   SnipeIsUnpromotable,
   AlreadyMadeSubPly,
   CannotPromoteUntilMoveIsMade,
@@ -174,8 +175,8 @@ export function tryCapture(
     return result.err(IllegalMove.AlreadyMoved);
   }
 
-  const optAttackerRow = getRow(state, attackerType);
-  const optTargetRow = getRow(state, targetType);
+  const optAttackerRow = getRowNumber(state, attackerType);
+  const optTargetRow = getRowNumber(state, targetType);
 
   if (optAttackerRow.isNone()) {
     return result.err(IllegalMove.AttackerInReserve);
@@ -289,7 +290,10 @@ function hasAlreadyMoved(state: GameState): boolean {
   });
 }
 
-export function getRow(state: GameState, cardType: CardType): Option<Row> {
+export function getRowNumber(
+  state: GameState,
+  cardType: CardType
+): Option<Row> {
   if (containsCardType(state.alpha.backRow, cardType)) {
     return option.some(1);
   }
@@ -500,7 +504,7 @@ export function tryMove(
     return result.err(IllegalMove.AlreadyMoved);
   }
 
-  const optAttackerRow = getRow(state, attackerType);
+  const optAttackerRow = getRowNumber(state, attackerType);
 
   if (optAttackerRow.isNone()) {
     return result.err(IllegalMove.AttackerInReserve);
@@ -592,6 +596,10 @@ export function tryToggle(
 
   if (state.turn !== card.allegiance) {
     return result.err(IllegalToggle.NotYourCard);
+  }
+
+  if (getRowNumber(state, card.cardType).isNone()) {
+    return result.err(IllegalToggle.CannotToggleCardInReserve);
   }
 
   if (isSnipe(card.cardType)) {

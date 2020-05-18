@@ -6,3 +6,7 @@
 .BoardCell {
   border: 1px solid black;
 }
+
+.Plies {
+  list-style-type: none;
+}

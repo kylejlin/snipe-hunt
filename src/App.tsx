@@ -17,7 +17,8 @@ import {
   isSnipe,
 } from "./game";
 import stateSaver from "./stateSaver";
-import { AppState, Card, CardType, Player, Row } from "./types";
+import { AppState, Card, CardType, Player, Row, PlyType } from "./types";
+import { cardEmojis } from "./cardMaps";
 
 export default class App extends React.Component<{}, AppState> {
   constructor(props: {}) {
@@ -190,7 +191,72 @@ export default class App extends React.Component<{}, AppState> {
             </tbody>
           </table>
         </div>
-        <div className="Moves"></div>
+        <div>
+          <h3>Plies</h3>
+          <ol className="Plies">
+            <li>
+              {getEmoji(CardType.BetaSnipe) + "1"}. =
+              {gameState.initialPositions.beta.reserve.map((card) =>
+                getEmoji(card.cardType)
+              )}
+              ;{" "}
+              {gameState.initialPositions.beta.backRow.map((card) =>
+                getEmoji(card.cardType)
+              )}
+              ;{" "}
+              {gameState.initialPositions.beta.frontRow.map((card) =>
+                getEmoji(card.cardType)
+              )}
+            </li>
+            <li>
+              {getEmoji(CardType.AlphaSnipe) + "2"}. =
+              {gameState.initialPositions.alpha.reserve.map((card) =>
+                getEmoji(card.cardType)
+              )}
+              ;{" "}
+              {gameState.initialPositions.alpha.backRow.map((card) =>
+                getEmoji(card.cardType)
+              )}
+              ;{" "}
+              {gameState.initialPositions.alpha.frontRow.map((card) =>
+                getEmoji(card.cardType)
+              )}
+            </li>
+
+            {gameState.plies.map((ply, zeroBasedPlyNumber) => {
+              const plyNumber = zeroBasedPlyNumber + 3;
+              const plyMakerEmoji =
+                plyNumber % 2 === 0
+                  ? getEmoji(CardType.AlphaSnipe)
+                  : getEmoji(CardType.BetaSnipe);
+              switch (ply.plyType) {
+                case PlyType.DemoteMove:
+                  return (
+                    <li>
+                      {plyMakerEmoji + plyNumber}. -{getEmoji(ply.demoted)};{" "}
+                      {getEmoji(ply.moved)}
+                      {ply.destination}
+                      {ply.captures.map(getEmoji)}
+                    </li>
+                  );
+                case PlyType.MovePromote:
+                  return (
+                    <li>
+                      {plyMakerEmoji + plyNumber}. {getEmoji(ply.moved)}
+                      {ply.destination}
+                      {ply.captures.map(getEmoji)}; +{getEmoji(ply.promoted)}
+                    </li>
+                  );
+                case PlyType.Drop:
+                  return (
+                    <li>
+                      {plyMakerEmoji + plyNumber}. !{getEmoji(ply.dropped)}
+                    </li>
+                  );
+              }
+            })}
+          </ol>
+        </div>
         <button onClick={this.onResetClicked}>Reset</button>
       </div>
     );
@@ -389,6 +455,10 @@ function loadState(): AppState {
     stateSaver.setState(state);
     return state;
   });
+}
+
+function getEmoji(cardType: CardType): string {
+  return cardEmojis[cardType];
 }
 
 function isAlpha(card: Card): boolean {

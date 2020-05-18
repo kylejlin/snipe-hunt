@@ -677,7 +677,7 @@ export function tryDrop(
   getMutRow(newState, destination).push(card);
   newState.plies.push({
     plyType: PlyType.Drop,
-    drop: card.cardType,
+    dropped: card.cardType,
     destination,
   });
   newState.turn = opponentOf(newState.turn);

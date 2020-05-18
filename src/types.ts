@@ -93,7 +93,7 @@ export interface MovePromote {
 
 export interface Drop {
   plyType: PlyType.Drop;
-  drop: CardType;
+  dropped: CardType;
   destination: Row;
 }
 

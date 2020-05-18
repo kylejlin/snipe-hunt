@@ -845,3 +845,13 @@ function tryApplySubPly(
       return tryMoveOrCapture(state, subPly);
   }
 }
+
+export function canCapture(
+  state: GameState,
+  attackerType: CardType,
+  targetType: CardType
+): boolean {
+  const attacker = getCard(state, attackerType);
+  const target = getCard(state, targetType);
+  return doAttackerElementsTrumpTargetElements(attacker, target);
+}

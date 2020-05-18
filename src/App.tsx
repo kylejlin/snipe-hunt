@@ -63,6 +63,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
+                    gameState={gameState}
                     cards={gameState.alpha.reserve}
                     showInactiveElements={false}
                     selectedCard={this.state.selectedCard}
@@ -71,6 +72,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
+                    gameState={gameState}
                     cards={gameState.alpha.reserve}
                     showInactiveElements={true}
                     selectedCard={this.state.selectedCard}
@@ -87,6 +89,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
+                    gameState={gameState}
                     cards={gameState.alpha.backRow}
                     showInactiveElements={false}
                     selectedCard={this.state.selectedCard}
@@ -95,6 +98,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
+                    gameState={gameState}
                     cards={gameState.alpha.backRow}
                     showInactiveElements={true}
                     selectedCard={this.state.selectedCard}
@@ -111,6 +115,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
+                    gameState={gameState}
                     cards={gameState.alpha.frontRow}
                     showInactiveElements={false}
                     selectedCard={this.state.selectedCard}
@@ -119,6 +124,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
+                    gameState={gameState}
                     cards={gameState.alpha.frontRow}
                     showInactiveElements={true}
                     selectedCard={this.state.selectedCard}
@@ -135,6 +141,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
+                    gameState={gameState}
                     cards={gameState.beta.frontRow}
                     showInactiveElements={false}
                     selectedCard={this.state.selectedCard}
@@ -143,6 +150,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
+                    gameState={gameState}
                     cards={gameState.beta.frontRow}
                     showInactiveElements={true}
                     selectedCard={this.state.selectedCard}
@@ -159,6 +167,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
+                    gameState={gameState}
                     cards={gameState.beta.backRow}
                     showInactiveElements={false}
                     selectedCard={this.state.selectedCard}
@@ -167,6 +176,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
+                    gameState={gameState}
                     cards={gameState.beta.backRow}
                     showInactiveElements={true}
                     selectedCard={this.state.selectedCard}
@@ -180,6 +190,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
+                    gameState={gameState}
                     cards={gameState.beta.reserve}
                     showInactiveElements={false}
                     selectedCard={this.state.selectedCard}
@@ -188,6 +199,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
+                    gameState={gameState}
                     cards={gameState.beta.reserve}
                     showInactiveElements={true}
                     selectedCard={this.state.selectedCard}
@@ -281,6 +293,7 @@ export default class App extends React.Component<{}, AppState> {
         <CardComponent
           card={card}
           isSelected={isSelected}
+          isCapturable={false}
           onCardClicked={this.onCardClicked}
         />
       );
@@ -354,6 +367,7 @@ export default class App extends React.Component<{}, AppState> {
           none: () => false,
           some: (cardType) => cardType === card.cardType,
         })}
+        isCapturable={false}
         onCardClicked={() => this.onCardClicked(card)}
       />
     ));

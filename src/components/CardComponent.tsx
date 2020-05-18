@@ -7,12 +7,14 @@ import "./styles/CardComponent.css";
 interface Props {
   card: Card;
   isSelected: boolean;
+  isCapturable: boolean;
   onCardClicked(card: Card): void;
 }
 
 export default function CardComponent({
   card,
   isSelected,
+  isCapturable,
   onCardClicked,
 }: Props): React.ReactElement {
   return (
@@ -24,7 +26,8 @@ export default function CardComponent({
           : " CardComponent--beta") +
         (card.isPromoted ? " CardComponent--promoted" : "") +
         (isSelected ? " CardComponent--selected" : "") +
-        (canMoveBackward(card) ? " CardComponent--canMoveBackward" : "")
+        (canMoveBackward(card) ? " CardComponent--canMoveBackward" : "") +
+        (isCapturable ? " CardComponent--capturable" : "")
       }
       onClick={() => onCardClicked(card)}
     >

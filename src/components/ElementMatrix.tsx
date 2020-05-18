@@ -1,14 +1,16 @@
 import React from "react";
 import { Option } from "rusty-ts";
 import {
+  canCapture,
   getCardsWithActiveElements,
   getCardsWithInactiveElements,
 } from "../game";
-import { Card, CardType, Element } from "../types";
+import { Card, CardType, Element, GameState } from "../types";
 import CardComponent from "./CardComponent";
 import "./styles/ElementMatrix.css";
 
 interface Props {
+  gameState: GameState;
   cards: Card[];
   showInactiveElements: boolean;
   selectedCard: Option<CardType>;
@@ -16,6 +18,7 @@ interface Props {
 }
 
 export default function ElementMatrix({
+  gameState,
   cards,
   showInactiveElements,
   selectedCard,
@@ -73,11 +76,17 @@ export default function ElementMatrix({
 
   function renderCard(card: Card): React.ReactElement {
     const isSelected = selectedCard.unwrapOr(null) === card.cardType;
+    const isCapturable = selectedCard.match({
+      none: () => false,
+      some: (selectedCard) =>
+        canCapture(gameState, selectedCard, card.cardType),
+    });
 
     return (
       <CardComponent
         card={card}
         isSelected={isSelected}
+        isCapturable={isCapturable}
         onCardClicked={onCardClicked}
       />
     );

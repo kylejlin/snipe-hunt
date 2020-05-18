@@ -1,26 +1,28 @@
 import React from "react";
 import { option } from "rusty-ts";
 import "./App.css";
+import { cardEmojis } from "./cardMaps";
 import CardComponent from "./components/CardComponent";
 import ElementMatrix from "./components/ElementMatrix";
+import PlyComponent from "./components/PlyComponent";
+import SubPlyComponent from "./components/SubPlyComponent";
 import {
   getRandomState,
   getRow,
+  IllegalDrop,
+  IllegalMove,
+  IllegalToggle,
+  IllegalUndo,
+  isGameOver,
+  isSnipe,
   tryCapture,
   tryDrop,
   tryMove,
   tryToggle,
-  isGameOver,
-  IllegalMove,
-  IllegalDrop,
-  IllegalToggle,
-  isSnipe,
+  tryUndoPlyOrSubPly,
 } from "./game";
 import stateSaver from "./stateSaver";
-import { AppState, Card, CardType, Player, Row, PlyType } from "./types";
-import { cardEmojis } from "./cardMaps";
-import PlyComponent from "./components/PlyComponent";
-import SubPlyComponent from "./components/SubPlyComponent";
+import { AppState, Card, CardType, Player, Row } from "./types";
 
 export default class App extends React.Component<{}, AppState> {
   constructor(props: {}) {
@@ -34,6 +36,7 @@ export default class App extends React.Component<{}, AppState> {
   bindMethods() {
     this.onCardClicked = this.onCardClicked.bind(this);
     this.onResetClicked = this.onResetClicked.bind(this);
+    this.onUndoPlyClicked = this.onUndoPlyClicked.bind(this);
   }
 
   saveState(newState: Partial<AppState>): void {
@@ -247,6 +250,7 @@ export default class App extends React.Component<{}, AppState> {
                 ),
             })}
           </ol>
+          <button onClick={this.onUndoPlyClicked}>Back</button>
         </div>
         <button onClick={this.onResetClicked}>Reset</button>
       </div>
@@ -427,6 +431,20 @@ export default class App extends React.Component<{}, AppState> {
       },
       err: (e) => {
         alert(IllegalToggle[e]);
+        this.saveState({ selectedCard: option.none() });
+      },
+    });
+  }
+
+  onUndoPlyClicked(): void {
+    tryUndoPlyOrSubPly(this.state.gameState).match({
+      ok: (newGameState) => {
+        this.saveState({
+          gameState: newGameState,
+        });
+      },
+      err: (e) => {
+        alert(IllegalUndo[e]);
         this.saveState({ selectedCard: option.none() });
       },
     });

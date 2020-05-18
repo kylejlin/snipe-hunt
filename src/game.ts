@@ -16,6 +16,8 @@ import {
   Row,
   STATE_VERSION,
   SubPlyType,
+  Ply,
+  SubPly,
 } from "./types";
 
 export enum IllegalMove {
@@ -43,6 +45,11 @@ export enum IllegalDrop {
   NotYourCard,
   AlreadyMadeSubPly,
   CannotEmptyReserve,
+}
+
+export enum IllegalUndo {
+  NothingToUndo,
+  IllegalPlyOrSubPly,
 }
 
 interface ElementCountTable {
@@ -90,7 +97,7 @@ export function getRandomState(): AppState {
       beta,
       initialPositions: { alpha, beta },
       plies: [],
-      futurePlies: [],
+      futurePlyStack: [],
       pendingSubPly: option.none(),
     },
     selectedCard: option.none(),
@@ -726,4 +733,110 @@ export function getCardsWithInactiveElements(
       },
     })
   );
+}
+
+export function tryUndoPlyOrSubPly(
+  state: GameState
+): Result<GameState, IllegalUndo> {
+  const newState = cloneGameStateAsMut(state);
+
+  if (newState.pendingSubPly.isSome()) {
+    newState.pendingSubPly = option.none();
+    return recalculateOutOfSyncGameState(newState).mapErr(
+      () => IllegalUndo.IllegalPlyOrSubPly
+    );
+  }
+
+  if (newState.plies.length === 0) {
+    return result.err(IllegalUndo.NothingToUndo);
+  }
+
+  const removedPly = newState.plies.pop()!;
+  newState.futurePlyStack.push(removedPly);
+  return recalculateOutOfSyncGameState(newState).mapErr(
+    () => IllegalUndo.IllegalPlyOrSubPly
+  );
+}
+
+function recalculateOutOfSyncGameState(
+  state: GameState
+): Result<GameState, IllegalToggle | IllegalMove | IllegalDrop> {
+  const initState: GameState = {
+    turn: Player.Beta,
+    alpha: state.initialPositions.alpha,
+    beta: state.initialPositions.beta,
+    initialPositions: state.initialPositions,
+    plies: [],
+    futurePlyStack: [],
+    pendingSubPly: option.none(),
+  };
+
+  const withFullPliesApplied = state.plies.reduce(
+    (
+      currentStateOrError: Result<
+        GameState,
+        IllegalToggle | IllegalMove | IllegalDrop
+      >,
+      ply
+    ) =>
+      currentStateOrError.andThen((currentState) =>
+        tryApplyPly(currentState, ply)
+      ),
+    result.ok(initState)
+  );
+  const withPendingSubPlyApplied = withFullPliesApplied.andThen(
+    (currentState) =>
+      currentState.pendingSubPly.match({
+        none: () => result.ok(currentState),
+        some: (subPly) => tryApplySubPly(currentState, subPly),
+      })
+  );
+
+  return withPendingSubPlyApplied.map((currentState) => {
+    return {
+      ...currentState,
+      futurePlyStack: state.futurePlyStack,
+    };
+  });
+}
+
+function tryApplyPly(
+  state: GameState,
+  ply: Ply
+): Result<GameState, IllegalToggle | IllegalMove | IllegalDrop> {
+  switch (ply.plyType) {
+    case PlyType.DemoteMove:
+      return tryToggle(state, ply.demoted).andThen((afterDemotion) =>
+        tryMoveOrCapture(afterDemotion, ply)
+      );
+    case PlyType.MovePromote:
+      return tryMoveOrCapture(state, ply).andThen((afterMoveOrCapture) =>
+        tryToggle(afterMoveOrCapture, ply.promoted)
+      );
+    case PlyType.Drop:
+      return tryDrop(state, ply.dropped, ply.destination);
+  }
+}
+
+function tryMoveOrCapture(
+  state: GameState,
+  ply: { moved: CardType; destination: Row; captures: CardType[] }
+): Result<GameState, IllegalMove> {
+  if (ply.captures.length === 1) {
+    return tryCapture(state, ply.moved, ply.captures[0]);
+  } else {
+    return tryMove(state, ply.moved, ply.destination);
+  }
+}
+
+function tryApplySubPly(
+  state: GameState,
+  subPly: SubPly
+): Result<GameState, IllegalToggle | IllegalMove> {
+  switch (subPly.subPlyType) {
+    case SubPlyType.Demote:
+      return tryToggle(state, subPly.demoted);
+    case SubPlyType.Move:
+      return tryMoveOrCapture(state, subPly);
+  }
 }

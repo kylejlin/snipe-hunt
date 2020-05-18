@@ -1,6 +1,6 @@
 import React from "react";
 import { cardEmojis } from "../cardMaps";
-import { CardType, SubPly, PlyType, SubPlyType } from "../types";
+import { CardType, SubPly, SubPlyType } from "../types";
 import "./styles/SubPlyComponent.css";
 
 interface Props {

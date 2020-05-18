@@ -1,14 +1,12 @@
 import React from "react";
 import { Option } from "rusty-ts";
-import { cardEmojis } from "../cardMaps";
 import {
   getCardsWithActiveElements,
   getCardsWithInactiveElements,
-  canMoveBackward,
 } from "../game";
-import { Card, CardType, Element, Player } from "../types";
-import "./styles/ElementMatrix.css";
+import { Card, CardType, Element } from "../types";
 import CardComponent from "./CardComponent";
+import "./styles/ElementMatrix.css";
 
 interface Props {
   cards: Card[];

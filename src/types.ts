@@ -5,7 +5,7 @@ import { Option } from "rusty-ts";
  * to state interfaces to ensure seralized state
  * compatibility detection will continue to work.
  */
-export const STATE_VERSION = 8;
+export const STATE_VERSION = 9;
 
 export interface AppState {
   stateVersion: typeof STATE_VERSION;
@@ -21,7 +21,7 @@ export interface MutGameState {
   beta: Position;
   initialPositions: { alpha: Position; beta: Position };
   plies: Ply[];
-  futurePlies: Ply[];
+  futurePlyStack: Ply[];
   pendingSubPly: Option<SubPly>;
 }
 

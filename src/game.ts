@@ -11,13 +11,13 @@ import {
   MutCard,
   MutGameState,
   Player,
+  Ply,
   PlyType,
   Position,
   Row,
   STATE_VERSION,
-  SubPlyType,
-  Ply,
   SubPly,
+  SubPlyType,
 } from "./types";
 
 export enum IllegalMove {
@@ -278,9 +278,117 @@ export function getWinner(state: GameState): Option<Player> {
     return option.some(Player.Beta);
   }
 
-  // TODO check if player is out of plies/sub-plies
+  if (!hasLegalPly(state)) {
+    return option.some(opponentOf(state.turn));
+  }
 
   return option.none();
+}
+
+function hasLegalPly(state: GameState): boolean {
+  return state.pendingSubPly.match({
+    none: () => {
+      return hasLegalDrop(state) || hasLegalDemotionMoveOrMovePromotion(state);
+    },
+    some: (subPly) => {
+      switch (subPly.subPlyType) {
+        case SubPlyType.Demote: {
+          return hasLegalMoveSubPly(state);
+        }
+        case SubPlyType.Move: {
+          // If you can move a card, you can definitely promote it.
+          return true;
+        }
+      }
+    },
+  });
+}
+
+function hasLegalDrop(state: GameState): boolean {
+  const { reserve } = state[getPlayerKey(state.turn)];
+  return reserve.length > 1;
+}
+
+function hasLegalDemotionMoveOrMovePromotion(state: GameState): boolean {
+  if (hasLegalMoveSubPly(state)) {
+    return true;
+  }
+
+  const allCards = [
+    ...state.alpha.backRow,
+    ...state.alpha.frontRow,
+    ...state.beta.frontRow,
+    ...state.beta.backRow,
+  ];
+  for (const card of allCards) {
+    if (card.allegiance === state.turn && card.isPromoted) {
+      const afterDemotion = unsafeForceApplyDemotion(state, card.cardType);
+      if (hasLegalMoveSubPly(afterDemotion)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function unsafeForceApplyDemotion(
+  state: GameState,
+  demoted: CardType
+): GameState {
+  const newState = cloneGameStateAsMut(state);
+  const card = getMutCard(newState, demoted);
+  card.isPromoted = false;
+  return newState;
+}
+
+function hasLegalMoveSubPly(state: GameState): boolean {
+  for (let i = 1; i <= 4; i++) {
+    const row = i as Row;
+    const rowCards = getMutRow(state, row);
+
+    for (const card of rowCards) {
+      if (card.allegiance === state.turn) {
+        const forwardRow = forward(row, state.turn);
+        if (forwardRow.isSome()) {
+          const destination = forwardRow.unwrap();
+          const destinationCards = getMutRow(state, destination);
+          const friendlySnipeInDesination = containsCardType(
+            destinationCards,
+            getPlayerSnipe(state.turn)
+          );
+          if (!friendlySnipeInDesination) {
+            return true;
+          }
+          if (doesEnteringRowActivateTriplet(card, destinationCards)) {
+            return true;
+          }
+
+          // TODO handle single captures
+        }
+
+        if (canMoveBackward(card)) {
+          const backwardRow = backward(row, state.turn);
+          if (backwardRow.isSome()) {
+            const destination = backwardRow.unwrap();
+            const destinationCards = getMutRow(state, destination);
+            const friendlySnipeInDesination = containsCardType(
+              destinationCards,
+              getPlayerSnipe(state.turn)
+            );
+            if (!friendlySnipeInDesination) {
+              return true;
+            }
+            if (doesEnteringRowActivateTriplet(card, destinationCards)) {
+              return true;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return false;
 }
 
 export function hasAlreadyMoved(state: GameState): boolean {

@@ -24,6 +24,7 @@ import {
 } from "./game";
 import stateSaver from "./stateSaver";
 import { AppState, Card, CardType, Player, Row } from "./types";
+import { getBestPly, getLegalPlies } from "./kraken";
 
 export default class App extends React.Component<{}, AppState> {
   constructor(props: {}) {
@@ -32,6 +33,10 @@ export default class App extends React.Component<{}, AppState> {
     this.state = loadState();
 
     this.bindMethods();
+
+    (window as any).app = this;
+    (window as any).getBestPly = getBestPly;
+    (window as any).getLegalPlies = getLegalPlies;
   }
 
   bindMethods() {

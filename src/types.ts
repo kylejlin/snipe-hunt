@@ -5,7 +5,7 @@ import { Option } from "rusty-ts";
  * to state interfaces to ensure seralized state
  * compatibility detection will continue to work.
  */
-export const STATE_VERSION = 9;
+export const STATE_VERSION = 10;
 
 export interface AppState {
   stateVersion: typeof STATE_VERSION;
@@ -45,26 +45,26 @@ export interface MutCard {
 }
 
 export enum CardType {
-  AlphaSnipe,
-  BetaSnipe,
+  AlphaSnipe = "Alpha",
+  BetaSnipe = "Beta",
 
-  Mouse,
-  Ox,
-  Tiger,
-  Rabbit,
-  Dragon,
-  Snake,
-  Horse,
-  Ram,
-  Monkey,
-  Rooster,
-  Dog,
-  Boar,
+  Mouse = "Mouse",
+  Ox = "Ox",
+  Tiger = "Tiger",
+  Rabbit = "Rabbit",
+  Dragon = "Dragon",
+  Snake = "Snake",
+  Horse = "Horse",
+  Ram = "Ram",
+  Monkey = "Monkey",
+  Rooster = "Rooster",
+  Dog = "Dog",
+  Boar = "Boar",
 
-  Fish,
-  Elephant,
-  Squid,
-  Frog,
+  Fish = "Fish",
+  Elephant = "Elephant",
+  Squid = "Squid",
+  Frog = "Frog",
 }
 
 export type Ply = DemoteMove | MovePromote | Drop;

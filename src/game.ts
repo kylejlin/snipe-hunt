@@ -190,9 +190,9 @@ export function tryCapture(
 
   if (
     !(
-      attackerRow + forward(attacker) === targetRow ||
+      forward(attackerRow, attacker.allegiance).unwrapOr(NaN) === targetRow ||
       (canMoveBackward(attacker) &&
-        attackerRow + backward(attacker) === targetRow)
+        backward(attackerRow, attacker.allegiance).unwrapOr(NaN) === targetRow)
     )
   ) {
     return result.err(IllegalMove.DestinationOutOfRange);
@@ -269,7 +269,7 @@ export function isGameOver(state: GameState): boolean {
   return getWinner(state).isSome();
 }
 
-function getWinner(state: GameState): Option<Player> {
+export function getWinner(state: GameState): Option<Player> {
   if (containsCardType(state.alpha.reserve, CardType.BetaSnipe)) {
     return option.some(Player.Alpha);
   }
@@ -283,7 +283,7 @@ function getWinner(state: GameState): Option<Player> {
   return option.none();
 }
 
-function hasAlreadyMoved(state: GameState): boolean {
+export function hasAlreadyMoved(state: GameState): boolean {
   return state.pendingSubPly.match({
     none: () => false,
     some: (sub) => sub.subPlyType === SubPlyType.Move,
@@ -309,20 +309,22 @@ export function getRowNumber(
   return option.none();
 }
 
-function getCard(state: GameState, cardType: CardType): Readonly<Card> {
+export function getCard(state: GameState, cardType: CardType): Readonly<Card> {
   return getMutCard(state, cardType);
 }
 
-function forward(card: Card): number {
-  if (card.allegiance === Player.Alpha) {
-    return 1;
+export function forward(row: Row, player: Player): Option<Row> {
+  const delta = player === Player.Alpha ? 1 : -1;
+  const newRow = row + delta;
+  if (1 <= newRow && newRow <= 4) {
+    return option.some(newRow as Row);
   } else {
-    return -1;
+    return option.none();
   }
 }
 
-function backward(card: Card): number {
-  return -forward(card);
+export function backward(row: Row, player: Player): Option<Row> {
+  return forward(row, opponentOf(player));
 }
 
 export function canMoveBackward(card: Card): boolean {
@@ -335,7 +337,7 @@ export function canMoveBackward(card: Card): boolean {
   }
 }
 
-function doAttackerElementsTrumpTargetElements(
+export function doAttackerElementsTrumpTargetElements(
   attacker: Card,
   target: Card
 ): boolean {
@@ -349,7 +351,7 @@ function doAttackerElementsTrumpTargetElements(
     });
 }
 
-function getActiveElements(
+export function getActiveElements(
   card: Card
 ): Option<{ double: Element; single: Element }> {
   return cardProperties[card.cardType].elements.map((elements) =>
@@ -357,7 +359,7 @@ function getActiveElements(
   );
 }
 
-function getInactiveElements(
+export function getInactiveElements(
   card: Card
 ): Option<{ double: Element; single: Element }> {
   return cardProperties[card.cardType].elements.map((elements) =>
@@ -375,7 +377,7 @@ function doesTrump(a: Element, b: Element): boolean {
   );
 }
 
-function cloneGameStateAsMut(state: GameState): MutGameState {
+export function cloneGameStateAsMut(state: GameState): MutGameState {
   const str = JSON.stringify(state, (_k, v) => {
     if (v !== null && "object" === typeof v && "function" === typeof v.unwrap) {
       return v.unwrapOr(null);
@@ -390,7 +392,7 @@ function cloneGameStateAsMut(state: GameState): MutGameState {
   };
 }
 
-function getMutRow(state: MutGameState, row: Row): Card[] {
+export function getMutRow(state: MutGameState, row: Row): Card[] {
   return [
     state.alpha.backRow,
     state.alpha.frontRow,
@@ -399,7 +401,7 @@ function getMutRow(state: MutGameState, row: Row): Card[] {
   ][row - 1];
 }
 
-function doesEnteringRowActivateTriplet(
+export function doesEnteringRowActivateTriplet(
   enteringCard: Card,
   currentCards: Card[]
 ): boolean {
@@ -448,14 +450,14 @@ function doesEnteringRowActivateTriplet(
   );
 }
 
-function removeCardByType(arr: Card[], cardType: CardType): void {
+export function removeCardByType(arr: Card[], cardType: CardType): void {
   arr.splice(
     arr.findIndex((card) => card.cardType === cardType),
     1
   );
 }
 
-function getPlayerKey(player: Player): "alpha" | "beta" {
+export function getPlayerKey(player: Player): "alpha" | "beta" {
   switch (player) {
     case Player.Alpha:
       return "alpha";
@@ -464,17 +466,17 @@ function getPlayerKey(player: Player): "alpha" | "beta" {
   }
 }
 
-function toReserved(owner: Player): (card: Card) => Card {
+export function toReserved(owner: Player): (card: Card) => Card {
   return function toReserved(card: Card): Card {
     return { ...card, allegiance: owner, isPromoted: false };
   };
 }
 
-function containsCardType(cards: Card[], cardType: CardType): boolean {
+export function containsCardType(cards: Card[], cardType: CardType): boolean {
   return cards.some((card) => card.cardType === cardType);
 }
 
-function getPlayerSnipe(
+export function getPlayerSnipe(
   player: Player
 ): CardType.AlphaSnipe | CardType.BetaSnipe {
   switch (player) {
@@ -514,9 +516,10 @@ export function tryMove(
 
   if (
     !(
-      attackerRow + forward(attacker) === destination ||
+      forward(attackerRow, attacker.allegiance).unwrapOr(NaN) === destination ||
       (canMoveBackward(attacker) &&
-        attackerRow + backward(attacker) === destination)
+        backward(attackerRow, attacker.allegiance).unwrapOr(NaN) ===
+          destination)
     )
   ) {
     return result.err(IllegalMove.DestinationOutOfRange);
@@ -643,7 +646,7 @@ export function isSnipe(cardType: CardType): boolean {
   return cardType === CardType.AlphaSnipe || cardType === CardType.BetaSnipe;
 }
 
-function getMutCard(state: GameState, cardType: CardType): MutCard {
+export function getMutCard(state: GameState, cardType: CardType): MutCard {
   function matchesType(card: Card): boolean {
     return card.cardType === cardType;
   }
@@ -656,7 +659,7 @@ function getMutCard(state: GameState, cardType: CardType): MutCard {
     state.beta.reserve.find(matchesType))!;
 }
 
-function opponentOf(player: Player): Player {
+export function opponentOf(player: Player): Player {
   switch (player) {
     case Player.Alpha:
       return Player.Beta;
@@ -862,4 +865,22 @@ export function canCapture(
   const attacker = getCard(state, attackerType);
   const target = getCard(state, targetType);
   return doAttackerElementsTrumpTargetElements(attacker, target);
+}
+
+export function backRowNumber(player: Player): 1 | 4 {
+  switch (player) {
+    case Player.Alpha:
+      return 1;
+    case Player.Beta:
+      return 4;
+  }
+}
+
+export function frontRowNumber(player: Player): 2 | 3 {
+  switch (player) {
+    case Player.Alpha:
+      return 2;
+    case Player.Beta:
+      return 3;
+  }
 }

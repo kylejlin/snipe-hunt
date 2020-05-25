@@ -12,14 +12,14 @@ import "./styles/ElementMatrix.css";
 interface Props {
   gameState: GameState;
   cards: Card[];
-  selectedCardType: Option<CardType>;
+  selectedCard: Option<Card>;
   onCardClicked(card: Card): void;
 }
 
 export default function ElementMatrix({
   gameState,
   cards,
-  selectedCardType,
+  selectedCard,
   onCardClicked,
 }: Props): React.ReactElement {
   interface ElementMatrixCellProps {
@@ -73,8 +73,8 @@ export default function ElementMatrix({
   }
 
   function renderCard(card: Card): React.ReactElement {
-    const isSelected = selectedCardType.unwrapOr(null) === card.cardType;
-    const isCapturable = selectedCardType.match({
+    const isSelected = selectedCard.unwrapOr(null) === card.cardType;
+    const isCapturable = selectedCard.match({
       none: () => false,
       some: (selectedCard) =>
         canCapture(gameState, selectedCard, card.cardType),

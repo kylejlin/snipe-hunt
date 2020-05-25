@@ -1,25 +1,21 @@
 import { option, Option } from "rusty-ts";
-import { AppState, StateSaver, STATE_VERSION } from "./types";
+import { GameState, StateSaver, STATE_VERSION } from "./types";
 
 enum LocalStorageKeys {
   AppState = "AppState",
 }
 
-const stateSaverImpl: StateSaver<AppState> = {
-  getState(): Option<AppState> {
+const stateSaverImpl: StateSaver<GameState> = {
+  getState(): Option<GameState> {
     const stateStr = localStorage.getItem(LocalStorageKeys.AppState);
     if (stateStr === null) {
       return option.none();
     } else {
       const state = JSON.parse(stateStr);
       if (state.stateVersion === STATE_VERSION) {
-        const convertedState: AppState = {
-          ...state,
-          selectedCard: option.fromVoidable(state.selectedCard),
-          gameState: {
-            ...state.gameState,
-            pendingSubPly: option.fromVoidable(state.gameState.pendingSubPly),
-          },
+        const convertedState: GameState = {
+          ...state.gameState,
+          pendingSubPly: option.fromVoidable(state.gameState.pendingSubPly),
         };
         return option.some(convertedState);
       } else {
@@ -27,7 +23,7 @@ const stateSaverImpl: StateSaver<AppState> = {
       }
     }
   },
-  setState(state: AppState): void {
+  setState(state: GameState): void {
     const stateStr = JSON.stringify(state, (_k, v) => {
       if (
         v !== null &&

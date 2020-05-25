@@ -6,38 +6,17 @@ import CardComponent from "./components/CardComponent";
 import ElementMatrix from "./components/ElementMatrix";
 import PlyComponent from "./components/PlyComponent";
 import SubPlyComponent from "./components/SubPlyComponent";
-import {
-  getRandomState,
-  getRowNumber,
-  IllegalDrop,
-  IllegalMove,
-  IllegalToggle,
-  IllegalUndo,
-  isGameOver,
-  isSnipe,
-  tryCapture,
-  tryDrop,
-  tryMove,
-  tryToggle,
-  tryUndoPlyOrSubPly,
-  recalculateOutOfSyncGameState,
-} from "./OLD_game";
 import stateSaver from "./stateSaver";
-import { AppState, Card, CardType, Player, RowNumber } from "./types";
-import { getBestPly, getLegalPlies } from "./kraken";
-import { getGameAnalyzer } from "./game";
+import { AppState, Card, CardType, Player, CardLocation, Row } from "./types";
+import { gameUtil } from "./game";
 
-export default class App extends React.Component<{}, AppState> {
+export default class App<X_T> extends React.Component<{}, AppState> {
   constructor(props: {}) {
     super(props);
 
     this.state = loadState();
 
     this.bindMethods();
-
-    (window as any).app = this;
-    (window as any).getBestPly = getBestPly;
-    (window as any).getLegalPlies = getLegalPlies;
   }
 
   bindMethods() {
@@ -47,9 +26,19 @@ export default class App extends React.Component<{}, AppState> {
     this.onRedoPlyClicked = this.onRedoPlyClicked.bind(this);
   }
 
-  saveState(newState: Partial<AppState>): void {
-    this.setState(newState as AppState);
-    stateSaver.setState({ ...this.state, ...newState });
+  saveState(
+    stateUpdatesOrUpdater:
+      | Partial<AppState>
+      | ((prevState: AppState) => AppState)
+  ): void {
+    if ("function" === typeof stateUpdatesOrUpdater) {
+      stateSaver.setState(stateUpdatesOrUpdater(this.state).gameState);
+      this.setState(stateUpdatesOrUpdater);
+    } else {
+      const newState = { ...this.state, ...stateUpdatesOrUpdater };
+      stateSaver.setState(newState.gameState);
+      this.setState(stateUpdatesOrUpdater as AppState);
+    }
   }
 
   render(): React.ReactElement {
@@ -59,10 +48,11 @@ export default class App extends React.Component<{}, AppState> {
   renderMatrixView(): React.ReactElement {
     const { gameState, ux } = this.state;
 
-    const analyzer = getGameAnalyzer(gameState);
-    const cards = analyzer.getBoardCards();
+    const initialBoard = gameState.getInitialState().getBoard();
+    const currentBoard = gameState.getBoard();
+    const plies = gameState.getPlies();
 
-    const { selectedCardType } = ux;
+    const { selectedCard, futurePlyStack } = ux;
 
     return (
       <div className="SnipeHunt">
@@ -71,13 +61,14 @@ export default class App extends React.Component<{}, AppState> {
             <tbody>
               <tr>
                 <td className="BoardCell">
-                  Reserve{this.renderSnipesIn(cards.alphaReserve)}
+                  Reserve
+                  {this.renderSnipesIn(currentBoard[CardLocation.AlphaReserve])}
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
                     gameState={gameState}
-                    cards={cards.alphaReserve}
-                    selectedCardType={selectedCardType}
+                    cards={currentBoard[CardLocation.AlphaReserve]}
+                    selectedCard={selectedCard}
                     onCardClicked={this.onCardClicked}
                   />
                 </td>
@@ -87,13 +78,13 @@ export default class App extends React.Component<{}, AppState> {
                   className="BoardCell"
                   onClick={() => this.onRowNumberClicked(1)}
                 >
-                  1{this.renderSnipesIn(cards.rows[1])}
+                  1{this.renderSnipesIn(currentBoard[CardLocation.Row1])}
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
                     gameState={gameState}
-                    cards={cards.rows[1]}
-                    selectedCardType={selectedCardType}
+                    cards={currentBoard[CardLocation.Row1]}
+                    selectedCard={selectedCard}
                     onCardClicked={this.onCardClicked}
                   />
                 </td>
@@ -103,13 +94,13 @@ export default class App extends React.Component<{}, AppState> {
                   className="BoardCell"
                   onClick={() => this.onRowNumberClicked(2)}
                 >
-                  2{this.renderSnipesIn(cards.rows[2])}
+                  2{this.renderSnipesIn(currentBoard[CardLocation.Row2])}
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
                     gameState={gameState}
-                    cards={cards.rows[2]}
-                    selectedCardType={selectedCardType}
+                    cards={currentBoard[CardLocation.Row2]}
+                    selectedCard={selectedCard}
                     onCardClicked={this.onCardClicked}
                   />
                 </td>
@@ -119,13 +110,13 @@ export default class App extends React.Component<{}, AppState> {
                   className="BoardCell"
                   onClick={() => this.onRowNumberClicked(3)}
                 >
-                  3{this.renderSnipesIn(cards.rows[3])}
+                  3{this.renderSnipesIn(currentBoard[CardLocation.Row3])}
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
                     gameState={gameState}
-                    cards={cards.rows[3]}
-                    selectedCardType={selectedCardType}
+                    cards={currentBoard[CardLocation.Row3]}
+                    selectedCard={selectedCard}
                     onCardClicked={this.onCardClicked}
                   />
                 </td>
@@ -135,13 +126,13 @@ export default class App extends React.Component<{}, AppState> {
                   className="BoardCell"
                   onClick={() => this.onRowNumberClicked(4)}
                 >
-                  4{this.renderSnipesIn(cards.rows[4])}
+                  4{this.renderSnipesIn(currentBoard[CardLocation.Row4])}
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
                     gameState={gameState}
-                    cards={cards.rows[4]}
-                    selectedCardType={selectedCardType}
+                    cards={currentBoard[CardLocation.Row4]}
+                    selectedCard={selectedCard}
                     onCardClicked={this.onCardClicked}
                   />
                 </td>
@@ -151,13 +142,13 @@ export default class App extends React.Component<{}, AppState> {
                   className="BoardCell"
                   onClick={() => this.onRowNumberClicked(5)}
                 >
-                  5{this.renderSnipesIn(cards.rows[5])}
+                  5{this.renderSnipesIn(currentBoard[CardLocation.Row5])}
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
                     gameState={gameState}
-                    cards={cards.rows[5]}
-                    selectedCardType={selectedCardType}
+                    cards={currentBoard[CardLocation.Row5]}
+                    selectedCard={selectedCard}
                     onCardClicked={this.onCardClicked}
                   />
                 </td>
@@ -167,26 +158,27 @@ export default class App extends React.Component<{}, AppState> {
                   className="BoardCell"
                   onClick={() => this.onRowNumberClicked(6)}
                 >
-                  6{this.renderSnipesIn(cards.rows[6])}
+                  6{this.renderSnipesIn(currentBoard[CardLocation.Row6])}
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
                     gameState={gameState}
-                    cards={cards.rows[6]}
-                    selectedCardType={selectedCardType}
+                    cards={currentBoard[CardLocation.Row6]}
+                    selectedCard={selectedCard}
                     onCardClicked={this.onCardClicked}
                   />
                 </td>
               </tr>
               <tr>
                 <td className="BoardCell">
-                  Reserve{this.renderSnipesIn(cards.betaReserve)}
+                  Reserve
+                  {this.renderSnipesIn(currentBoard[CardLocation.BetaReserve])}
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
                     gameState={gameState}
-                    cards={cards.betaReserve}
-                    selectedCardType={selectedCardType}
+                    cards={currentBoard[CardLocation.BetaReserve]}
+                    selectedCard={selectedCard}
                     onCardClicked={this.onCardClicked}
                   />
                 </td>
@@ -201,73 +193,58 @@ export default class App extends React.Component<{}, AppState> {
               <div className="PlyNumber">
                 {getEmoji({
                   cardType: CardType.Snipe,
-                  instance: 0,
                   allegiance: Player.Beta,
                 }) + "1"}
                 .
               </div>{" "}
               =
-              {gameState.initialPositions.beta.reserve.map((card) =>
+              {initialBoard[CardLocation.BetaReserve].map((card) =>
                 getEmoji(card)
               )}
-              ;{" "}
-              {gameState.initialPositions.beta.backRow.map((card) =>
-                getEmoji(card)
-              )}
-              ;{" "}
-              {gameState.initialPositions.beta.frontRow.map((card) =>
-                getEmoji(card)
-              )}
+              ; {initialBoard[CardLocation.Row6].map((card) => getEmoji(card))};{" "}
+              {initialBoard[CardLocation.Row5].map((card) => getEmoji(card))};{" "}
+              {initialBoard[CardLocation.Row4].map((card) => getEmoji(card))}
             </li>
             <li>
               <div className="PlyNumber">
                 {getEmoji({
                   cardType: CardType.Snipe,
-                  instance: 0,
                   allegiance: Player.Alpha,
                 }) + "2"}
                 .
               </div>{" "}
               =
-              {gameState.initialPositions.alpha.reserve.map((card) =>
+              {initialBoard[CardLocation.AlphaReserve].map((card) =>
                 getEmoji(card)
               )}
-              ;{" "}
-              {gameState.initialPositions.alpha.backRow.map((card) =>
-                getEmoji(card)
-              )}
-              ;{" "}
-              {gameState.initialPositions.alpha.frontRow.map((card) =>
-                getEmoji(card)
-              )}
+              ; {initialBoard[CardLocation.Row1].map((card) => getEmoji(card))};{" "}
+              {initialBoard[CardLocation.Row2].map((card) => getEmoji(card))};{" "}
+              {initialBoard[CardLocation.Row3].map((card) => getEmoji(card))}
             </li>
 
-            {gameState.plies.map((ply, zeroBasedPlyNumber) => {
+            {plies.map((ply, zeroBasedPlyNumber) => {
               const plyNumber = zeroBasedPlyNumber + 3;
               return <PlyComponent ply={ply} plyNumber={plyNumber} />;
             })}
 
-            {gameState.pendingSubPly.match({
+            {gameState.getPendingAnimalStep().match({
               none: () => null,
               some: (pendingSubPly) =>
-                isGameOver(gameState) ? null : (
+                gameState.isGameOver() ? null : (
                   <SubPlyComponent
                     subPly={pendingSubPly}
-                    plyNumber={gameState.plies.length + 3}
+                    plyNumber={plies.length + 3}
                   />
                 ),
             })}
           </ol>
           <h4>Future plies</h4>
           <ol className="Plies">
-            {gameState.futurePlyStack
+            {futurePlyStack
               .slice()
               .reverse()
               .map((ply, i) => (
-                <PlyComponent
-                  ply={ply}
-                  plyNumber={gameState.plies.length + 3 + i}
-                />
+                <PlyComponent ply={ply} plyNumber={plies.length + 3 + i} />
               ))}
           </ol>
           <button onClick={this.onUndoPlyClicked}>Back</button>
@@ -279,10 +256,12 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   renderSnipesIn(cards: Card[]): React.ReactElement[] {
-    const snipes = cards.filter((card) => isSnipe(card.cardType));
+    const selectedCardType = this.state.ux.selectedCard.map(
+      (card) => card.cardType
+    );
+    const snipes = cards.filter((card) => card.cardType === CardType.Snipe);
     return snipes.map((card) => {
-      const isSelected =
-        this.state.selectedCard.unwrapOr(null) === card.cardType;
+      const isSelected = selectedCardType.equalsSome(card.cardType);
       return (
         <CardComponent
           card={card}
@@ -296,6 +275,8 @@ export default class App extends React.Component<{}, AppState> {
 
   renderTraditionalView(): React.ReactElement {
     const { gameState } = this.state;
+    const currentBoard = gameState.getBoard();
+
     return (
       <table>
         <tbody>
@@ -303,49 +284,93 @@ export default class App extends React.Component<{}, AppState> {
             <td>Reserve</td>
             <td
               className={
-                isGameOver(gameState)
+                gameState.isGameOver()
                   ? ""
-                  : gameState.turn === Player.Alpha
+                  : gameState.getTurn() === Player.Alpha
                   ? "TurnIndicatorLight"
                   : ""
               }
             />
-            <td>{this.renderCards(gameState.alpha.reserve)}</td>
+            <td>{this.renderCards(currentBoard[CardLocation.AlphaReserve])}</td>
           </tr>
           <tr>
             <td onClick={() => this.onRowNumberClicked(1)}>1</td>
-            <td>{this.renderCards(gameState.alpha.backRow.filter(isBeta))}</td>
-            <td>{this.renderCards(gameState.alpha.backRow.filter(isAlpha))}</td>
-          </tr>
-          <tr>
-            <td onClick={() => this.onRowNumberClicked(2)}>2</td>
-            <td>{this.renderCards(gameState.alpha.frontRow.filter(isBeta))}</td>
             <td>
-              {this.renderCards(gameState.alpha.frontRow.filter(isAlpha))}
+              {this.renderCards(currentBoard[CardLocation.Row1].filter(isBeta))}
+            </td>
+            <td>
+              {this.renderCards(
+                currentBoard[CardLocation.Row1].filter(isAlpha)
+              )}
             </td>
           </tr>
           <tr>
+            <td onClick={() => this.onRowNumberClicked(2)}>2</td>
+            <td>
+              {this.renderCards(currentBoard[CardLocation.Row2].filter(isBeta))}
+            </td>
+            <td>
+              {this.renderCards(
+                currentBoard[CardLocation.Row2].filter(isAlpha)
+              )}
+            </td>
+          </tr>{" "}
+          <tr>
             <td onClick={() => this.onRowNumberClicked(3)}>3</td>
-            <td>{this.renderCards(gameState.beta.frontRow.filter(isBeta))}</td>
-            <td>{this.renderCards(gameState.beta.frontRow.filter(isAlpha))}</td>
+            <td>
+              {this.renderCards(currentBoard[CardLocation.Row3].filter(isBeta))}
+            </td>
+            <td>
+              {this.renderCards(
+                currentBoard[CardLocation.Row3].filter(isAlpha)
+              )}
+            </td>
           </tr>{" "}
           <tr>
             <td onClick={() => this.onRowNumberClicked(4)}>4</td>
-            <td>{this.renderCards(gameState.beta.backRow.filter(isBeta))}</td>
-            <td>{this.renderCards(gameState.beta.backRow.filter(isAlpha))}</td>
+            <td>
+              {this.renderCards(currentBoard[CardLocation.Row4].filter(isBeta))}
+            </td>
+            <td>
+              {this.renderCards(
+                currentBoard[CardLocation.Row4].filter(isAlpha)
+              )}
+            </td>
+          </tr>{" "}
+          <tr>
+            <td onClick={() => this.onRowNumberClicked(5)}>5</td>
+            <td>
+              {this.renderCards(currentBoard[CardLocation.Row5].filter(isBeta))}
+            </td>
+            <td>
+              {this.renderCards(
+                currentBoard[CardLocation.Row5].filter(isAlpha)
+              )}
+            </td>
+          </tr>{" "}
+          <tr>
+            <td onClick={() => this.onRowNumberClicked(6)}>6</td>
+            <td>
+              {this.renderCards(currentBoard[CardLocation.Row6].filter(isBeta))}
+            </td>
+            <td>
+              {this.renderCards(
+                currentBoard[CardLocation.Row6].filter(isAlpha)
+              )}
+            </td>
           </tr>
           <tr>
             <td>Reserve</td>
             <td
               className={
-                isGameOver(gameState)
+                gameState.isGameOver()
                   ? ""
-                  : gameState.turn === Player.Beta
+                  : gameState.getTurn() === Player.Beta
                   ? "TurnIndicatorLight"
                   : ""
               }
             />
-            <td>{this.renderCards(gameState.beta.reserve)}</td>
+            <td>{this.renderCards(currentBoard[CardLocation.BetaReserve])}</td>
           </tr>
         </tbody>
       </table>
@@ -357,9 +382,9 @@ export default class App extends React.Component<{}, AppState> {
       <CardComponent
         key={card.cardType}
         card={card}
-        isSelected={this.state.selectedCard.match({
+        isSelected={this.state.ux.selectedCard.match({
           none: () => false,
-          some: (cardType) => cardType === card.cardType,
+          some: (selectedCard) => selectedCard.cardType === card.cardType,
         })}
         isCapturable={false}
         onCardClicked={() => this.onCardClicked(card)}
@@ -367,147 +392,165 @@ export default class App extends React.Component<{}, AppState> {
     ));
   }
 
-  onCardClicked(card: Card): void {
-    this.state.selectedCard.match({
+  onCardClicked(clicked: Card): void {
+    this.state.ux.selectedCard.match({
       none: () => {
-        this.saveState({ selectedCard: option.some(card.cardType) });
+        this.saveState((prevState) => {
+          return {
+            ...prevState,
+            ux: { ...prevState.ux, selectedCard: option.some(clicked) },
+          };
+        });
       },
-      some: (currentSelectedCardType) => {
-        if (currentSelectedCardType === card.cardType) {
-          this.saveState({ selectedCard: option.none() });
+      some: (selected) => {
+        if (gameUtil.areCardsEqual(selected, clicked)) {
+          this.saveState((prevState) => {
+            return {
+              ...prevState,
+              ux: { ...prevState.ux, selectedCard: option.none() },
+            };
+          });
         } else {
-          this.tryCapture(currentSelectedCardType, card.cardType);
+          this.tryCapture(selected.cardType, clicked.cardType);
         }
       },
     });
   }
 
   tryCapture(attacker: CardType, target: CardType): void {
-    tryCapture(this.state.gameState, attacker, target).match({
-      ok: (newGameState) => {
-        this.saveState({
-          gameState: newGameState,
-          selectedCard: option.none(),
-        });
-      },
-      err: (e) => {
-        alert(IllegalMove[e]);
-        this.saveState({ selectedCard: option.none() });
-      },
+    // tryCapture(this.state.gameState, attacker, target).match({
+    //   ok: (newGameState) => {
+    //     this.saveState({
+    //       gameState: newGameState,
+    //       selectedCard: option.none(),
+    //     });
+    //   },
+    //   err: (e) => {
+    //     alert(IllegalMove[e]);
+    //     this.saveState({ selectedCard: option.none() });
+    //   },
+    // });
+  }
+
+  onRowNumberClicked(row: Row): void {
+    this.state.ux.selectedCard.ifSome((selected) => {
+      // getRowNumber(this.state.gameState, selected).match({
+      //   none: () => {
+      //     this.tryDrop(selected, row);
+      //   },
+      //   some: (selectedCardRow) => {
+      //     if (selectedCardRow === row) {
+      //       this.tryToggle(selected);
+      //     } else {
+      //       this.tryMove(selected, row);
+      //     }
+      //   },
+      // });
     });
   }
 
-  onRowNumberClicked(row: RowNumber): void {
-    this.state.selectedCard.ifSome((selectedCard) => {
-      getRowNumber(this.state.gameState, selectedCard).match({
-        none: () => {
-          this.tryDrop(selectedCard, row);
-        },
-        some: (selectedCardRow) => {
-          if (selectedCardRow === row) {
-            this.tryToggle(selectedCard);
-          } else {
-            this.tryMove(selectedCard, row);
-          }
-        },
-      });
-    });
+  tryMove(selectedCard: CardType, row: Row): void {
+    // tryMove(this.state.gameState, selectedCard, row).match({
+    //   ok: (newGameState) => {
+    //     this.saveState({
+    //       gameState: newGameState,
+    //       selectedCard: option.none(),
+    //     });
+    //   },
+    //   err: (e) => {
+    //     alert(IllegalMove[e]);
+    //     this.saveState({ selectedCard: option.none() });
+    //   },
+    // });
   }
 
-  tryMove(selectedCard: CardType, row: RowNumber): void {
-    tryMove(this.state.gameState, selectedCard, row).match({
-      ok: (newGameState) => {
-        this.saveState({
-          gameState: newGameState,
-          selectedCard: option.none(),
-        });
-      },
-      err: (e) => {
-        alert(IllegalMove[e]);
-        this.saveState({ selectedCard: option.none() });
-      },
-    });
-  }
-
-  tryDrop(selectedCard: CardType, destination: RowNumber): void {
-    tryDrop(this.state.gameState, selectedCard, destination).match({
-      ok: (newGameState) => {
-        this.saveState({
-          gameState: newGameState,
-          selectedCard: option.none(),
-        });
-      },
-      err: (e) => {
-        alert(IllegalDrop[e]);
-        this.saveState({ selectedCard: option.none() });
-      },
-    });
+  tryDrop(selectedCard: CardType, destination: Row): void {
+    // tryDrop(this.state.gameState, selectedCard, destination).match({
+    //   ok: (newGameState) => {
+    //     this.saveState({
+    //       gameState: newGameState,
+    //       selectedCard: option.none(),
+    //     });
+    //   },
+    //   err: (e) => {
+    //     alert(IllegalDrop[e]);
+    //     this.saveState({ selectedCard: option.none() });
+    //   },
+    // });
   }
 
   tryToggle(selectedCard: CardType): void {
-    tryToggle(this.state.gameState, selectedCard).match({
-      ok: (newGameState) => {
-        this.saveState({
-          gameState: newGameState,
-          selectedCard: option.none(),
-        });
-      },
-      err: (e) => {
-        alert(IllegalToggle[e]);
-        this.saveState({ selectedCard: option.none() });
-      },
-    });
+    // tryToggle(this.state.gameState, selectedCard).match({
+    //   ok: (newGameState) => {
+    //     this.saveState({
+    //       gameState: newGameState,
+    //       selectedCard: option.none(),
+    //     });
+    //   },
+    //   err: (e) => {
+    //     alert(IllegalToggle[e]);
+    //     this.saveState({ selectedCard: option.none() });
+    //   },
+    // });
   }
 
   onUndoPlyClicked(): void {
-    tryUndoPlyOrSubPly(this.state.gameState).match({
-      ok: (newGameState) => {
-        this.saveState({
-          gameState: newGameState,
-        });
-      },
-      err: (e) => {
-        alert(IllegalUndo[e]);
-        this.saveState({ selectedCard: option.none() });
-      },
-    });
+    // tryUndoPlyOrSubPly(this.state.gameState).match({
+    //   ok: (newGameState) => {
+    //     this.saveState({
+    //       gameState: newGameState,
+    //     });
+    //   },
+    //   err: (e) => {
+    //     alert(IllegalUndo[e]);
+    //     this.saveState({ selectedCard: option.none() });
+    //   },
+    // });
   }
 
   onRedoPlyClicked(): void {
-    const { gameState } = this.state;
-    if (gameState.futurePlyStack.length > 0) {
-      recalculateOutOfSyncGameState({
-        ...gameState,
-        plies: gameState.plies.concat(gameState.futurePlyStack.slice(-1)),
-        futurePlyStack: gameState.futurePlyStack.slice(0, -1),
-      }).match({
-        ok: (newGameState) => {
-          this.saveState({
-            gameState: newGameState,
-          });
-        },
-        err: (e) => {
-          alert("Bug: Illegal redo");
-          this.saveState({ selectedCard: option.none() });
-        },
-      });
-    }
+    // const { gameState } = this.state;
+    // if (gameState.futurePlyStack.length > 0) {
+    //   recalculateOutOfSyncGameState({
+    //     ...gameState,
+    //     plies: gameState.plies.concat(gameState.futurePlyStack.slice(-1)),
+    //     futurePlyStack: gameState.futurePlyStack.slice(0, -1),
+    //   }).match({
+    //     ok: (newGameState) => {
+    //       this.saveState({
+    //         gameState: newGameState,
+    //       });
+    //     },
+    //     err: (e) => {
+    //       alert("Bug: Illegal redo");
+    //       this.saveState({ selectedCard: option.none() });
+    //     },
+    //   });
+    // }
   }
 
   onResetClicked(): void {
     if (window.confirm("Are you sure you want to reset?")) {
-      const state = getRandomState();
+      const state: AppState = {
+        gameState: gameUtil.getRandomGameState(),
+        ux: { selectedCard: option.none(), futurePlyStack: [] },
+      };
       this.saveState(state);
     }
   }
 }
 
 function loadState(): AppState {
-  return stateSaver.getState().unwrapOrElse(() => {
-    const state = getRandomState();
-    stateSaver.setState(state);
-    return state;
+  const gameState = stateSaver.getState().unwrapOrElse(() => {
+    const newGameState = gameUtil.getRandomGameState();
+    stateSaver.setState(newGameState);
+    return newGameState;
   });
+
+  return {
+    gameState: gameState,
+    ux: { selectedCard: option.none(), futurePlyStack: [] },
+  };
 }
 
 function getEmoji(card: Card): string {

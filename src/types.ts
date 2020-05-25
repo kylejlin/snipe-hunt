@@ -8,21 +8,23 @@ import { Option } from "rusty-ts";
 export const STATE_VERSION = 10;
 
 export interface AppState {
-  stateVersion: typeof STATE_VERSION;
   gameState: GameState;
-  selectedCard: Option<CardType>;
+  ux: {
+    selectedCardType: Option<CardType>;
+    futurePlyStack: Ply[];
+  };
 }
 
-export type GameState = Readonly<MutGameState>;
+export interface GameState {
+  stateVersion: typeof STATE_VERSION;
 
-export interface MutGameState {
   turn: Player;
   alpha: Position;
   beta: Position;
   initialPositions: { alpha: Position; beta: Position };
   plies: Ply[];
-  futurePlyStack: Ply[];
-  pendingSubPly: Option<SubPly>;
+
+  pendingAnimalStep: Option<AnimalStep>;
 }
 
 export enum Player {
@@ -36,12 +38,9 @@ export interface Position {
   frontRow: Card[];
 }
 
-export type Card = Readonly<MutCard>;
-
-export interface MutCard {
+export interface Card {
   cardType: CardType;
   allegiance: Player;
-  isPromoted: boolean;
 }
 
 export enum CardType {
@@ -67,69 +66,48 @@ export enum CardType {
   Frog = "Frog",
 }
 
-export type Ply = DemoteMove | MovePromote | Drop;
+export type Ply = SnipeStep | Drop | TwoAnimalSteps;
 
 export enum PlyType {
-  DemoteMove,
-  MovePromote,
+  SnipeStep,
   Drop,
+  TwoAnimalSteps,
 }
 
-export interface DemoteMove {
-  plyType: PlyType.DemoteMove;
-  demoted: CardType;
-  moved: CardType;
-  destination: Row;
-  captures: CardType[];
-}
-
-export interface MovePromote {
-  plyType: PlyType.MovePromote;
-  moved: CardType;
-  destination: Row;
-  captures: CardType[];
-  promoted: CardType;
+export interface SnipeStep {
+  plyType: PlyType.SnipeStep;
+  destination: RowNumber;
 }
 
 export interface Drop {
   plyType: PlyType.Drop;
   dropped: CardType;
-  destination: Row;
+  destination: RowNumber;
 }
 
-export type SubPly = DemoteSubPly | MoveSubPly;
-
-export enum SubPlyType {
-  Demote,
-  Move,
+export interface TwoAnimalSteps {
+  plyType: PlyType.TwoAnimalSteps;
+  first: AnimalStep;
+  second: AnimalStep;
 }
 
-export interface DemoteSubPly {
-  subPlyType: SubPlyType.Demote;
-  demoted: CardType;
-}
-
-export interface MoveSubPly {
-  subPlyType: SubPlyType.Move;
+export interface AnimalStep {
   moved: CardType;
-  destination: Row;
-  captures: CardType[];
+  destination: RowNumber;
 }
 
-export type Row = 1 | 2 | 3 | 4;
+export type RowNumber = 1 | 2 | 3 | 4 | 5 | 6;
 
-export interface StateSaver<T> {
-  getState(): Option<T>;
-  setState(state: T): void;
+export interface CardProperties {
+  elements: Option<{ double: Element; single: Element }>;
+  canRetreat: boolean;
 }
 
-export interface CardPropertyDefinition {
-  elements: Option<{
-    unpromoted: { double: Element; single: Element };
-    promoted: { double: Element; single: Element };
-  }>;
-  canUnpromotedMoveBackward: boolean;
-  canPromotedMoveBackward: boolean;
+export enum Element {
+  Fire,
+  Water,
+  Earth,
+  Air,
 }
 
 export interface CardMap<T> {
@@ -153,11 +131,7 @@ export interface CardMap<T> {
   [CardType.Frog]: T;
 }
 
-export type CardPropertyMap = CardMap<CardPropertyDefinition>;
-
-export enum Element {
-  Fire,
-  Water,
-  Earth,
-  Air,
+export interface StateSaver<T> {
+  getState(): Option<T>;
+  setState(state: T): void;
 }

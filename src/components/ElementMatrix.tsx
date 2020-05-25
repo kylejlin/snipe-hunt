@@ -4,7 +4,7 @@ import {
   canCapture,
   getCardsWithActiveElements,
   getCardsWithInactiveElements,
-} from "../game";
+} from "../OLD_game";
 import { Card, CardType, Element, GameState } from "../types";
 import CardComponent from "./CardComponent";
 import "./styles/ElementMatrix.css";
@@ -12,7 +12,6 @@ import "./styles/ElementMatrix.css";
 interface Props {
   gameState: GameState;
   cards: Card[];
-  showInactiveElements: boolean;
   selectedCard: Option<CardType>;
   onCardClicked(card: Card): void;
 }

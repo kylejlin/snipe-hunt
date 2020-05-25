@@ -1,146 +1,80 @@
 import { option } from "rusty-ts";
-import { CardPropertyMap, CardType, Element, CardMap } from "./types";
+import { CardType, Element, CardMap, CardProperties } from "./types";
 
-export const cardProperties: CardPropertyMap = {
+export const cardProperties: CardMap<CardProperties> = {
   [CardType.AlphaSnipe]: {
     elements: option.none(),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
+    canRetreat: true,
   },
   [CardType.BetaSnipe]: {
     elements: option.none(),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
+    canRetreat: true,
   },
 
   [CardType.Mouse]: {
-    elements: option.some({
-      unpromoted: { double: Element.Fire, single: Element.Earth },
-      promoted: { double: Element.Earth, single: Element.Water },
-    }),
-    canUnpromotedMoveBackward: true,
-    canPromotedMoveBackward: false,
+    elements: option.some({ double: Element.Fire, single: Element.Earth }),
+    canRetreat: true,
   },
   [CardType.Ox]: {
-    elements: option.some({
-      unpromoted: { double: Element.Earth, single: Element.Water },
-      promoted: { double: Element.Air, single: Element.Earth },
-    }),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
+    elements: option.some({ double: Element.Earth, single: Element.Water }),
+    canRetreat: false,
   },
   [CardType.Tiger]: {
-    elements: option.some({
-      unpromoted: { double: Element.Fire, single: Element.Fire },
-      promoted: { double: Element.Fire, single: Element.Air },
-    }),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
+    elements: option.some({ double: Element.Fire, single: Element.Fire }),
+    canRetreat: false,
   },
   [CardType.Rabbit]: {
-    elements: option.some({
-      unpromoted: { double: Element.Air, single: Element.Water },
-      promoted: { double: Element.Water, single: Element.Water },
-    }),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
+    elements: option.some({ double: Element.Air, single: Element.Water }),
+    canRetreat: false,
   },
   [CardType.Dragon]: {
-    elements: option.some({
-      unpromoted: { double: Element.Air, single: Element.Air },
-      promoted: { double: Element.Air, single: Element.Water },
-    }),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
+    elements: option.some({ double: Element.Air, single: Element.Air }),
+    canRetreat: false,
   },
   [CardType.Snake]: {
-    elements: option.some({
-      unpromoted: { double: Element.Water, single: Element.Earth },
-      promoted: { double: Element.Water, single: Element.Earth },
-    }),
-    canUnpromotedMoveBackward: true,
-    canPromotedMoveBackward: false,
+    elements: option.some({ double: Element.Water, single: Element.Earth }),
+    canRetreat: true,
   },
   [CardType.Horse]: {
-    elements: option.some({
-      unpromoted: { double: Element.Fire, single: Element.Air },
-      promoted: { double: Element.Air, single: Element.Fire },
-    }),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
+    elements: option.some({ double: Element.Fire, single: Element.Air }),
+    canRetreat: false,
   },
   [CardType.Ram]: {
-    elements: option.some({
-      unpromoted: { double: Element.Earth, single: Element.Air },
-      promoted: { double: Element.Earth, single: Element.Air },
-    }),
-    canUnpromotedMoveBackward: true,
-    canPromotedMoveBackward: false,
+    elements: option.some({ double: Element.Earth, single: Element.Air }),
+    canRetreat: true,
   },
   [CardType.Monkey]: {
-    elements: option.some({
-      unpromoted: { double: Element.Air, single: Element.Earth },
-      promoted: { double: Element.Earth, single: Element.Fire },
-    }),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
+    elements: option.some({ double: Element.Air, single: Element.Earth }),
+    canRetreat: false,
   },
   [CardType.Rooster]: {
-    elements: option.some({
-      unpromoted: { double: Element.Air, single: Element.Fire },
-      promoted: { double: Element.Fire, single: Element.Fire },
-    }),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
+    elements: option.some({ double: Element.Air, single: Element.Fire }),
+    canRetreat: false,
   },
   [CardType.Dog]: {
-    elements: option.some({
-      unpromoted: { double: Element.Fire, single: Element.Water },
-      promoted: { double: Element.Air, single: Element.Air },
-    }),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
+    elements: option.some({ double: Element.Fire, single: Element.Water }),
+    canRetreat: false,
   },
   [CardType.Boar]: {
-    elements: option.some({
-      unpromoted: { double: Element.Earth, single: Element.Fire },
-      promoted: { double: Element.Fire, single: Element.Earth },
-    }),
-    canUnpromotedMoveBackward: true,
-    canPromotedMoveBackward: false,
+    elements: option.some({ double: Element.Earth, single: Element.Fire }),
+    canRetreat: true,
   },
 
   [CardType.Fish]: {
-    elements: option.some({
-      unpromoted: { double: Element.Water, single: Element.Water },
-      promoted: { double: Element.Water, single: Element.Earth },
-    }),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
+    elements: option.some({ double: Element.Water, single: Element.Water }),
+    canRetreat: false,
   },
   [CardType.Elephant]: {
-    elements: option.some({
-      unpromoted: { double: Element.Earth, single: Element.Earth },
-      promoted: { double: Element.Fire, single: Element.Water },
-    }),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
+    elements: option.some({ double: Element.Earth, single: Element.Earth }),
+    canRetreat: false,
   },
   [CardType.Squid]: {
-    elements: option.some({
-      unpromoted: { double: Element.Water, single: Element.Fire },
-      promoted: { double: Element.Earth, single: Element.Earth },
-    }),
-    canUnpromotedMoveBackward: true,
-    canPromotedMoveBackward: false,
+    elements: option.some({ double: Element.Water, single: Element.Fire }),
+    canRetreat: true,
   },
   [CardType.Frog]: {
-    elements: option.some({
-      unpromoted: { double: Element.Water, single: Element.Air },
-      promoted: { double: Element.Water, single: Element.Fire },
-    }),
-    canUnpromotedMoveBackward: false,
-    canPromotedMoveBackward: false,
+    elements: option.some({ double: Element.Water, single: Element.Air }),
+    canRetreat: false,
   },
 };
 

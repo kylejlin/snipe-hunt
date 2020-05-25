@@ -14,7 +14,7 @@ import {
 import { result, Result, Option } from "rusty-ts";
 
 export interface GameAnalyzer {
-  getBoardCardTypes(): BoardCardTypes;
+  getBoardCards(): BoardCards;
 
   //   getState(): GameState;
   //   tryApplyPly(ply: Ply): Result<GameState, IllegalPly>;
@@ -25,16 +25,16 @@ export interface GameAnalyzer {
   //   getWinner(): Option<Player>;
 }
 
-export interface BoardCardTypes {
-  alphaReserve: CardType[];
-  betaReserve: CardType[];
+export interface BoardCards {
+  alphaReserve: Card[];
+  betaReserve: Card[];
   rows: {
-    1: CardType[];
-    2: CardType[];
-    3: CardType[];
-    4: CardType[];
-    5: CardType[];
-    6: CardType[];
+    1: Card[];
+    2: Card[];
+    3: Card[];
+    4: Card[];
+    5: Card[];
+    6: Card[];
   };
 }
 
@@ -96,12 +96,10 @@ export function getGameAnalyzer(state: GameState): GameAnalyzer {
 
   function isSnipeCaptured(): boolean {}
 
-  function getPlayerSnipe(
-    player: Player
-  ): CardType.AlphaSnipe | CardType.BetaSnipe {
+  function getPlayerSnipe(player: Player): CardType.Snipe | CardType.BetaSnipe {
     switch (player) {
       case Player.Alpha:
-        return CardType.AlphaSnipe;
+        return CardType.Snipe;
       case Player.Beta:
         return CardType.BetaSnipe;
     }

@@ -14,7 +14,7 @@ export default function PlyComponent({
 }: Props): React.ReactElement {
   const plyMakerEmoji =
     plyNumber % 2 === 0
-      ? getEmoji(CardType.AlphaSnipe)
+      ? getEmoji(CardType.Snipe)
       : getEmoji(CardType.BetaSnipe);
   switch (ply.plyType) {
     case PlyType.DemoteMove:

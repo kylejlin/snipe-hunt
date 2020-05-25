@@ -40,12 +40,12 @@ export interface Position {
 
 export interface Card {
   cardType: CardType;
+  instance: 0 | 1;
   allegiance: Player;
 }
 
 export enum CardType {
-  AlphaSnipe = "Alpha",
-  BetaSnipe = "Beta",
+  Snipe = "Snipe",
 
   Mouse = "Mouse",
   Ox = "Ox",
@@ -111,8 +111,7 @@ export enum Element {
 }
 
 export interface CardMap<T> {
-  [CardType.AlphaSnipe]: T;
-  [CardType.BetaSnipe]: T;
+  [CardType.Snipe]: T;
   [CardType.Mouse]: T;
   [CardType.Ox]: T;
   [CardType.Tiger]: T;

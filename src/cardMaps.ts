@@ -2,7 +2,7 @@ import { option } from "rusty-ts";
 import { CardType, Element, CardMap, CardProperties } from "./types";
 
 export const cardProperties: CardMap<CardProperties> = {
-  [CardType.AlphaSnipe]: {
+  [CardType.Snipe]: {
     elements: option.none(),
     canRetreat: true,
   },
@@ -78,9 +78,7 @@ export const cardProperties: CardMap<CardProperties> = {
   },
 };
 
-export const cardEmojis: CardMap<string> = {
-  [CardType.AlphaSnipe]: "α",
-  [CardType.BetaSnipe]: "β",
+export const cardEmojis: Omit<CardMap<string>, CardType.Snipe> = {
   [CardType.Mouse]: "🐀",
   [CardType.Ox]: "🐮",
   [CardType.Tiger]: "🐯",

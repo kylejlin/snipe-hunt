@@ -14,7 +14,7 @@ export default function SubPlyComponent({
 }: Props): React.ReactElement {
   const plyMakerEmoji =
     plyNumber % 2 === 0
-      ? getEmoji(CardType.AlphaSnipe)
+      ? getEmoji(CardType.Snipe)
       : getEmoji(CardType.BetaSnipe);
   switch (subPly.subPlyType) {
     case SubPlyType.Demote:

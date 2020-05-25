@@ -60,7 +60,7 @@ export default class App extends React.Component<{}, AppState> {
     const { gameState, ux } = this.state;
 
     const analyzer = getGameAnalyzer(gameState);
-    const cardTypes = analyzer.getBoardCardTypes();
+    const cards = analyzer.getBoardCards();
 
     const { selectedCardType } = ux;
 
@@ -71,13 +71,13 @@ export default class App extends React.Component<{}, AppState> {
             <tbody>
               <tr>
                 <td className="BoardCell">
-                  Reserve{this.renderSnipesIn(cardTypes.alphaReserve)}
+                  Reserve{this.renderSnipesIn(cards.alphaReserve)}
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
                     gameState={gameState}
-                    cards={cardTypes.alphaReserve}
-                    selectedCard={selectedCardType}
+                    cards={cards.alphaReserve}
+                    selectedCardType={selectedCardType}
                     onCardClicked={this.onCardClicked}
                   />
                 </td>
@@ -87,13 +87,13 @@ export default class App extends React.Component<{}, AppState> {
                   className="BoardCell"
                   onClick={() => this.onRowNumberClicked(1)}
                 >
-                  1{this.renderSnipesIn(gameState.alpha.backRow)}
+                  1{this.renderSnipesIn(cards.rows[1])}
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
                     gameState={gameState}
-                    cards={gameState.alpha.backRow}
-                    selectedCard={this.state.selectedCard}
+                    cards={cards.rows[1]}
+                    selectedCardType={selectedCardType}
                     onCardClicked={this.onCardClicked}
                   />
                 </td>
@@ -103,13 +103,13 @@ export default class App extends React.Component<{}, AppState> {
                   className="BoardCell"
                   onClick={() => this.onRowNumberClicked(2)}
                 >
-                  2{this.renderSnipesIn(gameState.alpha.frontRow)}
+                  2{this.renderSnipesIn(cards.rows[2])}
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
                     gameState={gameState}
-                    cards={gameState.alpha.frontRow}
-                    selectedCard={this.state.selectedCard}
+                    cards={cards.rows[2]}
+                    selectedCardType={selectedCardType}
                     onCardClicked={this.onCardClicked}
                   />
                 </td>
@@ -119,13 +119,13 @@ export default class App extends React.Component<{}, AppState> {
                   className="BoardCell"
                   onClick={() => this.onRowNumberClicked(3)}
                 >
-                  3{this.renderSnipesIn(gameState.beta.frontRow)}
+                  3{this.renderSnipesIn(cards.rows[3])}
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
                     gameState={gameState}
-                    cards={gameState.beta.frontRow}
-                    selectedCard={this.state.selectedCard}
+                    cards={cards.rows[3]}
+                    selectedCardType={selectedCardType}
                     onCardClicked={this.onCardClicked}
                   />
                 </td>
@@ -135,26 +135,58 @@ export default class App extends React.Component<{}, AppState> {
                   className="BoardCell"
                   onClick={() => this.onRowNumberClicked(4)}
                 >
-                  4{this.renderSnipesIn(gameState.beta.backRow)}
+                  4{this.renderSnipesIn(cards.rows[4])}
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
                     gameState={gameState}
-                    cards={gameState.beta.backRow}
-                    selectedCard={this.state.selectedCard}
+                    cards={cards.rows[4]}
+                    selectedCardType={selectedCardType}
+                    onCardClicked={this.onCardClicked}
+                  />
+                </td>
+              </tr>
+              <tr>
+                <td
+                  className="BoardCell"
+                  onClick={() => this.onRowNumberClicked(5)}
+                >
+                  5{this.renderSnipesIn(cards.rows[5])}
+                </td>
+                <td className="BoardCell">
+                  <ElementMatrix
+                    gameState={gameState}
+                    cards={cards.rows[5]}
+                    selectedCardType={selectedCardType}
+                    onCardClicked={this.onCardClicked}
+                  />
+                </td>
+              </tr>
+              <tr>
+                <td
+                  className="BoardCell"
+                  onClick={() => this.onRowNumberClicked(6)}
+                >
+                  6{this.renderSnipesIn(cards.rows[6])}
+                </td>
+                <td className="BoardCell">
+                  <ElementMatrix
+                    gameState={gameState}
+                    cards={cards.rows[6]}
+                    selectedCardType={selectedCardType}
                     onCardClicked={this.onCardClicked}
                   />
                 </td>
               </tr>
               <tr>
                 <td className="BoardCell">
-                  Reserve{this.renderSnipesIn(gameState.beta.reserve)}
+                  Reserve{this.renderSnipesIn(cards.betaReserve)}
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
                     gameState={gameState}
-                    cards={gameState.beta.reserve}
-                    selectedCard={this.state.selectedCard}
+                    cards={cards.betaReserve}
+                    selectedCardType={selectedCardType}
                     onCardClicked={this.onCardClicked}
                   />
                 </td>
@@ -167,36 +199,46 @@ export default class App extends React.Component<{}, AppState> {
           <ol className="Plies">
             <li>
               <div className="PlyNumber">
-                {getEmoji(CardType.BetaSnipe) + "1"}.
+                {getEmoji({
+                  cardType: CardType.Snipe,
+                  instance: 0,
+                  allegiance: Player.Beta,
+                }) + "1"}
+                .
               </div>{" "}
               =
               {gameState.initialPositions.beta.reserve.map((card) =>
-                getEmoji(card.cardType)
+                getEmoji(card)
               )}
               ;{" "}
               {gameState.initialPositions.beta.backRow.map((card) =>
-                getEmoji(card.cardType)
+                getEmoji(card)
               )}
               ;{" "}
               {gameState.initialPositions.beta.frontRow.map((card) =>
-                getEmoji(card.cardType)
+                getEmoji(card)
               )}
             </li>
             <li>
               <div className="PlyNumber">
-                {getEmoji(CardType.AlphaSnipe) + "2"}.
+                {getEmoji({
+                  cardType: CardType.Snipe,
+                  instance: 0,
+                  allegiance: Player.Alpha,
+                }) + "2"}
+                .
               </div>{" "}
               =
               {gameState.initialPositions.alpha.reserve.map((card) =>
-                getEmoji(card.cardType)
+                getEmoji(card)
               )}
               ;{" "}
               {gameState.initialPositions.alpha.backRow.map((card) =>
-                getEmoji(card.cardType)
+                getEmoji(card)
               )}
               ;{" "}
               {gameState.initialPositions.alpha.frontRow.map((card) =>
-                getEmoji(card.cardType)
+                getEmoji(card)
               )}
             </li>
 
@@ -468,8 +510,17 @@ function loadState(): AppState {
   });
 }
 
-function getEmoji(cardType: CardType): string {
-  return cardEmojis[cardType];
+function getEmoji(card: Card): string {
+  if (card.cardType === CardType.Snipe) {
+    switch (card.allegiance) {
+      case Player.Alpha:
+        return "α";
+      case Player.Beta:
+        return "β";
+    }
+  } else {
+    return cardEmojis[card.cardType];
+  }
 }
 
 function isAlpha(card: Card): boolean {

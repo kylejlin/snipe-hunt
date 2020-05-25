@@ -1,6 +1,6 @@
 import React from "react";
 import { cardEmojis } from "../cardMaps";
-import { canMoveBackward } from "../game";
+import { canMoveBackward } from "../OLD_game";
 import { Card, Player } from "../types";
 import "./styles/CardComponent.css";
 

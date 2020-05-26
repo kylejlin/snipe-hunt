@@ -1,4 +1,4 @@
-import { Option } from "rusty-ts";
+import { Option, Result } from "rusty-ts";
 
 /**
  * Increment this when making breaking changes
@@ -11,7 +11,10 @@ export interface AppState {
   gameState: GameState;
   ux: {
     selectedCard: Option<Card>;
-    futurePlyStack: Ply[];
+    futureSubPlyStack: {
+      plies: Ply[];
+      pendingAnimalStep: Option<AnimalStep>;
+    };
   };
 }
 
@@ -22,6 +25,14 @@ export interface GameState {
   getPendingAnimalStep(): Option<AnimalStep>;
   isGameOver(): boolean;
   getTurn(): Player;
+  getCardLocation(card: Omit<Card, "allegiance">): CardLocation;
+  tryDrop(drop: Drop): Result<GameState, IllegalGameStateUpdate>;
+  tryAnimalStep(step: AnimalStep): Result<GameState, IllegalGameStateUpdate>;
+  tryUndoSubPly(): Result<
+    { newState: GameState; undone: SnipeStep | Drop | AnimalStep },
+    IllegalGameStateUpdate
+  >;
+  tryPerform(atomic: Atomic): Result<GameState, IllegalGameStateUpdate>;
 }
 
 export enum CardLocation {
@@ -36,27 +47,23 @@ export enum CardLocation {
 }
 
 export interface Board {
-  [CardLocation.AlphaReserve]: Card[];
-  [CardLocation.Row1]: Card[];
-  [CardLocation.Row2]: Card[];
-  [CardLocation.Row3]: Card[];
-  [CardLocation.Row4]: Card[];
-  [CardLocation.Row5]: Card[];
-  [CardLocation.Row6]: Card[];
-  [CardLocation.BetaReserve]: Card[];
+  [CardLocation.AlphaReserve]: AllegiantCard[];
+  [CardLocation.Row1]: AllegiantCard[];
+  [CardLocation.Row2]: AllegiantCard[];
+  [CardLocation.Row3]: AllegiantCard[];
+  [CardLocation.Row4]: AllegiantCard[];
+  [CardLocation.Row5]: AllegiantCard[];
+  [CardLocation.Row6]: AllegiantCard[];
+  [CardLocation.BetaReserve]: AllegiantCard[];
 }
 
-export type Card = Snipe | Animal;
-
-export interface Snipe {
-  cardType: CardType.Snipe;
+export interface AllegiantCard extends Card {
   allegiance: Player;
 }
 
-export interface Animal {
-  cardType: AnimalType;
+export interface Card {
+  cardType: CardType;
   instance: 0 | 1;
-  allegiance: Player;
 }
 
 export enum CardType {
@@ -86,23 +93,23 @@ export enum Player {
   Beta,
 }
 
-export type AnimalType =
-  | CardType.Mouse
-  | CardType.Ox
-  | CardType.Tiger
-  | CardType.Rabbit
-  | CardType.Dragon
-  | CardType.Snake
-  | CardType.Horse
-  | CardType.Ram
-  | CardType.Monkey
-  | CardType.Rooster
-  | CardType.Dog
-  | CardType.Boar
-  | CardType.Fish
-  | CardType.Elephant
-  | CardType.Squid
-  | CardType.Frog;
+// export type AnimalType =
+//   | CardType.Mouse
+//   | CardType.Ox
+//   | CardType.Tiger
+//   | CardType.Rabbit
+//   | CardType.Dragon
+//   | CardType.Snake
+//   | CardType.Horse
+//   | CardType.Ram
+//   | CardType.Monkey
+//   | CardType.Rooster
+//   | CardType.Dog
+//   | CardType.Boar
+//   | CardType.Fish
+//   | CardType.Elephant
+//   | CardType.Squid
+//   | CardType.Frog;
 
 export type Ply = SnipeStep | Drop | TwoAnimalSteps;
 
@@ -119,7 +126,7 @@ export interface SnipeStep {
 
 export interface Drop {
   plyType: PlyType.Drop;
-  dropped: CardType;
+  dropped: Card;
   destination: Row;
 }
 
@@ -130,9 +137,11 @@ export interface TwoAnimalSteps {
 }
 
 export interface AnimalStep {
-  moved: CardType;
+  moved: Card;
   destination: Row;
 }
+
+export type Atomic = SnipeStep | Drop | AnimalStep;
 
 export type Row =
   | CardLocation.Row1
@@ -141,6 +150,8 @@ export type Row =
   | CardLocation.Row4
   | CardLocation.Row5
   | CardLocation.Row6;
+
+export enum IllegalGameStateUpdate {}
 
 export interface StateSaver<T> {
   getState(): Option<T>;

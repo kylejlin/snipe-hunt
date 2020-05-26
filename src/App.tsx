@@ -1,16 +1,30 @@
 import React from "react";
-import { option } from "rusty-ts";
+import { option, Result } from "rusty-ts";
 import "./App.css";
 import { cardEmojis } from "./cardMaps";
 import CardComponent from "./components/CardComponent";
 import ElementMatrix from "./components/ElementMatrix";
 import PlyComponent from "./components/PlyComponent";
 import SubPlyComponent from "./components/SubPlyComponent";
-import stateSaver from "./stateSaver";
-import { AppState, Card, CardType, Player, CardLocation, Row } from "./types";
 import { gameUtil } from "./game";
+import stateSaver from "./stateSaver";
+import {
+  AllegiantCard,
+  AnimalStep,
+  AppState,
+  Card,
+  CardLocation,
+  CardType,
+  Drop,
+  GameState,
+  IllegalGameStateUpdate,
+  Player,
+  PlyType,
+  Row,
+  SnipeStep,
+} from "./types";
 
-export default class App<X_T> extends React.Component<{}, AppState> {
+export default class App extends React.Component<{}, AppState> {
   constructor(props: {}) {
     super(props);
 
@@ -22,23 +36,13 @@ export default class App<X_T> extends React.Component<{}, AppState> {
   bindMethods() {
     this.onCardClicked = this.onCardClicked.bind(this);
     this.onResetClicked = this.onResetClicked.bind(this);
-    this.onUndoPlyClicked = this.onUndoPlyClicked.bind(this);
-    this.onRedoPlyClicked = this.onRedoPlyClicked.bind(this);
+    this.onUndoSubPlyClicked = this.onUndoSubPlyClicked.bind(this);
+    this.onRedoSubPlyClicked = this.onRedoSubPlyClicked.bind(this);
   }
 
-  saveState(
-    stateUpdatesOrUpdater:
-      | Partial<AppState>
-      | ((prevState: AppState) => AppState)
-  ): void {
-    if ("function" === typeof stateUpdatesOrUpdater) {
-      stateSaver.setState(stateUpdatesOrUpdater(this.state).gameState);
-      this.setState(stateUpdatesOrUpdater);
-    } else {
-      const newState = { ...this.state, ...stateUpdatesOrUpdater };
-      stateSaver.setState(newState.gameState);
-      this.setState(stateUpdatesOrUpdater as AppState);
-    }
+  saveAndUpdateGameState(newGameState: GameState) {
+    stateSaver.setState(newGameState);
+    this.setState({ gameState: newGameState });
   }
 
   render(): React.ReactElement {
@@ -52,7 +56,7 @@ export default class App<X_T> extends React.Component<{}, AppState> {
     const currentBoard = gameState.getBoard();
     const plies = gameState.getPlies();
 
-    const { selectedCard, futurePlyStack } = ux;
+    const { selectedCard, futureSubPlyStack } = ux;
 
     return (
       <div className="SnipeHunt">
@@ -193,7 +197,7 @@ export default class App<X_T> extends React.Component<{}, AppState> {
               <div className="PlyNumber">
                 {getEmoji({
                   cardType: CardType.Snipe,
-                  allegiance: Player.Beta,
+                  instance: 1,
                 }) + "1"}
                 .
               </div>{" "}
@@ -209,7 +213,7 @@ export default class App<X_T> extends React.Component<{}, AppState> {
               <div className="PlyNumber">
                 {getEmoji({
                   cardType: CardType.Snipe,
-                  allegiance: Player.Alpha,
+                  instance: 0,
                 }) + "2"}
                 .
               </div>{" "}
@@ -238,17 +242,21 @@ export default class App<X_T> extends React.Component<{}, AppState> {
                 ),
             })}
           </ol>
-          <h4>Future plies</h4>
+          <h4>Future sub plies</h4>
           <ol className="Plies">
-            {futurePlyStack
+            {futureSubPlyStack.pendingAnimalStep.match({
+              some: () => <p>Todo: future animal step</p>,
+              none: () => null,
+            })}
+            {futureSubPlyStack.plies
               .slice()
               .reverse()
               .map((ply, i) => (
                 <PlyComponent ply={ply} plyNumber={plies.length + 3 + i} />
               ))}
           </ol>
-          <button onClick={this.onUndoPlyClicked}>Back</button>
-          <button onClick={this.onRedoPlyClicked}>Forward</button>
+          <button onClick={this.onUndoSubPlyClicked}>Back</button>
+          <button onClick={this.onRedoSubPlyClicked}>Forward</button>
         </div>
         <button onClick={this.onResetClicked}>Reset</button>
       </div>
@@ -393,149 +401,199 @@ export default class App<X_T> extends React.Component<{}, AppState> {
   }
 
   onCardClicked(clicked: Card): void {
-    this.state.ux.selectedCard.match({
-      none: () => {
-        this.saveState((prevState) => {
-          return {
-            ...prevState,
-            ux: { ...prevState.ux, selectedCard: option.some(clicked) },
-          };
-        });
-      },
-      some: (selected) => {
-        if (gameUtil.areCardsEqual(selected, clicked)) {
-          this.saveState((prevState) => {
-            return {
-              ...prevState,
-              ux: { ...prevState.ux, selectedCard: option.none() },
-            };
-          });
-        } else {
-          this.tryCapture(selected.cardType, clicked.cardType);
-        }
-      },
-    });
+    const { selectedCard } = this.state.ux;
+    const isClickedCardAlreadySelected = selectedCard.someSatisfies(
+      (selected) => gameUtil.areCardsEqual(selected, clicked)
+    );
+    if (isClickedCardAlreadySelected) {
+      this.updateUxState({ selectedCard: option.none() });
+    } else {
+      this.updateUxState({ selectedCard: option.some(clicked) });
+    }
   }
 
-  tryCapture(attacker: CardType, target: CardType): void {
-    // tryCapture(this.state.gameState, attacker, target).match({
-    //   ok: (newGameState) => {
-    //     this.saveState({
-    //       gameState: newGameState,
-    //       selectedCard: option.none(),
-    //     });
-    //   },
-    //   err: (e) => {
-    //     alert(IllegalMove[e]);
-    //     this.saveState({ selectedCard: option.none() });
-    //   },
-    // });
+  updateUxState(newUxState: Partial<AppState["ux"]>): void {
+    this.setState((prevState) => {
+      return {
+        ...prevState,
+        ux: {
+          ...prevState.ux,
+          ...newUxState,
+        },
+      };
+    });
   }
 
   onRowNumberClicked(row: Row): void {
-    this.state.ux.selectedCard.ifSome((selected) => {
-      // getRowNumber(this.state.gameState, selected).match({
-      //   none: () => {
-      //     this.tryDrop(selected, row);
-      //   },
-      //   some: (selectedCardRow) => {
-      //     if (selectedCardRow === row) {
-      //       this.tryToggle(selected);
-      //     } else {
-      //       this.tryMove(selected, row);
-      //     }
-      //   },
-      // });
+    const { gameState } = this.state;
+    const { selectedCard } = this.state.ux;
+
+    selectedCard.ifSome((selected) => {
+      const location = gameState.getCardLocation(selected);
+      if (gameUtil.isReserve(location)) {
+        this.tryDrop(selected, row);
+      } else {
+        this.tryAnimalStep(selected, row);
+      }
     });
   }
 
-  tryMove(selectedCard: CardType, row: Row): void {
-    // tryMove(this.state.gameState, selectedCard, row).match({
-    //   ok: (newGameState) => {
-    //     this.saveState({
-    //       gameState: newGameState,
-    //       selectedCard: option.none(),
-    //     });
-    //   },
-    //   err: (e) => {
-    //     alert(IllegalMove[e]);
-    //     this.saveState({ selectedCard: option.none() });
-    //   },
-    // });
+  tryDrop(selected: Card, destination: Row): void {
+    const { gameState } = this.state;
+    const drop: Drop = {
+      plyType: PlyType.Drop,
+      dropped: selected,
+      destination,
+    };
+
+    const dropResult = gameState.tryDrop(drop);
+    this.updateGameStateOrAlertError(dropResult);
   }
 
-  tryDrop(selectedCard: CardType, destination: Row): void {
-    // tryDrop(this.state.gameState, selectedCard, destination).match({
-    //   ok: (newGameState) => {
-    //     this.saveState({
-    //       gameState: newGameState,
-    //       selectedCard: option.none(),
-    //     });
-    //   },
-    //   err: (e) => {
-    //     alert(IllegalDrop[e]);
-    //     this.saveState({ selectedCard: option.none() });
-    //   },
-    // });
+  updateGameStateOrAlertError(
+    res: Result<GameState, IllegalGameStateUpdate>
+  ): void {
+    res.match({
+      ok: (newGameState) => {
+        this.saveAndUpdateGameState(newGameState);
+      },
+      err: (errorCode) => {
+        alert(IllegalGameStateUpdate[errorCode]);
+      },
+    });
   }
 
-  tryToggle(selectedCard: CardType): void {
-    // tryToggle(this.state.gameState, selectedCard).match({
-    //   ok: (newGameState) => {
-    //     this.saveState({
-    //       gameState: newGameState,
-    //       selectedCard: option.none(),
-    //     });
-    //   },
-    //   err: (e) => {
-    //     alert(IllegalToggle[e]);
-    //     this.saveState({ selectedCard: option.none() });
-    //   },
-    // });
+  tryAnimalStep(selected: Card, destination: Row): void {
+    const { gameState } = this.state;
+    const step: AnimalStep = {
+      moved: selected,
+      destination,
+    };
+
+    const stepResult = gameState.tryAnimalStep(step);
+    this.updateGameStateOrAlertError(stepResult);
   }
 
-  onUndoPlyClicked(): void {
-    // tryUndoPlyOrSubPly(this.state.gameState).match({
-    //   ok: (newGameState) => {
-    //     this.saveState({
-    //       gameState: newGameState,
-    //     });
-    //   },
-    //   err: (e) => {
-    //     alert(IllegalUndo[e]);
-    //     this.saveState({ selectedCard: option.none() });
-    //   },
-    // });
+  onUndoSubPlyClicked(): void {
+    const { gameState } = this.state;
+
+    const undoResult = gameState.tryUndoSubPly();
+    undoResult.match({
+      ok: ({ newState: newGameState, undone }) => {
+        this.updateUxState({
+          futureSubPlyStack: this.getNewFutureSubPlyStack(undone),
+        });
+
+        this.saveAndUpdateGameState(newGameState);
+      },
+
+      err: (errorCode) => {
+        alert(IllegalGameStateUpdate[errorCode]);
+      },
+    });
   }
 
-  onRedoPlyClicked(): void {
-    // const { gameState } = this.state;
-    // if (gameState.futurePlyStack.length > 0) {
-    //   recalculateOutOfSyncGameState({
-    //     ...gameState,
-    //     plies: gameState.plies.concat(gameState.futurePlyStack.slice(-1)),
-    //     futurePlyStack: gameState.futurePlyStack.slice(0, -1),
-    //   }).match({
-    //     ok: (newGameState) => {
-    //       this.saveState({
-    //         gameState: newGameState,
-    //       });
-    //     },
-    //     err: (e) => {
-    //       alert("Bug: Illegal redo");
-    //       this.saveState({ selectedCard: option.none() });
-    //     },
-    //   });
-    // }
+  getNewFutureSubPlyStack(
+    undone: SnipeStep | Drop | AnimalStep
+  ): AppState["ux"]["futureSubPlyStack"] {
+    const stack = this.state.ux.futureSubPlyStack;
+
+    return stack.pendingAnimalStep.match({
+      some: (pending) => {
+        if ("plyType" in undone) {
+          throw new Error(
+            "Unreachable: Cannot undo a non-animal-step atomic if there is an animal step was just undone."
+          );
+        }
+        return {
+          pendingAnimalStep: option.none(),
+          plies: stack.plies.concat([
+            { plyType: PlyType.TwoAnimalSteps, first: undone, second: pending },
+          ]),
+        };
+      },
+
+      none: () => {
+        if ("plyType" in undone) {
+          return {
+            pendingAnimalStep: option.none(),
+            plies: stack.plies.concat([undone]),
+          };
+        }
+
+        return {
+          pendingAnimalStep: option.none(),
+          plies: stack.plies,
+        };
+      },
+    });
+  }
+
+  onRedoSubPlyClicked(): void {
+    if (!this.canRedoSubPly()) {
+      alert("Nothing to redo.");
+    }
+
+    const { gameState } = this.state;
+    const stack = this.state.ux.futureSubPlyStack;
+
+    const redoResult = stack.pendingAnimalStep.match({
+      some: (step) => {
+        this.updateUxState({
+          futureSubPlyStack: {
+            pendingAnimalStep: option.none(),
+            plies: this.state.ux.futureSubPlyStack.plies,
+          },
+        });
+
+        return gameState.tryPerform(step);
+      },
+
+      none: () => {
+        const nextPly = stack.plies[stack.plies.length - 1];
+        const newPlies = stack.plies.slice(0, -1);
+
+        if (nextPly.plyType === PlyType.TwoAnimalSteps) {
+          this.updateUxState({
+            futureSubPlyStack: {
+              pendingAnimalStep: option.some(nextPly.second),
+              plies: newPlies,
+            },
+          });
+
+          return gameState.tryPerform(nextPly.first);
+        } else {
+          this.updateUxState({
+            futureSubPlyStack: {
+              pendingAnimalStep: option.none(),
+              plies: newPlies,
+            },
+          });
+
+          return gameState.tryPerform(nextPly);
+        }
+      },
+    });
+
+    this.updateGameStateOrAlertError(redoResult);
+  }
+
+  canRedoSubPly(): boolean {
+    const stack = this.state.ux.futureSubPlyStack;
+    return stack.pendingAnimalStep.isSome() || stack.plies.length > 0;
   }
 
   onResetClicked(): void {
     if (window.confirm("Are you sure you want to reset?")) {
       const state: AppState = {
         gameState: gameUtil.getRandomGameState(),
-        ux: { selectedCard: option.none(), futurePlyStack: [] },
+        ux: {
+          selectedCard: option.none(),
+          futureSubPlyStack: { pendingAnimalStep: option.none(), plies: [] },
+        },
       };
-      this.saveState(state);
+      stateSaver.setState(state.gameState);
+      this.setState(state);
     }
   }
 }
@@ -549,16 +607,19 @@ function loadState(): AppState {
 
   return {
     gameState: gameState,
-    ux: { selectedCard: option.none(), futurePlyStack: [] },
+    ux: {
+      selectedCard: option.none(),
+      futureSubPlyStack: { pendingAnimalStep: option.none(), plies: [] },
+    },
   };
 }
 
 function getEmoji(card: Card): string {
   if (card.cardType === CardType.Snipe) {
-    switch (card.allegiance) {
-      case Player.Alpha:
+    switch (card.instance) {
+      case 0:
         return "α";
-      case Player.Beta:
+      case 1:
         return "β";
     }
   } else {
@@ -566,10 +627,10 @@ function getEmoji(card: Card): string {
   }
 }
 
-function isAlpha(card: Card): boolean {
+function isAlpha(card: AllegiantCard): boolean {
   return card.allegiance === Player.Alpha;
 }
 
-function isBeta(card: Card): boolean {
+function isBeta(card: AllegiantCard): boolean {
   return card.allegiance === Player.Beta;
 }

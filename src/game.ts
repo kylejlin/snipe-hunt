@@ -1,18 +1,15 @@
-import { Card, CardType, GameState } from "./types";
+import { Card, CardType, GameState, AnimalStep, CardLocation } from "./types";
 import { GameStateStruct, getGameState } from "./gameStateStruct";
+import { Result } from "rusty-ts";
 
-export const gameUtil = { areCardsEqual, getRandomGameState };
+export const gameUtil = {
+  areCardsEqual,
+  getRandomGameState,
+  isReserve,
+};
 
 function areCardsEqual(a: Card, b: Card): boolean {
-  if (a.cardType === CardType.Snipe || b.cardType === CardType.Snipe) {
-    return a.cardType === b.cardType && a.allegiance === b.allegiance;
-  } else {
-    return (
-      a.cardType === b.cardType &&
-      a.instance === b.instance &&
-      a.allegiance === b.allegiance
-    );
-  }
+  return a.cardType === b.cardType && a.instance === b.instance;
 }
 
 function getRandomGameState(): GameState {
@@ -73,4 +70,11 @@ function shuffle(arr: unknown[]): void {
       arr[j] = temp;
     }
   }
+}
+
+function isReserve(location: CardLocation): boolean {
+  return (
+    location === CardLocation.AlphaReserve ||
+    location === CardLocation.BetaReserve
+  );
 }

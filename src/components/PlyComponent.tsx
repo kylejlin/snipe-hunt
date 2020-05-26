@@ -17,7 +17,7 @@ export default function PlyComponent({
       ? getEmoji(CardType.Snipe)
       : getEmoji(CardType.BetaSnipe);
   switch (ply.plyType) {
-    case PlyType.DemoteMove:
+    case PlyType.SnipeStep:
       return (
         <li>
           <div className="PlyNumber">{plyMakerEmoji + plyNumber}.</div> -
@@ -26,7 +26,7 @@ export default function PlyComponent({
           {ply.captures.map(getEmoji)}
         </li>
       );
-    case PlyType.MovePromote:
+    case PlyType.Drop:
       return (
         <li>
           <div className="PlyNumber">{plyMakerEmoji + plyNumber}.</div>{" "}
@@ -35,7 +35,7 @@ export default function PlyComponent({
           {ply.captures.map(getEmoji)}; +{getEmoji(ply.promoted)}
         </li>
       );
-    case PlyType.Drop:
+    case PlyType.TwoAnimalSteps:
       return (
         <li>
           <div className="PlyNumber">{plyMakerEmoji + plyNumber}.</div> !

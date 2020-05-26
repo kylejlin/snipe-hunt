@@ -1,20 +1,18 @@
 import React from "react";
 import { cardEmojis } from "../cardMaps";
-import { canMoveBackward } from "../OLD_game";
+import * as gameUtil from "../gameUtil";
 import { Card, Player } from "../types";
 import "./styles/CardComponent.css";
 
 interface Props {
   card: Card;
   isSelected: boolean;
-  isCapturable: boolean;
   onCardClicked(card: Card): void;
 }
 
 export default function CardComponent({
   card,
   isSelected,
-  isCapturable,
   onCardClicked,
 }: Props): React.ReactElement {
   return (
@@ -24,10 +22,10 @@ export default function CardComponent({
         (card.allegiance === Player.Alpha
           ? " CardComponent--alpha"
           : " CardComponent--beta") +
-        (card.isPromoted ? " CardComponent--promoted" : "") +
         (isSelected ? " CardComponent--selected" : "") +
-        (canMoveBackward(card) ? " CardComponent--canMoveBackward" : "") +
-        (isCapturable ? " CardComponent--capturable" : "")
+        (gameUtil.canRetreat(card.cardType)
+          ? " CardComponent--canMoveBackward"
+          : "")
       }
       onClick={() => onCardClicked(card)}
     >

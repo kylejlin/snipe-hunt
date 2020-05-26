@@ -10,7 +10,7 @@ export const STATE_VERSION = 10;
 export interface AppState {
   gameState: GameState;
   ux: {
-    selectedCard: Option<Card>;
+    selectedCardType: Option<CardType>;
     futureSubPlyStack: {
       plies: Ply[];
       pendingAnimalStep: Option<AnimalStep>;
@@ -25,7 +25,7 @@ export interface GameState {
   getPendingAnimalStep(): Option<AnimalStep>;
   isGameOver(): boolean;
   getTurn(): Player;
-  getCardLocation(card: Omit<Card, "allegiance">): CardLocation;
+  getCardLocation(card: Omit<CardType, "allegiance">): CardLocation;
   tryDrop(drop: Drop): Result<GameState, IllegalGameStateUpdate>;
   tryAnimalStep(step: AnimalStep): Result<GameState, IllegalGameStateUpdate>;
   tryUndoSubPly(): Result<
@@ -48,23 +48,19 @@ export enum CardLocation {
 }
 
 export interface Board {
-  [CardLocation.AlphaReserve]: AllegiantCard[];
-  [CardLocation.Row1]: AllegiantCard[];
-  [CardLocation.Row2]: AllegiantCard[];
-  [CardLocation.Row3]: AllegiantCard[];
-  [CardLocation.Row4]: AllegiantCard[];
-  [CardLocation.Row5]: AllegiantCard[];
-  [CardLocation.Row6]: AllegiantCard[];
-  [CardLocation.BetaReserve]: AllegiantCard[];
-}
-
-export interface AllegiantCard extends Card {
-  allegiance: Player;
+  [CardLocation.AlphaReserve]: Card[];
+  [CardLocation.Row1]: Card[];
+  [CardLocation.Row2]: Card[];
+  [CardLocation.Row3]: Card[];
+  [CardLocation.Row4]: Card[];
+  [CardLocation.Row5]: Card[];
+  [CardLocation.Row6]: Card[];
+  [CardLocation.BetaReserve]: Card[];
 }
 
 export interface Card {
   cardType: CardType;
-  instance: 0 | 1;
+  allegiance: Player;
 }
 
 export enum CardType {
@@ -146,7 +142,7 @@ export interface SnipeStep {
 
 export interface Drop {
   plyType: PlyType.Drop;
-  dropped: Card;
+  dropped: CardType;
   destination: Row;
 }
 
@@ -157,7 +153,7 @@ export interface TwoAnimalSteps {
 }
 
 export interface AnimalStep {
-  moved: Card;
+  moved: CardType;
   destination: Row;
 }
 
@@ -176,6 +172,59 @@ export enum IllegalGameStateUpdate {}
 export interface StateSaver<T> {
   getState(): Option<T>;
   setState(state: T): void;
+}
+
+export interface CardMap<T> {
+  [CardType.Mouse1]: T;
+  [CardType.Ox1]: T;
+  [CardType.Tiger1]: T;
+  [CardType.Rabbit1]: T;
+  [CardType.Dragon1]: T;
+  [CardType.Snake1]: T;
+  [CardType.Horse1]: T;
+  [CardType.Ram1]: T;
+  [CardType.Monkey1]: T;
+  [CardType.Rooster1]: T;
+  [CardType.Dog1]: T;
+  [CardType.Boar1]: T;
+
+  [CardType.Fish1]: T;
+  [CardType.Elephant1]: T;
+  [CardType.Squid1]: T;
+  [CardType.Frog1]: T;
+
+  [CardType.Mouse2]: T;
+  [CardType.Ox2]: T;
+  [CardType.Tiger2]: T;
+  [CardType.Rabbit2]: T;
+  [CardType.Dragon2]: T;
+  [CardType.Snake2]: T;
+  [CardType.Horse2]: T;
+  [CardType.Ram2]: T;
+  [CardType.Monkey2]: T;
+  [CardType.Rooster2]: T;
+  [CardType.Dog2]: T;
+  [CardType.Boar2]: T;
+
+  [CardType.Fish2]: T;
+  [CardType.Elephant2]: T;
+  [CardType.Squid2]: T;
+  [CardType.Frog2]: T;
+
+  [CardType.AlphaSnipe]: T;
+  [CardType.BetaSnipe]: T;
+}
+
+export interface CardProperties {
+  elements: Option<{ double: Element; single: Element }>;
+  canRetreat: boolean;
+}
+
+export enum Element {
+  Fire,
+  Water,
+  Earth,
+  Air,
 }
 
 // export interface GameStateStruct {
@@ -233,35 +282,3 @@ export interface StateSaver<T> {
 // }
 
 // export type RowNumber = 1 | 2 | 3 | 4 | 5 | 6;
-
-// export interface CardProperties {
-//   elements: Option<{ double: Element; single: Element }>;
-//   canRetreat: boolean;
-// }
-
-// export enum Element {
-//   Fire,
-//   Water,
-//   Earth,
-//   Air,
-// }
-
-// export interface CardMap<T> {
-//   [CardType.Snipe]: T;
-//   [CardType.Mouse]: T;
-//   [CardType.Ox]: T;
-//   [CardType.Tiger]: T;
-//   [CardType.Rabbit]: T;
-//   [CardType.Dragon]: T;
-//   [CardType.Snake]: T;
-//   [CardType.Horse]: T;
-//   [CardType.Ram]: T;
-//   [CardType.Monkey]: T;
-//   [CardType.Rooster]: T;
-//   [CardType.Dog]: T;
-//   [CardType.Boar]: T;
-//   [CardType.Fish]: T;
-//   [CardType.Elephant]: T;
-//   [CardType.Squid]: T;
-//   [CardType.Frog]: T;
-// }

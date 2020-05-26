@@ -6,15 +6,14 @@ import CardComponent from "./components/CardComponent";
 import ElementMatrix from "./components/ElementMatrix";
 import PlyComponent from "./components/PlyComponent";
 import SubPlyComponent from "./components/SubPlyComponent";
-import { gameUtil } from "./gameUtil";
+import * as gameUtil from "./gameUtil";
 import stateSaver from "./stateSaver";
 import {
-  AllegiantCard,
+  Card,
   AnimalStep,
   AppState,
-  Card,
-  CardLocation,
   CardType,
+  CardLocation,
   Drop,
   GameState,
   IllegalGameStateUpdate,
@@ -56,7 +55,7 @@ export default class App extends React.Component<{}, AppState> {
     const currentBoard = gameState.getBoard();
     const plies = gameState.getPlies();
 
-    const { selectedCard, futureSubPlyStack } = ux;
+    const { selectedCardType: selectedCard, futureSubPlyStack } = ux;
 
     return (
       <div className="SnipeHunt">
@@ -195,35 +194,45 @@ export default class App extends React.Component<{}, AppState> {
           <ol className="Plies">
             <li>
               <div className="PlyNumber">
-                {getEmoji({
-                  cardType: CardType.Snipe,
-                  instance: 1,
-                }) + "1"}
-                .
+                {cardEmojis[CardType.BetaSnipe] + "1"}.
               </div>{" "}
               =
-              {initialBoard[CardLocation.BetaReserve].map((card) =>
-                getEmoji(card)
+              {initialBoard[CardLocation.BetaReserve].map(
+                (card) => cardEmojis[card.cardType]
               )}
-              ; {initialBoard[CardLocation.Row6].map((card) => getEmoji(card))};{" "}
-              {initialBoard[CardLocation.Row5].map((card) => getEmoji(card))};{" "}
-              {initialBoard[CardLocation.Row4].map((card) => getEmoji(card))}
+              ;{" "}
+              {initialBoard[CardLocation.Row6].map(
+                (card) => cardEmojis[card.cardType]
+              )}
+              ;{" "}
+              {initialBoard[CardLocation.Row5].map(
+                (card) => cardEmojis[card.cardType]
+              )}
+              ;{" "}
+              {initialBoard[CardLocation.Row4].map(
+                (card) => cardEmojis[card.cardType]
+              )}
             </li>
             <li>
               <div className="PlyNumber">
-                {getEmoji({
-                  cardType: CardType.Snipe,
-                  instance: 0,
-                }) + "2"}
-                .
+                {cardEmojis[CardType.AlphaSnipe] + "2"}.
               </div>{" "}
               =
-              {initialBoard[CardLocation.AlphaReserve].map((card) =>
-                getEmoji(card)
+              {initialBoard[CardLocation.AlphaReserve].map(
+                (card) => cardEmojis[card.cardType]
               )}
-              ; {initialBoard[CardLocation.Row1].map((card) => getEmoji(card))};{" "}
-              {initialBoard[CardLocation.Row2].map((card) => getEmoji(card))};{" "}
-              {initialBoard[CardLocation.Row3].map((card) => getEmoji(card))}
+              ;{" "}
+              {initialBoard[CardLocation.Row1].map(
+                (card) => cardEmojis[card.cardType]
+              )}
+              ;{" "}
+              {initialBoard[CardLocation.Row2].map(
+                (card) => cardEmojis[card.cardType]
+              )}
+              ;{" "}
+              {initialBoard[CardLocation.Row3].map(
+                (card) => cardEmojis[card.cardType]
+              )}
             </li>
 
             {plies.map((ply, zeroBasedPlyNumber) => {
@@ -264,17 +273,18 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   renderSnipesIn(cards: Card[]): React.ReactElement[] {
-    const selectedCardType = this.state.ux.selectedCard.map(
-      (card) => card.cardType
+    const selectedCardType = this.state.ux.selectedCardType.map((card) => card);
+    const snipes = cards.filter(
+      (card) =>
+        card.cardType === CardType.AlphaSnipe ||
+        card.cardType === CardType.BetaSnipe
     );
-    const snipes = cards.filter((card) => card.cardType === CardType.Snipe);
     return snipes.map((card) => {
       const isSelected = selectedCardType.equalsSome(card.cardType);
       return (
         <CardComponent
           card={card}
           isSelected={isSelected}
-          isCapturable={false}
           onCardClicked={this.onCardClicked}
         />
       );
@@ -390,25 +400,24 @@ export default class App extends React.Component<{}, AppState> {
       <CardComponent
         key={card.cardType}
         card={card}
-        isSelected={this.state.ux.selectedCard.match({
+        isSelected={this.state.ux.selectedCardType.match({
           none: () => false,
-          some: (selectedCard) => selectedCard.cardType === card.cardType,
+          some: (selectedCardType) => selectedCardType === card.cardType,
         })}
-        isCapturable={false}
         onCardClicked={() => this.onCardClicked(card)}
       />
     ));
   }
 
   onCardClicked(clicked: Card): void {
-    const { selectedCard } = this.state.ux;
-    const isClickedCardAlreadySelected = selectedCard.someSatisfies(
-      (selected) => gameUtil.areCardsEqual(selected, clicked)
+    const { selectedCardType } = this.state.ux;
+    const isClickedCardAlreadySelected = selectedCardType.someSatisfies(
+      (selectedType) => selectedType === clicked.cardType
     );
     if (isClickedCardAlreadySelected) {
-      this.updateUxState({ selectedCard: option.none() });
+      this.updateUxState({ selectedCardType: option.none() });
     } else {
-      this.updateUxState({ selectedCard: option.some(clicked) });
+      this.updateUxState({ selectedCardType: option.some(clicked.cardType) });
     }
   }
 
@@ -426,7 +435,7 @@ export default class App extends React.Component<{}, AppState> {
 
   onRowNumberClicked(row: Row): void {
     const { gameState } = this.state;
-    const { selectedCard } = this.state.ux;
+    const { selectedCardType: selectedCard } = this.state.ux;
 
     selectedCard.ifSome((selected) => {
       const location = gameState.getCardLocation(selected);
@@ -438,7 +447,7 @@ export default class App extends React.Component<{}, AppState> {
     });
   }
 
-  tryDrop(selected: Card, destination: Row): void {
+  tryDrop(selected: CardType, destination: Row): void {
     const { gameState } = this.state;
     const drop: Drop = {
       plyType: PlyType.Drop,
@@ -463,7 +472,7 @@ export default class App extends React.Component<{}, AppState> {
     });
   }
 
-  tryAnimalStep(selected: Card, destination: Row): void {
+  tryAnimalStep(selected: CardType, destination: Row): void {
     const { gameState } = this.state;
     const step: AnimalStep = {
       moved: selected,
@@ -588,7 +597,7 @@ export default class App extends React.Component<{}, AppState> {
       const state: AppState = {
         gameState: gameUtil.getRandomGameState(),
         ux: {
-          selectedCard: option.none(),
+          selectedCardType: option.none(),
           futureSubPlyStack: { pendingAnimalStep: option.none(), plies: [] },
         },
       };
@@ -608,29 +617,16 @@ function loadState(): AppState {
   return {
     gameState: gameState,
     ux: {
-      selectedCard: option.none(),
+      selectedCardType: option.none(),
       futureSubPlyStack: { pendingAnimalStep: option.none(), plies: [] },
     },
   };
 }
 
-function getEmoji(card: Card): string {
-  if (card.cardType === CardType.Snipe) {
-    switch (card.instance) {
-      case 0:
-        return "α";
-      case 1:
-        return "β";
-    }
-  } else {
-    return cardEmojis[card.cardType];
-  }
-}
-
-function isAlpha(card: AllegiantCard): boolean {
+function isAlpha(card: Card): boolean {
   return card.allegiance === Player.Alpha;
 }
 
-function isBeta(card: AllegiantCard): boolean {
+function isBeta(card: Card): boolean {
   return card.allegiance === Player.Beta;
 }

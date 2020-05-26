@@ -1,30 +1,14 @@
 import { gameStateImplUtils } from "./gameStateImpl";
-import {
-  AllegiantCard,
-  Card,
-  CardLocation,
-  CardType,
-  GameState,
-  Player,
-} from "./types";
+import { Card, CardLocation, CardType, GameState, Player } from "./types";
+import { cardProperties } from "./cardMaps";
 
-export const gameUtil = {
-  areCardsEqual,
-  getRandomGameState,
-  isReserve,
-};
-
-function areCardsEqual(a: Card, b: Card): boolean {
-  return a.cardType === b.cardType && a.instance === b.instance;
-}
-
-function getRandomGameState(): GameState {
+export function getRandomGameState(): GameState {
   const { alpha, beta } = getShuffledDecks();
   return gameStateImplUtils.fromBoard({
     [CardLocation.AlphaReserve]: [alpha.pop()!],
     [CardLocation.Row1]: [
       alpha.pop()!,
-      { cardType: CardType.Snipe, instance: 0, allegiance: Player.Alpha },
+      { cardType: CardType.AlphaSnipe, allegiance: Player.Alpha },
       alpha.pop()!,
     ],
     [CardLocation.Row2]: [
@@ -60,64 +44,66 @@ function getRandomGameState(): GameState {
     ],
     [CardLocation.Row6]: [
       beta.pop()!,
-      { cardType: CardType.Snipe, instance: 1, allegiance: Player.Beta },
+      { cardType: CardType.BetaSnipe, allegiance: Player.Beta },
       beta.pop()!,
     ],
     [CardLocation.BetaReserve]: [beta.pop()!],
   });
 }
 
-function getShuffledDecks(): { alpha: AllegiantCard[]; beta: AllegiantCard[] } {
-  const minors: Card[] = [
-    { cardType: CardType.Mouse, instance: 0 },
-    { cardType: CardType.Ox, instance: 0 },
-    { cardType: CardType.Rabbit, instance: 0 },
-    { cardType: CardType.Snake, instance: 0 },
-    { cardType: CardType.Horse, instance: 0 },
-    { cardType: CardType.Ram, instance: 0 },
-    { cardType: CardType.Monkey, instance: 0 },
-    { cardType: CardType.Rooster, instance: 0 },
-    { cardType: CardType.Dog, instance: 0 },
-    { cardType: CardType.Boar, instance: 0 },
-    { cardType: CardType.Squid, instance: 0 },
-    { cardType: CardType.Frog, instance: 0 },
+function getShuffledDecks(): { alpha: Card[]; beta: Card[] } {
+  const minors: CardType[] = [
+    CardType.Mouse1,
+    CardType.Ox1,
+    CardType.Rabbit1,
+    CardType.Snake1,
+    CardType.Horse1,
+    CardType.Ram1,
+    CardType.Monkey1,
+    CardType.Rooster1,
+    CardType.Dog1,
+    CardType.Boar1,
 
-    { cardType: CardType.Mouse, instance: 1 },
-    { cardType: CardType.Ox, instance: 1 },
-    { cardType: CardType.Rabbit, instance: 1 },
-    { cardType: CardType.Snake, instance: 1 },
-    { cardType: CardType.Horse, instance: 1 },
-    { cardType: CardType.Ram, instance: 1 },
-    { cardType: CardType.Monkey, instance: 1 },
-    { cardType: CardType.Rooster, instance: 1 },
-    { cardType: CardType.Dog, instance: 1 },
-    { cardType: CardType.Boar, instance: 1 },
-    { cardType: CardType.Squid, instance: 1 },
-    { cardType: CardType.Frog, instance: 1 },
+    CardType.Squid1,
+    CardType.Frog1,
+
+    CardType.Mouse2,
+    CardType.Ox2,
+    CardType.Rabbit2,
+    CardType.Snake2,
+    CardType.Horse2,
+    CardType.Ram2,
+    CardType.Monkey2,
+    CardType.Rooster2,
+    CardType.Dog2,
+    CardType.Boar2,
+
+    CardType.Squid2,
+    CardType.Frog2,
   ];
-  const majors: Card[] = [
-    { cardType: CardType.Tiger, instance: 0 },
-    { cardType: CardType.Dragon, instance: 0 },
-    { cardType: CardType.Fish, instance: 0 },
-    { cardType: CardType.Elephant, instance: 0 },
+  const majors: CardType[] = [
+    CardType.Tiger1,
+    CardType.Dragon1,
+    CardType.Fish1,
+    CardType.Elephant1,
 
-    { cardType: CardType.Tiger, instance: 1 },
-    { cardType: CardType.Dragon, instance: 1 },
-    { cardType: CardType.Fish, instance: 1 },
-    { cardType: CardType.Elephant, instance: 1 },
+    CardType.Tiger2,
+    CardType.Dragon2,
+    CardType.Fish2,
+    CardType.Elephant2,
   ];
 
   shuffle(minors);
   shuffle(majors);
 
-  const alpha: AllegiantCard[] = minors
+  const alpha: Card[] = minors
     .slice(0, 16)
     .concat(majors.slice(0, 4))
-    .map((card) => ({ ...card, allegiance: Player.Alpha }));
-  const beta: AllegiantCard[] = minors
+    .map((cardType) => ({ cardType, allegiance: Player.Alpha }));
+  const beta: Card[] = minors
     .slice(16)
     .concat(majors.slice(4))
-    .map((card) => ({ ...card, allegiance: Player.Beta }));
+    .map((cardType) => ({ cardType, allegiance: Player.Beta }));
 
   shuffle(alpha);
   shuffle(beta);
@@ -144,9 +130,13 @@ function randInt(inclMin: number, exclMax: number): number {
   return inclMin + Math.floor(diff * Math.random());
 }
 
-function isReserve(location: CardLocation): boolean {
+export function isReserve(location: CardLocation): boolean {
   return (
     location === CardLocation.AlphaReserve ||
     location === CardLocation.BetaReserve
   );
+}
+
+export function canRetreat(cardType: CardType): boolean {
+  return cardProperties[cardType].canRetreat;
 }

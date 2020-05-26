@@ -1,18 +1,14 @@
 import React from "react";
 import { Option } from "rusty-ts";
-import {
-  canCapture,
-  getCardsWithActiveElements,
-  getCardsWithInactiveElements,
-} from "../OLD_game";
-import { Card, CardType, Element, GameState } from "../types";
+import { CardType, Element, GameState, Card } from "../types";
 import CardComponent from "./CardComponent";
 import "./styles/ElementMatrix.css";
+import { cardProperties } from "../cardMaps";
 
 interface Props {
   gameState: GameState;
   cards: Card[];
-  selectedCard: Option<Card>;
+  selectedCard: Option<CardType>;
   onCardClicked(card: Card): void;
 }
 
@@ -56,9 +52,6 @@ export default function ElementMatrix({
     amount,
     element,
   }: ElementMatrixCellProps): React.ReactElement {
-    const getCardsWithElements = showInactiveElements
-      ? getCardsWithInactiveElements
-      : getCardsWithActiveElements;
     const cardsWithElements = getCardsWithElements(cards, amount, element);
     return (
       <td
@@ -74,19 +67,49 @@ export default function ElementMatrix({
 
   function renderCard(card: Card): React.ReactElement {
     const isSelected = selectedCard.unwrapOr(null) === card.cardType;
-    const isCapturable = selectedCard.match({
-      none: () => false,
-      some: (selectedCard) =>
-        canCapture(gameState, selectedCard, card.cardType),
-    });
 
     return (
       <CardComponent
         card={card}
         isSelected={isSelected}
-        isCapturable={isCapturable}
         onCardClicked={onCardClicked}
       />
     );
   }
+}
+
+function getCardsWithElements(
+  cards: Card[],
+  amount: number,
+  element: Element
+): Card[] {
+  return cards.filter(
+    (card) => countElement(card.cardType, element) === amount
+  );
+}
+
+function countElement(cardType: CardType, element: Element): number {
+  const { elements } = cardProperties[cardType];
+  return elements.match({
+    none: () => 0,
+    some: ({ double, single }) => {
+      if (double === single) {
+        if (double === element) {
+          return 3;
+        } else {
+          return 0;
+        }
+      }
+
+      if (double === element) {
+        return 2;
+      }
+
+      if (single === element) {
+        return 1;
+      }
+
+      return 0;
+    },
+  });
 }

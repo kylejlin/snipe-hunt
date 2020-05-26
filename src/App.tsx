@@ -6,7 +6,7 @@ import CardComponent from "./components/CardComponent";
 import ElementMatrix from "./components/ElementMatrix";
 import PlyComponent from "./components/PlyComponent";
 import SubPlyComponent from "./components/SubPlyComponent";
-import { gameUtil } from "./game";
+import { gameUtil } from "./gameUtil";
 import stateSaver from "./stateSaver";
 import {
   AllegiantCard,

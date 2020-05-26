@@ -1,5 +1,6 @@
 import { option, Option } from "rusty-ts";
-import { GameState, StateSaver, STATE_VERSION } from "./types";
+import { gameStateImplUtils } from "./gameStateImpl";
+import { GameState, StateSaver } from "./types";
 
 enum LocalStorageKeys {
   AppState = "AppState",
@@ -11,30 +12,11 @@ const stateSaverImpl: StateSaver<GameState> = {
     if (stateStr === null) {
       return option.none();
     } else {
-      const state = JSON.parse(stateStr);
-      if (state.stateVersion === STATE_VERSION) {
-        const convertedState: GameState = {
-          ...state.gameState,
-          pendingSubPly: option.fromVoidable(state.gameState.pendingSubPly),
-        };
-        return option.some(convertedState);
-      } else {
-        return option.none();
-      }
+      return gameStateImplUtils.fromString(stateStr);
     }
   },
   setState(state: GameState): void {
-    const stateStr = JSON.stringify(state, (_k, v) => {
-      if (
-        v !== null &&
-        "object" === typeof v &&
-        "function" === typeof v.unwrap
-      ) {
-        return v.unwrapOr(null);
-      } else {
-        return v;
-      }
-    });
+    const stateStr = state.serialize();
     localStorage.setItem(LocalStorageKeys.AppState, stateStr);
   },
 };

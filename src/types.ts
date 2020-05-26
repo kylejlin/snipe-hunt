@@ -33,6 +33,7 @@ export interface GameState {
     IllegalGameStateUpdate
   >;
   tryPerform(atomic: Atomic): Result<GameState, IllegalGameStateUpdate>;
+  serialize(): string;
 }
 
 export enum CardLocation {
@@ -67,25 +68,44 @@ export interface Card {
 }
 
 export enum CardType {
-  Snipe = "Snipe",
+  Mouse1 = 0,
+  Ox1 = 1,
+  Tiger1 = 2,
+  Rabbit1 = 3,
+  Dragon1 = 4,
+  Snake1 = 5,
+  Horse1 = 6,
+  Ram1 = 7,
+  Monkey1 = 8,
+  Rooster1 = 9,
+  Dog1 = 10,
+  Boar1 = 11,
 
-  Mouse = "Mouse",
-  Ox = "Ox",
-  Tiger = "Tiger",
-  Rabbit = "Rabbit",
-  Dragon = "Dragon",
-  Snake = "Snake",
-  Horse = "Horse",
-  Ram = "Ram",
-  Monkey = "Monkey",
-  Rooster = "Rooster",
-  Dog = "Dog",
-  Boar = "Boar",
+  Fish1 = 12,
+  Elephant1 = 13,
+  Squid1 = 14,
+  Frog1 = 15,
 
-  Fish = "Fish",
-  Elephant = "Elephant",
-  Squid = "Squid",
-  Frog = "Frog",
+  Mouse2 = 16,
+  Ox2 = 17,
+  Tiger2 = 18,
+  Rabbit2 = 19,
+  Dragon2 = 20,
+  Snake2 = 21,
+  Horse2 = 22,
+  Ram2 = 23,
+  Monkey2 = 24,
+  Rooster2 = 25,
+  Dog2 = 26,
+  Boar2 = 27,
+
+  Fish2 = 28,
+  Elephant2 = 29,
+  Squid2 = 30,
+  Frog2 = 31,
+
+  AlphaSnipe = 32,
+  BetaSnipe = 33,
 }
 
 export enum Player {

@@ -25,7 +25,7 @@ export interface GameState {
   getPendingAnimalStep(): Option<AnimalStep>;
   isGameOver(): boolean;
   getTurn(): Player;
-  getCardLocation(card: Omit<CardType, "allegiance">): CardLocation;
+  getCardLocation(cardType: CardType): CardLocation;
   tryDrop(drop: Drop): Result<GameState, IllegalGameStateUpdate>;
   tryAnimalStep(step: AnimalStep): Result<GameState, IllegalGameStateUpdate>;
   tryUndoSubPly(): Result<
@@ -34,6 +34,7 @@ export interface GameState {
   >;
   tryPerform(atomic: Atomic): Result<GameState, IllegalGameStateUpdate>;
   serialize(): string;
+  toNodeKey(): string;
 }
 
 export enum CardLocation {
@@ -46,6 +47,17 @@ export enum CardLocation {
   Row6 = 6,
   BetaReserve = 7,
 }
+
+export const allCardLocations = [
+  CardLocation.AlphaReserve,
+  CardLocation.Row1,
+  CardLocation.Row2,
+  CardLocation.Row3,
+  CardLocation.Row4,
+  CardLocation.Row5,
+  CardLocation.Row6,
+  CardLocation.BetaReserve,
+];
 
 export interface Board {
   [CardLocation.AlphaReserve]: Card[];
@@ -105,8 +117,8 @@ export enum CardType {
 }
 
 export enum Player {
-  Alpha,
-  Beta,
+  Alpha = 0,
+  Beta = 1,
 }
 
 // export type AnimalType =

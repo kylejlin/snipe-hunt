@@ -1,5 +1,4 @@
 import { Option, Result } from "rusty-ts";
-import { GameState } from "./analyzer";
 
 /**
  * Increment this when making breaking changes
@@ -9,7 +8,7 @@ import { GameState } from "./analyzer";
 export const STATE_VERSION = 10;
 
 export interface AppState {
-  gameState: GameAnalyzer;
+  gameState: GameState;
   ux: {
     selectedCardType: Option<CardType>;
     futureSubPlyStack: {
@@ -19,8 +18,16 @@ export interface AppState {
   };
 }
 
+export interface GameState {
+  initialBoard: Int32Array;
+  currentBoard: Int32Array;
+  turn: Player;
+  plies: number[];
+  pendingAnimalStep: number;
+}
+
 export interface GameAnalyzer {
-  getInitialState(): GameAnalyzer;
+  getInitialState(): GameState;
   getBoard(): Board;
   getPlies(): Ply[];
   getPendingAnimalStep(): Option<AnimalStep>;
@@ -28,13 +35,13 @@ export interface GameAnalyzer {
   getWinner(): Option<Player>;
   getTurn(): Player;
   getCardLocation(cardType: CardType): CardLocation;
-  tryDrop(drop: Drop): Result<GameAnalyzer, IllegalGameStateUpdate>;
-  tryAnimalStep(step: AnimalStep): Result<GameAnalyzer, IllegalGameStateUpdate>;
+  tryDrop(drop: Drop): Result<GameState, IllegalGameStateUpdate>;
+  tryAnimalStep(step: AnimalStep): Result<GameState, IllegalGameStateUpdate>;
   tryUndoSubPly(): Result<
-    { newState: GameAnalyzer; undone: SnipeStep | Drop | AnimalStep },
+    { newState: GameState; undone: SnipeStep | Drop | AnimalStep },
     IllegalGameStateUpdate
   >;
-  tryPerform(atomic: Atomic): Result<GameAnalyzer, IllegalGameStateUpdate>;
+  tryPerform(atomic: Atomic): Result<GameState, IllegalGameStateUpdate>;
   serialize(): string;
   toNodeKey(): string;
   setState(state: GameState): void;

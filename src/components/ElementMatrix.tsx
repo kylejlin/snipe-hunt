@@ -6,14 +6,14 @@ import "./styles/ElementMatrix.css";
 import { cardProperties } from "../cardMaps";
 
 interface Props {
-  gameState: GameAnalyzer;
+  analyzer: GameAnalyzer;
   cards: Card[];
   selectedCard: Option<CardType>;
   onCardClicked(card: Card): void;
 }
 
 export default function ElementMatrix({
-  gameState,
+  analyzer,
   cards,
   selectedCard,
   onCardClicked,

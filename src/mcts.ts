@@ -1,5 +1,4 @@
-import { GameState } from "./analyzer";
-import { GameAnalyzer } from "./types";
+import { GameAnalyzer, GameState } from "./types";
 
 export interface MctsUtils {
   performCycle(): void;

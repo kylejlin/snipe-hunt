@@ -15,7 +15,7 @@ import {
   CardType,
   CardLocation,
   Drop,
-  GameState,
+  GameAnalyzer,
   IllegalGameStateUpdate,
   Player,
   PlyType,
@@ -39,7 +39,7 @@ export default class App extends React.Component<{}, AppState> {
     this.onRedoSubPlyClicked = this.onRedoSubPlyClicked.bind(this);
   }
 
-  saveAndUpdateGameState(newGameState: GameState) {
+  saveAndUpdateGameState(newGameState: GameAnalyzer) {
     stateSaver.setState(newGameState);
     this.setState({ gameState: newGameState });
   }
@@ -460,7 +460,7 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   updateGameStateOrAlertError(
-    res: Result<GameState, IllegalGameStateUpdate>
+    res: Result<GameAnalyzer, IllegalGameStateUpdate>
   ): void {
     res.match({
       ok: (newGameState) => {

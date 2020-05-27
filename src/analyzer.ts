@@ -1,5 +1,5 @@
 import {
-  GameState,
+  GameAnalyzer,
   Board,
   CardLocation,
   allCardLocations,
@@ -14,9 +14,7 @@ import {
 } from "./types";
 import { Option, Result } from "rusty-ts";
 
-interface GameStateImpl extends GameState {}
-
-export interface GameStateData {
+export interface GameState {
   initialBoard: Int32Array;
   currentBoard: Int32Array;
   turn: Player;
@@ -24,12 +22,12 @@ export interface GameStateData {
   pendingAnimalStep: number;
 }
 
-export interface GameStateImplUtils {
-  fromString(s: string): Option<GameState>;
-  fromBoard(board: Board): GameState;
+export interface GameAnalyzerUtils {
+  fromString(s: string): Option<GameAnalyzer>;
+  fromBoard(board: Board): GameAnalyzer;
 }
 
-export const gameStateImplUtils = getGameStateImplUtils();
+export const gameAnalyzerUtils = getGameAnalyzerUtils();
 
 enum Offset {
   AlphaAnimals = 0,
@@ -42,12 +40,12 @@ enum Filter {
   LeastBit = 0b1,
 }
 
-function getGameStateImplUtils(): GameStateImplUtils {
+function getGameAnalyzerUtils(): GameAnalyzerUtils {
   return { fromString, fromBoard };
 
-  function fromString(s: string): Option<GameStateImpl> {}
+  function fromString(s: string): Option<GameAnalyzer> {}
 
-  function fromBoard(board: Board): GameStateImpl {
+  function fromBoard(board: Board): GameAnalyzer {
     const initialBoard = new Int32Array(24);
 
     for (const location of allCardLocations) {
@@ -71,7 +69,7 @@ function getGameStateImplUtils(): GameStateImplUtils {
       }
     }
 
-    const data: GameStateData = {
+    const data: GameState = {
       initialBoard,
       currentBoard: initialBoard,
       turn: Player.Beta,
@@ -79,16 +77,19 @@ function getGameStateImplUtils(): GameStateImplUtils {
       pendingAnimalStep: 0,
     };
 
-    return getGameStateFromData(data);
+    return getAnalyzer(data);
   }
 
-  function getGameStateFromData(data: GameStateData): GameStateImpl {
+  function getAnalyzer(initState: GameState): GameAnalyzer {
+    let state = initState;
+
     return {
       getInitialState,
       getBoard,
       getPlies,
       getPendingAnimalStep,
       isGameOver,
+      getWinner,
       getTurn,
       getCardLocation,
       tryDrop,
@@ -97,9 +98,11 @@ function getGameStateImplUtils(): GameStateImplUtils {
       tryPerform,
       serialize,
       toNodeKey,
+      setState,
+      getStatesAfterPerformingOneAtomic,
     };
 
-    function getInitialState(): GameState {}
+    function getInitialState(): GameAnalyzer {}
 
     function getBoard(): Board {}
 
@@ -109,29 +112,33 @@ function getGameStateImplUtils(): GameStateImplUtils {
 
     function isGameOver(): boolean {}
 
+    function getWinner(): Option<Player> {}
+
     function getTurn(): Player {}
 
     function getCardLocation(cardType: CardType): CardLocation {}
 
-    function tryDrop(drop: Drop): Result<GameState, IllegalGameStateUpdate> {}
+    function tryDrop(
+      drop: Drop
+    ): Result<GameAnalyzer, IllegalGameStateUpdate> {}
 
     function tryAnimalStep(
       step: AnimalStep
-    ): Result<GameState, IllegalGameStateUpdate> {}
+    ): Result<GameAnalyzer, IllegalGameStateUpdate> {}
 
     function tryUndoSubPly(): Result<
-      { newState: GameState; undone: SnipeStep | Drop | AnimalStep },
+      { newState: GameAnalyzer; undone: SnipeStep | Drop | AnimalStep },
       IllegalGameStateUpdate
     > {}
 
     function tryPerform(
       atomic: Atomic
-    ): Result<GameState, IllegalGameStateUpdate> {}
+    ): Result<GameAnalyzer, IllegalGameStateUpdate> {}
 
     function serialize(): string {}
 
     function toNodeKey(): string {
-      const { currentBoard } = data;
+      const { currentBoard } = state;
       return String.fromCharCode(
         // Animals
         currentBoard[0] & Filter.LeastSixteenBits,
@@ -178,8 +185,14 @@ function getGameStateImplUtils(): GameStateImplUtils {
           (currentBoard[23] << 14),
 
         // Turn and animal step
-        (data.turn << 1) | (data.pendingAnimalStep & Filter.LeastBit)
+        (state.turn << 1) | (state.pendingAnimalStep & Filter.LeastBit)
       );
     }
+
+    function setState(newState: GameState): void {
+      state = newState;
+    }
+
+    function getStatesAfterPerformingOneAtomic(): GameState[] {}
   }
 }

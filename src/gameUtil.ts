@@ -1,10 +1,10 @@
-import { gameStateImplUtils } from "./gameStateImpl";
-import { Card, CardLocation, CardType, GameState, Player } from "./types";
+import { gameAnalyzerUtils } from "./analyzer";
+import { Card, CardLocation, CardType, GameAnalyzer, Player } from "./types";
 import { cardProperties } from "./cardMaps";
 
-export function getRandomGameState(): GameState {
+export function getRandomGameState(): GameAnalyzer {
   const { alpha, beta } = getShuffledDecks();
-  return gameStateImplUtils.fromBoard({
+  return gameAnalyzerUtils.fromBoard({
     [CardLocation.AlphaReserve]: [alpha.pop()!],
     [CardLocation.Row1]: [
       alpha.pop()!,

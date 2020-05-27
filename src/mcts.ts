@@ -1,5 +1,5 @@
-import { GameStateData } from "./gameStateImpl";
-import { GameState } from "./types";
+import { GameState } from "./analyzer";
+import { GameAnalyzer } from "./types";
 
 export interface MctsUtils {
   performCycle(): void;
@@ -7,7 +7,7 @@ export interface MctsUtils {
 
 export interface Node {
   parent: Node | undefined;
-  state: GameStateData;
+  state: GameState;
   value: number;
   rollouts: number;
   children: Node[];
@@ -17,8 +17,8 @@ const EXPLORATION_CONSTANT = 2;
 const BIG_NUMBER = 1e7;
 
 export function getMctsUtils(
-  state: GameStateData,
-  analyzer: GameState
+  state: GameState,
+  analyzer: GameAnalyzer
 ): MctsUtils {
   const root: Node = {
     parent: undefined,
@@ -28,7 +28,7 @@ export function getMctsUtils(
     children: [],
   };
 
-  analyzer.setData(state);
+  analyzer.setState(state);
   const perspective = analyzer.getTurn();
 
   return { performCycle };
@@ -88,7 +88,7 @@ export function getMctsUtils(
   }
 
   function rolloutOrMarkAsTerminalThenBackPropagate(node: Node): void {
-    analyzer.setData(node.state);
+    analyzer.setState(node.state);
     const winner = analyzer.getWinner();
 
     const { valueIncrease, rolloutIncrease } = winner.match({
@@ -115,13 +115,13 @@ export function getMctsUtils(
     updateAndBackPropagate(node, valueIncrease, rolloutIncrease);
   }
 
-  function rollout(state: GameStateData): 0 | 1 {
-    analyzer.setData(state);
+  function rollout(state: GameState): 0 | 1 {
+    analyzer.setState(state);
 
     let nextStates = analyzer.getStatesAfterPerformingOneAtomic();
     while (nextStates.length > 0) {
       const selected = nextStates[randInt(0, nextStates.length)];
-      analyzer.setData(selected);
+      analyzer.setState(selected);
       nextStates = analyzer.getStatesAfterPerformingOneAtomic();
     }
 
@@ -154,7 +154,7 @@ export function getMctsUtils(
   }
 
   function getChildren(node: Node): Node[] {
-    analyzer.setData(node.state);
+    analyzer.setState(node.state);
     return analyzer.getStatesAfterPerformingOneAtomic().map((state) => ({
       parent: node,
       state,

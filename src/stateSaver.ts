@@ -1,21 +1,21 @@
 import { option, Option } from "rusty-ts";
-import { gameStateImplUtils } from "./gameStateImpl";
-import { GameState, StateSaver } from "./types";
+import { gameAnalyzerUtils } from "./analyzer";
+import { GameAnalyzer, StateSaver } from "./types";
 
 enum LocalStorageKeys {
   AppState = "AppState",
 }
 
-const stateSaverImpl: StateSaver<GameState> = {
-  getState(): Option<GameState> {
+const stateSaverImpl: StateSaver<GameAnalyzer> = {
+  getState(): Option<GameAnalyzer> {
     const stateStr = localStorage.getItem(LocalStorageKeys.AppState);
     if (stateStr === null) {
       return option.none();
     } else {
-      return gameStateImplUtils.fromString(stateStr);
+      return gameAnalyzerUtils.fromString(stateStr);
     }
   },
-  setState(state: GameState): void {
+  setState(state: GameAnalyzer): void {
     const stateStr = state.serialize();
     localStorage.setItem(LocalStorageKeys.AppState, stateStr);
   },

@@ -38,7 +38,8 @@ enum Offset {
 }
 
 enum Filter {
-  LeastSixteenBits = 0b0000_0000_0000_0000_1111_1111_1111_1111,
+  LeastSixteenBits = 0b1111_1111_1111_1111,
+  LeastBit = 0b1,
 }
 
 function getGameStateImplUtils(): GameStateImplUtils {
@@ -132,56 +133,52 @@ function getGameStateImplUtils(): GameStateImplUtils {
     function toNodeKey(): string {
       const { currentBoard } = data;
       return String.fromCharCode(
+        // Animals
         currentBoard[0] & Filter.LeastSixteenBits,
         currentBoard[0] >>> 16,
         currentBoard[1] & Filter.LeastSixteenBits,
         currentBoard[1] >>> 16,
-        currentBoard[2] & Filter.LeastSixteenBits,
-        currentBoard[2] >>> 16,
         currentBoard[3] & Filter.LeastSixteenBits,
         currentBoard[3] >>> 16,
         currentBoard[4] & Filter.LeastSixteenBits,
         currentBoard[4] >>> 16,
-        currentBoard[5] & Filter.LeastSixteenBits,
-        currentBoard[5] >>> 16,
         currentBoard[6] & Filter.LeastSixteenBits,
         currentBoard[6] >>> 16,
         currentBoard[7] & Filter.LeastSixteenBits,
         currentBoard[7] >>> 16,
-        currentBoard[8] & Filter.LeastSixteenBits,
-        currentBoard[8] >>> 16,
         currentBoard[9] & Filter.LeastSixteenBits,
         currentBoard[9] >>> 16,
         currentBoard[10] & Filter.LeastSixteenBits,
         currentBoard[10] >>> 16,
-        currentBoard[11] & Filter.LeastSixteenBits,
-        currentBoard[11] >>> 16,
         currentBoard[12] & Filter.LeastSixteenBits,
         currentBoard[12] >>> 16,
         currentBoard[13] & Filter.LeastSixteenBits,
         currentBoard[13] >>> 16,
-        currentBoard[14] & Filter.LeastSixteenBits,
-        currentBoard[14] >>> 16,
         currentBoard[15] & Filter.LeastSixteenBits,
         currentBoard[15] >>> 16,
         currentBoard[16] & Filter.LeastSixteenBits,
         currentBoard[16] >>> 16,
-        currentBoard[17] & Filter.LeastSixteenBits,
-        currentBoard[17] >>> 16,
         currentBoard[18] & Filter.LeastSixteenBits,
         currentBoard[18] >>> 16,
         currentBoard[19] & Filter.LeastSixteenBits,
         currentBoard[19] >>> 16,
-        currentBoard[20] & Filter.LeastSixteenBits,
-        currentBoard[20] >>> 16,
         currentBoard[21] & Filter.LeastSixteenBits,
         currentBoard[21] >>> 16,
         currentBoard[22] & Filter.LeastSixteenBits,
         currentBoard[22] >>> 16,
-        currentBoard[23] & Filter.LeastSixteenBits,
-        currentBoard[23] >>> 16,
 
-        (data.turn << 15) | data.pendingAnimalStep
+        // Snipes
+        currentBoard[2] |
+          (currentBoard[5] << 2) |
+          (currentBoard[8] << 4) |
+          (currentBoard[11] << 6) |
+          (currentBoard[14] << 8) |
+          (currentBoard[17] << 10) |
+          (currentBoard[20] << 12) |
+          (currentBoard[23] << 14),
+
+        // Turn and animal step
+        (data.turn << 1) | (data.pendingAnimalStep & Filter.LeastBit)
       );
     }
   }

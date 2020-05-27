@@ -1,4 +1,5 @@
 import { Option, Result } from "rusty-ts";
+import { GameStateData } from "./gameStateImpl";
 
 /**
  * Increment this when making breaking changes
@@ -24,6 +25,7 @@ export interface GameState {
   getPlies(): Ply[];
   getPendingAnimalStep(): Option<AnimalStep>;
   isGameOver(): boolean;
+  getWinner(): Option<Player>;
   getTurn(): Player;
   getCardLocation(cardType: CardType): CardLocation;
   tryDrop(drop: Drop): Result<GameState, IllegalGameStateUpdate>;
@@ -35,6 +37,8 @@ export interface GameState {
   tryPerform(atomic: Atomic): Result<GameState, IllegalGameStateUpdate>;
   serialize(): string;
   toNodeKey(): string;
+  setData(data: GameStateData): void;
+  getStatesAfterPerformingOneAtomic(): GameStateData[];
 }
 
 export enum CardLocation {

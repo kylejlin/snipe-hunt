@@ -16,7 +16,7 @@ import { Option, Result } from "rusty-ts";
 
 interface GameStateImpl extends GameState {}
 
-interface GameStateData {
+export interface GameStateData {
   initialBoard: Int32Array;
   currentBoard: Int32Array;
   turn: Player;

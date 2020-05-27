@@ -573,7 +573,7 @@ export default class App extends React.Component<{}, AppState> {
             },
           });
 
-          return gameState.tryPerform(nextPly.first);
+          return analyzer.tryPerform(nextPly.first);
         } else {
           this.updateUxState({
             futureSubPlyStack: {
@@ -582,7 +582,7 @@ export default class App extends React.Component<{}, AppState> {
             },
           });
 
-          return gameState.tryPerform(nextPly);
+          return analyzer.tryPerform(nextPly);
         }
       },
     });

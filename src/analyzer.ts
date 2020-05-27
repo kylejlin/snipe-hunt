@@ -1,78 +1,19 @@
+import { Option, Result } from "rusty-ts";
+import { Filter } from "./bitwiseUtils";
 import {
-  GameAnalyzer,
-  GameState,
+  AnimalStep,
+  Atomic,
   Board,
   CardLocation,
-  allCardLocations,
   CardType,
+  Drop,
+  GameAnalyzer,
+  GameState,
+  IllegalGameStateUpdate,
   Player,
   Ply,
-  AnimalStep,
-  Drop,
-  IllegalGameStateUpdate,
   SnipeStep,
-  Atomic,
 } from "./types";
-import { Option, Result } from "rusty-ts";
-
-export interface GameStateUtils {
-  fromString(s: string): Option<GameState>;
-  fromBoard(board: Board): GameState;
-}
-
-export const gameStateUtils = getGameAnalyzerUtils();
-
-enum Offset {
-  AlphaAnimals = 0,
-  BetaAnimals = 1,
-  Snipes = 2,
-}
-
-enum Filter {
-  LeastSixteenBits = 0b1111_1111_1111_1111,
-  LeastBit = 0b1,
-}
-
-function getGameAnalyzerUtils(): GameStateUtils {
-  return { fromString, fromBoard };
-
-  function fromString(s: string): Option<GameState> {}
-
-  function fromBoard(board: Board): GameState {
-    const initialBoard = new Int32Array(24);
-
-    for (const location of allCardLocations) {
-      const cards = board[location];
-      for (const card of cards) {
-        if (
-          card.cardType === CardType.AlphaSnipe ||
-          card.cardType === CardType.BetaSnipe
-        ) {
-          const cardSet = card.cardType === CardType.AlphaSnipe ? 1 : 1 << 1;
-          const offset = Offset.Snipes;
-          initialBoard[location + offset] |= cardSet;
-        } else {
-          const cardSet = 1 << card.cardType;
-          const offset =
-            card.allegiance === Player.Alpha
-              ? Offset.AlphaAnimals
-              : Offset.BetaAnimals;
-          initialBoard[location + offset] |= cardSet;
-        }
-      }
-    }
-
-    const data: GameState = {
-      initialBoard,
-      currentBoard: initialBoard,
-      turn: Player.Beta,
-      plies: [],
-      pendingAnimalStep: 0,
-    };
-
-    return data;
-  }
-}
 
 export function getAnalyzer(initState: GameState): GameAnalyzer {
   let state = initState;

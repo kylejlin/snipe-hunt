@@ -1,5 +1,6 @@
 import { option, Option } from "rusty-ts";
-import { gameStateUtils, getAnalyzer } from "./analyzer";
+import { getAnalyzer } from "./analyzer";
+import { gameStateFactory } from "./gameStateFactory";
 import { GameState, StateSaver } from "./types";
 
 enum LocalStorageKeys {
@@ -12,7 +13,7 @@ const stateSaverImpl: StateSaver<GameState> = {
     if (stateStr === null) {
       return option.none();
     } else {
-      return gameStateUtils.fromString(stateStr);
+      return gameStateFactory.fromString(stateStr);
     }
   },
   setState(state: GameState): void {

@@ -1,7 +1,22 @@
-import { Option, Result, option } from "rusty-ts";
+import { Option, option, Result, result } from "rusty-ts";
 import { Filter, Offset, PlyTag } from "./bitwiseUtils";
+import { cardProperties } from "./cardMaps";
 import {
+  canRetreat,
+  decodePly,
+  isReserve,
+  isRow,
+  oneRowBackward,
+  oneRowForward,
+  opponentOf,
+  snipeOf,
+} from "./gameUtil";
+import {
+  allAnimalTypes,
+  allCardLocations,
+  allRows,
   AnimalStep,
+  AnimalType,
   Atomic,
   Board,
   CardLocation,
@@ -10,27 +25,14 @@ import {
   GameAnalyzer,
   GameState,
   IllegalGameStateUpdate,
+  legalRetreaterDrops,
   Player,
   Ply,
-  SnipeStep,
-  allCardLocations,
-  allAnimalTypes,
-  Row,
   PlyType,
+  Row,
+  SnipeStep,
   SnipeType,
-  AnimalType,
-  allRows,
-  legalRetreaterDrops,
 } from "./types";
-import {
-  opponentOf,
-  snipeOf,
-  oneRowForward,
-  isRow,
-  oneRowBackward,
-  canRetreat,
-} from "./gameUtil";
-import { cardProperties } from "./cardMaps";
 
 export function getAnalyzer(initState: GameState): GameAnalyzer {
   let state = initState;
@@ -44,18 +46,18 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
     getWinner,
     getTurn,
     getCardLocation,
-    tryDrop,
-    tryAnimalStep,
     tryUndoSubPly,
     tryPerform,
     serialize,
     toNodeKey,
     setState,
-    getStatesAfterPerformingOneAtomic,
+    getLegalAtomics,
+    forcePerform,
   };
 
   function getInitialState(): GameState {
     return {
+      stateVersion: state.stateVersion,
       initialBoard: state.initialBoard,
       currentBoard: state.initialBoard,
       turn: Player.Beta,
@@ -108,40 +110,6 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
 
   function getPlies(): Ply[] {
     return state.plies.map(decodePly);
-  }
-
-  function decodePly(ply: number): Ply {
-    const tag = (ply & Filter.LeastThreeBits) as PlyTag;
-    switch (tag) {
-      case PlyTag.SnipeStep: {
-        const destination = ((ply >>> 3) & Filter.LeastThreeBits) as Row;
-        return { plyType: PlyType.SnipeStep, destination };
-      }
-
-      case PlyTag.Drop: {
-        const cardType = ((ply >>> 3) & Filter.LeastThreeBits) as AnimalType;
-        const destination = ((ply >>> 8) & Filter.LeastThreeBits) as Row;
-        return {
-          plyType: PlyType.Drop,
-          dropped: cardType,
-          destination,
-        };
-      }
-
-      case PlyTag.TwoAnimalSteps: {
-        const firstCardType = ((ply >>> 3) &
-          Filter.LeastFiveBits) as AnimalType;
-        const firstDestination = ((ply >>> 8) & Filter.LeastThreeBits) as Row;
-        const secondCardType = ((ply >>> 11) &
-          Filter.LeastFiveBits) as AnimalType;
-        const secondDestination = ((ply >>> 16) & Filter.LeastThreeBits) as Row;
-        return {
-          plyType: PlyType.TwoAnimalSteps,
-          first: { moved: firstCardType, destination: firstDestination },
-          second: { moved: secondCardType, destination: secondDestination },
-        };
-      }
-    }
   }
 
   function getPendingAnimalStep(): Option<AnimalStep> {
@@ -212,7 +180,7 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
         const snipes = state.currentBoard[snipeLocation * 3 + Offset.Snipes];
         const enemySnipeFilter = 1 << opponentOf(state.turn);
         if ((snipes & enemySnipeFilter) | animals) {
-          const forward = oneRowForward(snipeLocation, Player.Alpha);
+          const forward = oneRowForward(snipeLocation, state.turn);
           if (isRow(forward)) {
             atomics.push({
               plyType: PlyType.SnipeStep,
@@ -220,7 +188,7 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
             });
           }
 
-          const backward = oneRowBackward(snipeLocation, Player.Alpha);
+          const backward = oneRowBackward(snipeLocation, state.turn);
           if (isRow(backward)) {
             atomics.push({
               plyType: PlyType.SnipeStep,
@@ -286,16 +254,54 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
         state.turn === Player.Alpha ? 1 << Player.Beta : 1 << Player.Alpha;
 
       for (const cardType of allAnimalTypes) {
+        if (
+          state.pendingAnimalStep &&
+          ((state.pendingAnimalStep >>> 3) & Filter.LeastFiveBits) === cardType
+        ) {
+          continue;
+        }
+
         if ((1 << cardType) & friendlyAnimals) {
           if (doesRowHaveAtLeastTwoCards) {
+            const friendlySnipeFilter =
+              state.turn === Player.Alpha
+                ? 1 << Player.Alpha
+                : 1 << Player.Beta;
+
             const forward = oneRowForward(row, state.turn);
-            if (isRow(forward)) {
+            const forwardSnipes =
+              state.currentBoard[forward * 3 + Offset.Snipes];
+            if (
+              isRow(forward) &&
+              !(
+                forwardSnipes & friendlySnipeFilter &&
+                !(forwardSnipes & enemySnipeFilter) &&
+                doesStepActivateTriplet(
+                  state.currentBoard[forward * 3 + Offset.AlphaAnimals] |
+                    state.currentBoard[forward * 3 + Offset.BetaAnimals],
+                  cardType
+                )
+              )
+            ) {
               atomics.push({ moved: cardType, destination: forward });
             }
 
             if (canRetreat(cardType)) {
               const backward = oneRowBackward(row, state.turn);
-              if (isRow(backward)) {
+              const backwardSnipes =
+                state.currentBoard[backward * 3 + Offset.Snipes];
+              if (
+                isRow(backward) &&
+                !(
+                  backwardSnipes & friendlySnipeFilter &&
+                  !(backwardSnipes & enemySnipeFilter) &&
+                  doesStepActivateTriplet(
+                    state.currentBoard[backward * 3 + Offset.AlphaAnimals] |
+                      state.currentBoard[backward * 3 + Offset.BetaAnimals],
+                    cardType
+                  )
+                )
+              ) {
                 atomics.push({ moved: cardType, destination: backward });
               }
             }
@@ -304,7 +310,7 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
             if (
               isRow(forward) &&
               snipes & enemySnipeFilter &&
-              activatesTriplet(
+              doesStepActivateTriplet(
                 state.currentBoard[forward * 3 + Offset.AlphaAnimals] |
                   state.currentBoard[forward * 3 + Offset.BetaAnimals],
                 cardType
@@ -318,7 +324,7 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
               if (
                 isRow(backward) &&
                 snipes & enemySnipeFilter &&
-                activatesTriplet(
+                doesStepActivateTriplet(
                   state.currentBoard[backward * 3 + Offset.AlphaAnimals] |
                     state.currentBoard[backward * 3 + Offset.BetaAnimals],
                   cardType
@@ -346,7 +352,7 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
     return (((n + (n >> 4)) & 0xf0f0f0f) * 0x1010101) >> 24;
   }
 
-  function activatesTriplet(
+  function doesStepActivateTriplet(
     oldAnimals: number,
     newAnimal: AnimalType
   ): boolean {
@@ -412,22 +418,398 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
     );
   }
 
-  function tryDrop(drop: Drop): Result<GameState, IllegalGameStateUpdate> {}
-
-  function tryAnimalStep(
-    step: AnimalStep
-  ): Result<GameState, IllegalGameStateUpdate> {}
-
   function tryUndoSubPly(): Result<
     { newState: GameState; undone: SnipeStep | Drop | AnimalStep },
     IllegalGameStateUpdate
-  > {}
+  > {
+    if (state.plies.length === 0 && state.pendingAnimalStep === 0) {
+      return result.err(IllegalGameStateUpdate.NothingToUndo);
+    }
+
+    if (state.pendingAnimalStep !== 0) {
+      const outOfSyncState = cloneState(state);
+      outOfSyncState.pendingAnimalStep = 0;
+
+      const undone: AnimalStep = {
+        moved: (state.pendingAnimalStep >>> 3) & Filter.LeastFiveBits,
+        destination: (state.pendingAnimalStep >>> 8) & Filter.LeastThreeBits,
+      };
+      return result.ok({
+        newState: recalculateOutOfSyncGameState(outOfSyncState),
+        undone,
+      });
+    }
+
+    const outOfSyncState = cloneState(state);
+    const encodedPly = outOfSyncState.plies.pop()!;
+    const ply = decodePly(encodedPly);
+    let undone: SnipeStep | Drop | AnimalStep;
+
+    if (ply.plyType === PlyType.TwoAnimalSteps) {
+      const encodedFirstStep =
+        (ply.first.destination << 8) | (ply.first.moved << 3) | 0b001;
+      outOfSyncState.pendingAnimalStep = encodedFirstStep;
+
+      undone = ply.second;
+    } else {
+      undone = ply;
+    }
+
+    return result.ok({
+      newState: recalculateOutOfSyncGameState(outOfSyncState),
+      undone,
+    });
+  }
+
+  function recalculateOutOfSyncGameState(
+    originalMutState: GameState
+  ): GameState {
+    let mutState = originalMutState;
+    const analyzer = getAnalyzer(mutState);
+
+    mutState.currentBoard = new Int32Array(mutState.initialBoard);
+
+    const plies = mutState.plies.map(decodePly);
+    const encodedPendingAnimalStep = mutState.pendingAnimalStep;
+
+    mutState.plies = [];
+    mutState.pendingAnimalStep = 0;
+    mutState.turn = Player.Beta;
+
+    plies.forEach((ply) => {
+      if (ply.plyType === PlyType.TwoAnimalSteps) {
+        analyzer.setState(mutState);
+        mutState = analyzer.forcePerform(ply.first);
+        analyzer.setState(mutState);
+        mutState = analyzer.forcePerform(ply.second);
+      } else {
+        analyzer.setState(mutState);
+        mutState = analyzer.forcePerform(ply);
+      }
+    });
+
+    if (encodedPendingAnimalStep) {
+      analyzer.setState(mutState);
+      const step: AnimalStep = {
+        moved: (encodedPendingAnimalStep >>> 3) & Filter.LeastFiveBits,
+        destination: (encodedPendingAnimalStep >>> 8) & Filter.LeastThreeBits,
+      };
+      mutState = analyzer.forcePerform(step);
+    }
+
+    return mutState;
+  }
 
   function tryPerform(
     atomic: Atomic
-  ): Result<GameState, IllegalGameStateUpdate> {}
+  ): Result<GameState, IllegalGameStateUpdate> {
+    return getReasonWhyAtomicIsIllegal(atomic).match({
+      some: result.err,
+      none: () => result.ok(forcePerform(atomic)),
+    });
+  }
 
-  function serialize(): string {}
+  function getReasonWhyAtomicIsIllegal(
+    atomic: Atomic
+  ): Option<IllegalGameStateUpdate> {
+    if (isEitherSnipeCaptured()) {
+      return option.some(IllegalGameStateUpdate.SnipeAlreadyCaptured);
+    }
+
+    if ("plyType" in atomic) {
+      switch (atomic.plyType) {
+        case PlyType.SnipeStep: {
+          if (state.pendingAnimalStep) {
+            return option.some(IllegalGameStateUpdate.AlreadyMovedAnimal);
+          }
+
+          const moved = snipeOf(state.turn);
+          if (!isInRange(moved, state.turn, atomic.destination)) {
+            return option.some(
+              IllegalGameStateUpdate.StepDestinationOutOfRange
+            );
+          }
+
+          const location = getSnipeLocation(moved) as Row;
+          const animals =
+            state.currentBoard[location * 3 + Offset.AlphaAnimals] |
+            state.currentBoard[location * 3 + Offset.BetaAnimals];
+          const snipes = state.currentBoard[location * 3 + Offset.Snipes];
+          const enemySnipeFilter =
+            state.turn === Player.Alpha ? 1 << Player.Beta : 1 << Player.Alpha;
+          if (!(animals | (snipes & enemySnipeFilter))) {
+            return option.some(
+              IllegalGameStateUpdate.CannotEmptyRowWithoutImmediatelyWinning
+            );
+          }
+
+          return option.none();
+        }
+
+        case PlyType.Drop: {
+          if (state.pendingAnimalStep) {
+            return option.some(IllegalGameStateUpdate.AlreadyMovedAnimal);
+          }
+
+          const reserveAnimals =
+            state.currentBoard[
+              (state.turn === Player.Alpha
+                ? CardLocation.AlphaReserve
+                : CardLocation.BetaReserve) *
+                3 +
+                (state.turn === Player.Alpha
+                  ? Offset.AlphaAnimals
+                  : Offset.BetaAnimals)
+            ];
+          if (!((1 << atomic.dropped) & reserveAnimals)) {
+            return option.some(
+              IllegalGameStateUpdate.DroppedAnimalNotInReserve
+            );
+          }
+
+          if (!(reserveAnimals & ~(1 << atomic.dropped))) {
+            return option.some(IllegalGameStateUpdate.CannotEmptyReserve);
+          }
+
+          if (
+            canRetreat(atomic.dropped) &&
+            !legalRetreaterDrops[state.turn].includes(atomic.destination)
+          ) {
+            return option.some(
+              IllegalGameStateUpdate.CannotDropRetreaterOnEnemysBackTwoRows
+            );
+          }
+
+          return option.none();
+        }
+      }
+    } else {
+      const location = getAnimalLocation(atomic.moved);
+
+      if (isReserve(location)) {
+        return option.some(IllegalGameStateUpdate.MovedCardInReserve);
+      }
+
+      const friendlyAnimals =
+        state.currentBoard[
+          location * 3 +
+            (state.turn === Player.Alpha
+              ? Offset.AlphaAnimals
+              : Offset.BetaAnimals)
+        ];
+      if (!((1 << atomic.moved) & friendlyAnimals)) {
+        return option.some(IllegalGameStateUpdate.NotYourAnimal);
+      }
+
+      if (!isInRange(atomic.moved, state.turn, atomic.destination)) {
+        return option.some(IllegalGameStateUpdate.StepDestinationOutOfRange);
+      }
+
+      if (
+        state.pendingAnimalStep &&
+        ((state.pendingAnimalStep >>> 3) & Filter.LeastFiveBits) ===
+          atomic.moved
+      ) {
+        return option.some(IllegalGameStateUpdate.CannotMoveSameAnimalTwice);
+      }
+
+      const destAnimals =
+        state.currentBoard[atomic.destination * 3 + Offset.AlphaAnimals] |
+        state.currentBoard[atomic.destination * 3 + Offset.BetaAnimals];
+      const activatesTriplet = doesStepActivateTriplet(
+        destAnimals,
+        atomic.moved
+      );
+
+      const destSnipes =
+        state.currentBoard[atomic.destination * 3 + Offset.Snipes];
+      const enemySnipeFilter =
+        state.turn === Player.Alpha ? 1 << Player.Beta : 1 << Player.Alpha;
+      const enemySnipeInDest = destSnipes & enemySnipeFilter;
+
+      const sourceAnimals =
+        state.currentBoard[location * 3 + Offset.AlphaAnimals] |
+        state.currentBoard[location * 3 + Offset.BetaAnimals];
+      const sourceSnipes = state.currentBoard[location * 3 + Offset.Snipes];
+      const doesSourceRowHaveAnotherCard =
+        (sourceAnimals & ~(1 << atomic.moved)) | sourceSnipes;
+
+      const friendlySnipeFilter =
+        state.turn === Player.Alpha ? 1 << Player.Alpha : 1 << Player.Beta;
+      const friendlySnipeInDest = destSnipes & friendlySnipeFilter;
+
+      if (doesSourceRowHaveAnotherCard) {
+        if (activatesTriplet && friendlySnipeInDest && !enemySnipeInDest) {
+          return option.some(
+            IllegalGameStateUpdate.CannotCaptureOwnSnipeWithoutAlsoCapturingOpponents
+          );
+        } else {
+          return option.none();
+        }
+      } else {
+        if (activatesTriplet && enemySnipeInDest) {
+          return option.none();
+        } else {
+          return option.some(
+            IllegalGameStateUpdate.CannotEmptyRowWithoutImmediatelyWinning
+          );
+        }
+      }
+    }
+  }
+
+  function isInRange(
+    movedType: CardType,
+    movedAllegiance: Player,
+    destination: Row
+  ): boolean {
+    const location = getCardLocation(movedType);
+
+    if (isReserve(location)) {
+      return false;
+    }
+
+    return (
+      oneRowForward(location, movedAllegiance) === destination ||
+      (canRetreat(movedType) &&
+        oneRowBackward(location, movedAllegiance) === destination)
+    );
+  }
+
+  function forcePerform(atomic: Atomic): GameState {
+    if ("plyType" in atomic) {
+      switch (atomic.plyType) {
+        case PlyType.SnipeStep:
+          return forcePerformSnipeStep(atomic);
+        case PlyType.Drop:
+          return forcePerformDrop(atomic);
+      }
+    } else {
+      return forcePerformAnimalStep(atomic);
+    }
+  }
+
+  function forcePerformSnipeStep(step: SnipeStep): GameState {
+    const friendlySnipeLocation = getCardLocation(snipeOf(state.turn)) as Row;
+    const friendlySnipeSet = 1 << state.turn;
+    const removeFriendlySnipeFilter = ~friendlySnipeSet;
+
+    const newState = cloneState(state);
+    newState.currentBoard[
+      friendlySnipeLocation * 3 + Offset.Snipes
+    ] &= removeFriendlySnipeFilter;
+    newState.currentBoard[
+      step.destination * 3 + Offset.Snipes
+    ] |= friendlySnipeSet;
+
+    newState.plies.push((step.destination << 3) | PlyTag.SnipeStep);
+
+    newState.turn = opponentOf(newState.turn);
+
+    return newState;
+  }
+
+  function cloneState(src: GameState): GameState {
+    return {
+      stateVersion: src.stateVersion,
+      initialBoard: new Int32Array(src.initialBoard),
+      currentBoard: new Int32Array(src.currentBoard),
+      turn: src.turn,
+      plies: src.plies.slice(),
+      pendingAnimalStep: src.pendingAnimalStep,
+    };
+  }
+
+  function forcePerformDrop(drop: Drop): GameState {
+    const reserve =
+      state.turn === Player.Alpha
+        ? CardLocation.AlphaReserve
+        : CardLocation.BetaReserve;
+    const friendlyOffset =
+      state.turn === Player.Alpha ? Offset.AlphaAnimals : Offset.BetaAnimals;
+    const droppedSet = 1 << drop.dropped;
+    const removeDroppedFilter = ~droppedSet;
+
+    const newState = cloneState(state);
+    newState.currentBoard[reserve * 3 + friendlyOffset] &= removeDroppedFilter;
+    newState.currentBoard[drop.destination * 3 + friendlyOffset] |= droppedSet;
+
+    newState.plies.push(
+      (drop.destination << 8) | (drop.dropped << 3) | PlyTag.Drop
+    );
+
+    newState.turn = opponentOf(newState.turn);
+
+    return newState;
+  }
+
+  function forcePerformAnimalStep(step: AnimalStep): GameState {
+    const start = getCardLocation(step.moved) as Row;
+    const friendlyOffset =
+      state.turn === Player.Alpha ? Offset.AlphaAnimals : Offset.BetaAnimals;
+
+    const destAnimalsBeforeStep =
+      state.currentBoard[step.destination * 3 + Offset.AlphaAnimals] |
+      state.currentBoard[step.destination * 3 + Offset.BetaAnimals];
+
+    const newState = cloneState(state);
+
+    const movedSet = 1 << step.moved;
+    const removeMovedFilter = ~movedSet;
+    newState.currentBoard[start * 3 + friendlyOffset] &= removeMovedFilter;
+
+    if (doesStepActivateTriplet(destAnimalsBeforeStep, step.moved)) {
+      const friendlyReserve =
+        state.turn === Player.Alpha
+          ? CardLocation.AlphaReserve
+          : CardLocation.BetaReserve;
+      const destSnipesBeforeStep =
+        state.currentBoard[step.destination * 3 + Offset.Snipes];
+      const enemyOffset =
+        state.turn === Player.Alpha ? Offset.BetaAnimals : Offset.AlphaAnimals;
+
+      newState.currentBoard[
+        friendlyReserve * 3 + friendlyOffset
+      ] |= destAnimalsBeforeStep;
+      newState.currentBoard[
+        friendlyReserve * 3 + Offset.Snipes
+      ] |= destSnipesBeforeStep;
+
+      newState.currentBoard[step.destination * 3 + friendlyOffset] = movedSet;
+      newState.currentBoard[step.destination * 3 + enemyOffset] = 0;
+      newState.currentBoard[step.destination * 3 + Offset.Snipes] = 0;
+    } else {
+      newState.currentBoard[step.destination * 3 + friendlyOffset] |= movedSet;
+    }
+
+    if (newState.pendingAnimalStep) {
+      const encodePlyWithIncorrectTag =
+        (step.destination << 16) |
+        (step.moved << 11) |
+        newState.pendingAnimalStep;
+      newState.plies.push(
+        (encodePlyWithIncorrectTag & ~Filter.LeastThreeBits) |
+          PlyTag.TwoAnimalSteps
+      );
+      newState.pendingAnimalStep = 0;
+      newState.turn = opponentOf(newState.turn);
+    } else {
+      newState.pendingAnimalStep =
+        (step.destination << 8) | (step.moved << 3) | 0b001;
+    }
+
+    return newState;
+  }
+
+  function serialize(): string {
+    return JSON.stringify(state, (_key, value) => {
+      if (value instanceof Int32Array) {
+        return Array.from(value);
+      } else {
+        return value;
+      }
+    });
+  }
 
   function toNodeKey(): string {
     const { currentBoard } = state;
@@ -484,6 +866,4 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
   function setState(newState: GameState): void {
     state = newState;
   }
-
-  function getStatesAfterPerformingOneAtomic(): GameState[] {}
 }

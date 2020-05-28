@@ -1,49 +1,96 @@
 import React from "react";
-import { option, Result } from "rusty-ts";
+import { option, Option, Result } from "rusty-ts";
+import { getAnalyzer } from "./analyzer";
 import "./App.css";
 import { cardEmojis } from "./cardMaps";
-import CardComponent from "./components/CardComponent";
+import AnimalStepView from "./components/AnimalStepView";
+import CardView from "./components/CardView";
 import ElementMatrix from "./components/ElementMatrix";
-import PlyComponent from "./components/PlyComponent";
-import SubPlyComponent from "./components/SubPlyComponent";
+import FutureAnimalStepView from "./components/FutureAnimalStepView";
+import PlyView from "./components/PlyView";
 import * as gameUtil from "./gameUtil";
-import stateSaver from "./stateSaver";
+import { futureSubPlyStackSaver, gameStateSaver } from "./stateSavers";
 import {
-  Card,
   AnimalStep,
+  AnimalType,
   AppState,
-  CardType,
+  Card,
   CardLocation,
+  CardType,
   Drop,
-  GameAnalyzer,
+  FutureSubPlyStack,
+  GameState,
   IllegalGameStateUpdate,
+  MctsWorkerMessage,
   Player,
   PlyType,
   Row,
   SnipeStep,
-  GameState,
+  STATE_VERSION,
+  WorkerMessageType,
+  MctsAnalysis,
+  UpdateMctsAnalyzerGameStateRequest,
+  Ply,
+  Atomic,
 } from "./types";
-import { getAnalyzer } from "./analyzer";
+import MctsWorker from "./workers/mcts.importable";
 
 export default class App extends React.Component<{}, AppState> {
+  private mctsWorker: Worker | undefined;
+  private hasMounted: boolean;
+
   constructor(props: {}) {
     super(props);
 
     this.state = loadState();
 
     this.bindMethods();
+
+    (window as any).app = this;
+
+    this.hasMounted = false;
   }
 
-  bindMethods() {
+  componentDidMount(): void {
+    const mctsWorker = new MctsWorker();
+    mctsWorker.addEventListener("message", this.onMctsWorkerMessage);
+    this.mctsWorker = mctsWorker;
+
+    this.updateMctsAnalyzerGameState(this.state.gameState);
+
+    this.hasMounted = true;
+  }
+
+  bindMethods(): void {
     this.onCardClicked = this.onCardClicked.bind(this);
     this.onResetClicked = this.onResetClicked.bind(this);
     this.onUndoSubPlyClicked = this.onUndoSubPlyClicked.bind(this);
     this.onRedoSubPlyClicked = this.onRedoSubPlyClicked.bind(this);
+    this.onMctsWorkerMessage = this.onMctsWorkerMessage.bind(this);
+    this.isMctsAnalysisUpToDate = this.isMctsAnalysisUpToDate.bind(this);
+  }
+
+  updateMctsAnalyzerGameState(gameState: GameState): void {
+    if (this.mctsWorker === undefined) {
+      throw new Error(
+        "Cannot updateMctsAnalyzerGameState() because mctsAnalyzer has not been initialized yet."
+      );
+    }
+
+    const message: UpdateMctsAnalyzerGameStateRequest = {
+      messageType: WorkerMessageType.UpdateMctsAnalyzerGameStateRequest,
+      gameState,
+    };
+    this.mctsWorker.postMessage(message);
   }
 
   saveAndUpdateGameState(newGameState: GameState) {
-    stateSaver.setState(newGameState);
-    this.setState({ gameState: newGameState });
+    gameStateSaver.setState(newGameState);
+    this.setState({
+      gameState: newGameState,
+    });
+
+    this.updateMctsAnalyzerGameState(newGameState);
   }
 
   render(): React.ReactElement {
@@ -51,17 +98,20 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   renderMatrixView(): React.ReactElement {
-    const { gameState, ux } = this.state;
-
     const analyzer = getAnalyzer(this.state.gameState);
     const initialBoard = getAnalyzer(analyzer.getInitialState()).getBoard();
     const currentBoard = analyzer.getBoard();
     const plies = analyzer.getPlies();
 
-    const { selectedCardType: selectedCard, futureSubPlyStack } = ux;
+    const { selectedCardType: selectedCard } = this.state.ux;
 
     return (
       <div className="SnipeHunt">
+        {analyzer.getWinner().match({
+          none: () => <div>Turn: {Player[analyzer.getTurn()]}</div>,
+          some: (winner) => <div>Winner: {Player[winner]}</div>,
+        })}
+
         <div>
           <table className="Board">
             <tbody>
@@ -82,7 +132,14 @@ export default class App extends React.Component<{}, AppState> {
               <tr>
                 <td
                   className="BoardCell"
-                  onClick={() => this.onRowNumberClicked(1)}
+                  onClick={(e) => {
+                    if (
+                      e.target instanceof HTMLTableCellElement &&
+                      e.target.classList.contains("BoardCell")
+                    ) {
+                      this.onRowNumberClicked(1);
+                    }
+                  }}
                 >
                   1{this.renderSnipesIn(currentBoard[CardLocation.Row1])}
                 </td>
@@ -98,7 +155,14 @@ export default class App extends React.Component<{}, AppState> {
               <tr>
                 <td
                   className="BoardCell"
-                  onClick={() => this.onRowNumberClicked(2)}
+                  onClick={(e) => {
+                    if (
+                      e.target instanceof HTMLTableCellElement &&
+                      e.target.classList.contains("BoardCell")
+                    ) {
+                      this.onRowNumberClicked(2);
+                    }
+                  }}
                 >
                   2{this.renderSnipesIn(currentBoard[CardLocation.Row2])}
                 </td>
@@ -114,7 +178,14 @@ export default class App extends React.Component<{}, AppState> {
               <tr>
                 <td
                   className="BoardCell"
-                  onClick={() => this.onRowNumberClicked(3)}
+                  onClick={(e) => {
+                    if (
+                      e.target instanceof HTMLTableCellElement &&
+                      e.target.classList.contains("BoardCell")
+                    ) {
+                      this.onRowNumberClicked(3);
+                    }
+                  }}
                 >
                   3{this.renderSnipesIn(currentBoard[CardLocation.Row3])}
                 </td>
@@ -130,7 +201,14 @@ export default class App extends React.Component<{}, AppState> {
               <tr>
                 <td
                   className="BoardCell"
-                  onClick={() => this.onRowNumberClicked(4)}
+                  onClick={(e) => {
+                    if (
+                      e.target instanceof HTMLTableCellElement &&
+                      e.target.classList.contains("BoardCell")
+                    ) {
+                      this.onRowNumberClicked(4);
+                    }
+                  }}
                 >
                   4{this.renderSnipesIn(currentBoard[CardLocation.Row4])}
                 </td>
@@ -146,7 +224,14 @@ export default class App extends React.Component<{}, AppState> {
               <tr>
                 <td
                   className="BoardCell"
-                  onClick={() => this.onRowNumberClicked(5)}
+                  onClick={(e) => {
+                    if (
+                      e.target instanceof HTMLTableCellElement &&
+                      e.target.classList.contains("BoardCell")
+                    ) {
+                      this.onRowNumberClicked(5);
+                    }
+                  }}
                 >
                   5{this.renderSnipesIn(currentBoard[CardLocation.Row5])}
                 </td>
@@ -162,7 +247,14 @@ export default class App extends React.Component<{}, AppState> {
               <tr>
                 <td
                   className="BoardCell"
-                  onClick={() => this.onRowNumberClicked(6)}
+                  onClick={(e) => {
+                    if (
+                      e.target instanceof HTMLTableCellElement &&
+                      e.target.classList.contains("BoardCell")
+                    ) {
+                      this.onRowNumberClicked(6);
+                    }
+                  }}
                 >
                   6{this.renderSnipesIn(currentBoard[CardLocation.Row6])}
                 </td>
@@ -240,37 +332,79 @@ export default class App extends React.Component<{}, AppState> {
 
             {plies.map((ply, zeroBasedPlyNumber) => {
               const plyNumber = zeroBasedPlyNumber + 3;
-              return <PlyComponent ply={ply} plyNumber={plyNumber} />;
+              return <PlyView ply={ply} plyNumber={plyNumber} />;
             })}
 
             {analyzer.getPendingAnimalStep().match({
               none: () => null,
-              some: (pendingSubPly) =>
-                analyzer.isGameOver() ? null : (
-                  <SubPlyComponent
-                    subPly={pendingSubPly}
-                    plyNumber={plies.length + 3}
-                  />
-                ),
+              some: (step) => (
+                <AnimalStepView
+                  step={step}
+                  plyNumber={plies.length + 3}
+                  winner={analyzer.getWinner()}
+                />
+              ),
+            })}
+
+            {analyzer.getWinner().match({
+              none: () => null,
+              some: (winner) => {
+                const winnerEmoji = cardEmojis[gameUtil.snipeOf(winner)];
+                const loserEmoji =
+                  cardEmojis[gameUtil.snipeOf(gameUtil.opponentOf(winner))];
+                return winnerEmoji + ">" + loserEmoji;
+              },
             })}
           </ol>
           <h4>Future sub plies</h4>
-          <ol className="Plies">
-            {futureSubPlyStack.pendingAnimalStep.match({
-              some: () => <p>Todo: future animal step</p>,
-              none: () => null,
-            })}
-            {futureSubPlyStack.plies
-              .slice()
-              .reverse()
-              .map((ply, i) => (
-                <PlyComponent ply={ply} plyNumber={plies.length + 3 + i} />
-              ))}
-          </ol>
+          <ol className="Plies">{this.renderFutureSubPlies()}</ol>
           <button onClick={this.onUndoSubPlyClicked}>Back</button>
           <button onClick={this.onRedoSubPlyClicked}>Forward</button>
         </div>
         <button onClick={this.onResetClicked}>Reset</button>
+        <div>
+          <h3>Computer agents:</h3>
+          {this.state.mctsAnalysis.match({
+            none: () =>
+              analyzer.isGameOver() ? <p>Game over</p> : <p>Loading...</p>,
+            some: (analysis) => {
+              const { bestAtomic } = analysis;
+              const afterPerformingBest = getAnalyzer(
+                analyzer.forcePerform(bestAtomic)
+              );
+              const currentStateMeanValue =
+                analysis.currentStateValue / analysis.currentStateRollouts;
+              const bestAtomicMeanValue =
+                analysis.bestAtomicValue / analysis.bestAtomicRollouts;
+
+              return (
+                <>
+                  <h4>
+                    MCTS (before: [v̅ = {currentStateMeanValue.toFixed(3)}, n ={" "}
+                    {analysis.currentStateRollouts}
+                    ], after: [v̅ = {bestAtomicMeanValue.toFixed(3)}, n ={" "}
+                    {analysis.bestAtomicRollouts}
+                    ]):
+                  </h4>
+                  {"plyType" in bestAtomic ? (
+                    <PlyView ply={bestAtomic} plyNumber={plies.length + 3} />
+                  ) : analyzer.getPendingAnimalStep().isSome() ? (
+                    <FutureAnimalStepView
+                      step={bestAtomic}
+                      plyNumber={plies.length + 3}
+                    />
+                  ) : (
+                    <AnimalStepView
+                      step={bestAtomic}
+                      plyNumber={plies.length + 3}
+                      winner={afterPerformingBest.getWinner()}
+                    />
+                  )}
+                </>
+              );
+            },
+          })}
+        </div>
       </div>
     );
   }
@@ -285,7 +419,8 @@ export default class App extends React.Component<{}, AppState> {
     return snipes.map((card) => {
       const isSelected = selectedCardType.equalsSome(card.cardType);
       return (
-        <CardComponent
+        <CardView
+          key={card.cardType}
           card={card}
           isSelected={isSelected}
           onCardClicked={this.onCardClicked}
@@ -400,7 +535,7 @@ export default class App extends React.Component<{}, AppState> {
 
   renderCards(cards: Card[]): React.ReactElement[] {
     return cards.map((card) => (
-      <CardComponent
+      <CardView
         key={card.cardType}
         card={card}
         isSelected={this.state.ux.selectedCardType.match({
@@ -412,7 +547,93 @@ export default class App extends React.Component<{}, AppState> {
     ));
   }
 
+  renderFutureSubPlies() {
+    const chronological = this.state.ux.futureSubPlyStack.atomics
+      .slice()
+      .reverse();
+    let preTurnsAnimalStep: Option<AnimalStep> = option.none();
+    const turns: Ply[] = [];
+    let postTurnsAnimalStep: Option<AnimalStep> = option.none();
+
+    let i = 0;
+    while (i < chronological.length) {
+      const next = chronological[i];
+
+      if ("plyType" in next) {
+        turns.push(next);
+        i++;
+      } else if (i + 1 < chronological.length) {
+        i++;
+        const nextNext = chronological[i];
+
+        if ("plyType" in nextNext) {
+          preTurnsAnimalStep = option.some(next);
+
+          turns.push(nextNext);
+          i++;
+        } else {
+          turns.push({
+            plyType: PlyType.TwoAnimalSteps,
+            first: next,
+            second: nextNext,
+          });
+          i++;
+        }
+      } else {
+        postTurnsAnimalStep = option.some(next);
+        i++;
+      }
+    }
+
+    const { plies } = this.state.gameState;
+    const analyzer = getAnalyzer(this.state.gameState);
+
+    return (
+      <>
+        {preTurnsAnimalStep.match({
+          none: () => null,
+          some: (step) => (
+            <FutureAnimalStepView step={step} plyNumber={plies.length + 3} />
+          ),
+        })}
+
+        {turns.map((ply, i) => (
+          <PlyView
+            ply={ply}
+            plyNumber={
+              plies.length +
+              3 +
+              preTurnsAnimalStep.match({ none: () => 0, some: () => 1 }) +
+              i
+            }
+          />
+        ))}
+
+        {postTurnsAnimalStep.match({
+          none: () => null,
+          some: (step) => (
+            <AnimalStepView
+              step={step}
+              plyNumber={
+                plies.length +
+                3 +
+                preTurnsAnimalStep.match({ none: () => 0, some: () => 1 }) +
+                turns.length
+              }
+              winner={getAnalyzer(analyzer.forcePerform(step)).getWinner()}
+            />
+          ),
+        })}
+      </>
+    );
+  }
+
   onCardClicked(clicked: Card): void {
+    const analyzer = getAnalyzer(this.state.gameState);
+    if (clicked.allegiance !== analyzer.getTurn()) {
+      return;
+    }
+
     const { selectedCardType } = this.state.ux;
     const isClickedCardAlreadySelected = selectedCardType.someSatisfies(
       (selectedType) => selectedType === clicked.cardType
@@ -426,31 +647,52 @@ export default class App extends React.Component<{}, AppState> {
 
   updateUxState(newUxState: Partial<AppState["ux"]>): void {
     this.setState((prevState) => {
-      return {
+      const newState = {
         ...prevState,
         ux: {
           ...prevState.ux,
           ...newUxState,
         },
       };
+      futureSubPlyStackSaver.setState(newState.ux.futureSubPlyStack);
+      return newState;
     });
   }
 
   onRowNumberClicked(row: Row): void {
     const analyzer = getAnalyzer(this.state.gameState);
+
+    if (analyzer.isGameOver()) {
+      return;
+    }
+
     const { selectedCardType: selectedCard } = this.state.ux;
 
     selectedCard.ifSome((selected) => {
+      this.updateUxState({
+        futureSubPlyStack: {
+          stateVersion: STATE_VERSION,
+          atomics: this.state.ux.futureSubPlyStack.atomics.slice(0, -1),
+        },
+      });
+
       const location = analyzer.getCardLocation(selected);
       if (gameUtil.isReserve(location)) {
-        this.tryDrop(selected, row);
+        this.tryDrop(selected as AnimalType, row);
       } else {
-        this.tryAnimalStep(selected, row);
+        if (
+          selected === CardType.AlphaSnipe ||
+          selected === CardType.BetaSnipe
+        ) {
+          this.trySnipeStep(row);
+        } else {
+          this.tryAnimalStep(selected, row);
+        }
       }
     });
   }
 
-  tryDrop(selected: CardType, destination: Row): void {
+  tryDrop(selected: AnimalType, destination: Row): void {
     const analyzer = getAnalyzer(this.state.gameState);
     const drop: Drop = {
       plyType: PlyType.Drop,
@@ -458,7 +700,7 @@ export default class App extends React.Component<{}, AppState> {
       destination,
     };
 
-    const dropResult = analyzer.tryDrop(drop);
+    const dropResult = analyzer.tryPerform(drop);
     this.updateGameStateOrAlertError(dropResult);
   }
 
@@ -468,21 +710,34 @@ export default class App extends React.Component<{}, AppState> {
     res.match({
       ok: (newGameState) => {
         this.saveAndUpdateGameState(newGameState);
+        this.updateUxState({ selectedCardType: option.none() });
       },
       err: (errorCode) => {
         alert(IllegalGameStateUpdate[errorCode]);
+        this.updateUxState({ selectedCardType: option.none() });
       },
     });
   }
 
-  tryAnimalStep(selected: CardType, destination: Row): void {
+  trySnipeStep(destination: Row): void {
+    const analyzer = getAnalyzer(this.state.gameState);
+    const step: SnipeStep = {
+      plyType: PlyType.SnipeStep,
+      destination,
+    };
+
+    const stepResult = analyzer.tryPerform(step);
+    this.updateGameStateOrAlertError(stepResult);
+  }
+
+  tryAnimalStep(selected: AnimalType, destination: Row): void {
     const analyzer = getAnalyzer(this.state.gameState);
     const step: AnimalStep = {
       moved: selected,
       destination,
     };
 
-    const stepResult = analyzer.tryAnimalStep(step);
+    const stepResult = analyzer.tryPerform(step);
     this.updateGameStateOrAlertError(stepResult);
   }
 
@@ -493,7 +748,7 @@ export default class App extends React.Component<{}, AppState> {
     undoResult.match({
       ok: ({ newState: newGameState, undone }) => {
         this.updateUxState({
-          futureSubPlyStack: this.getNewFutureSubPlyStack(undone),
+          futureSubPlyStack: this.getFutureSubPlyStackAfterUndoing(undone),
         });
 
         this.saveAndUpdateGameState(newGameState);
@@ -505,124 +760,115 @@ export default class App extends React.Component<{}, AppState> {
     });
   }
 
-  getNewFutureSubPlyStack(
-    undone: SnipeStep | Drop | AnimalStep
+  getFutureSubPlyStackAfterUndoing(
+    undone: Atomic
   ): AppState["ux"]["futureSubPlyStack"] {
     const stack = this.state.ux.futureSubPlyStack;
 
-    return stack.pendingAnimalStep.match({
-      some: (pending) => {
-        if ("plyType" in undone) {
-          throw new Error(
-            "Unreachable: Cannot undo a non-animal-step atomic if there is an animal step was just undone."
-          );
-        }
-        return {
-          pendingAnimalStep: option.none(),
-          plies: stack.plies.concat([
-            { plyType: PlyType.TwoAnimalSteps, first: undone, second: pending },
-          ]),
-        };
-      },
-
-      none: () => {
-        if ("plyType" in undone) {
-          return {
-            pendingAnimalStep: option.none(),
-            plies: stack.plies.concat([undone]),
-          };
-        }
-
-        return {
-          pendingAnimalStep: option.none(),
-          plies: stack.plies,
-        };
-      },
-    });
+    return {
+      stateVersion: stack.stateVersion,
+      atomics: stack.atomics.concat([undone]),
+    };
   }
 
   onRedoSubPlyClicked(): void {
-    if (!this.canRedoSubPly()) {
+    const { futureSubPlyStack } = this.state.ux;
+    const { atomics } = futureSubPlyStack;
+
+    if (atomics.length === 0) {
       alert("Nothing to redo.");
+      return;
     }
 
+    const nextAtomic = atomics[atomics.length - 1];
     const analyzer = getAnalyzer(this.state.gameState);
-    const stack = this.state.ux.futureSubPlyStack;
-
-    const redoResult = stack.pendingAnimalStep.match({
-      some: (step) => {
-        this.updateUxState({
-          futureSubPlyStack: {
-            pendingAnimalStep: option.none(),
-            plies: this.state.ux.futureSubPlyStack.plies,
-          },
-        });
-
-        return analyzer.tryPerform(step);
-      },
-
-      none: () => {
-        const nextPly = stack.plies[stack.plies.length - 1];
-        const newPlies = stack.plies.slice(0, -1);
-
-        if (nextPly.plyType === PlyType.TwoAnimalSteps) {
-          this.updateUxState({
-            futureSubPlyStack: {
-              pendingAnimalStep: option.some(nextPly.second),
-              plies: newPlies,
-            },
-          });
-
-          return analyzer.tryPerform(nextPly.first);
-        } else {
-          this.updateUxState({
-            futureSubPlyStack: {
-              pendingAnimalStep: option.none(),
-              plies: newPlies,
-            },
-          });
-
-          return analyzer.tryPerform(nextPly);
-        }
-      },
-    });
+    const redoResult = analyzer.tryPerform(nextAtomic);
 
     this.updateGameStateOrAlertError(redoResult);
-  }
 
-  canRedoSubPly(): boolean {
-    const stack = this.state.ux.futureSubPlyStack;
-    return stack.pendingAnimalStep.isSome() || stack.plies.length > 0;
+    redoResult.ifOk(() => {
+      this.updateUxState({
+        futureSubPlyStack: {
+          stateVersion: futureSubPlyStack.stateVersion,
+          atomics: atomics.slice(0, -1),
+        },
+      });
+    });
   }
 
   onResetClicked(): void {
     if (window.confirm("Are you sure you want to reset?")) {
+      const gameState = gameUtil.getRandomGameState();
       const state: AppState = {
-        gameState: gameUtil.getRandomGameState(),
+        gameState,
         ux: {
           selectedCardType: option.none(),
-          futureSubPlyStack: { pendingAnimalStep: option.none(), plies: [] },
+          futureSubPlyStack: {
+            stateVersion: STATE_VERSION,
+            atomics: [],
+          },
         },
+        mctsAnalysis: option.none(),
       };
-      stateSaver.setState(state.gameState);
+      gameStateSaver.setState(state.gameState);
       this.setState(state);
     }
+  }
+
+  onMctsWorkerMessage(event: MessageEvent): void {
+    const { data } = event;
+    if ("object" === typeof data && data !== null) {
+      const message: MctsWorkerMessage = data;
+      switch (message.messageType) {
+        case WorkerMessageType.LogNotification:
+          console.log("MCTS Worker Log:", message.data);
+          break;
+        case WorkerMessageType.UpdateMctsAnalysisNotification:
+          this.onMctsAnalysisUpdate(
+            option
+              .fromVoidable(message.optAnalysis)
+              .filter(this.isMctsAnalysisUpToDate)
+          );
+          break;
+      }
+    }
+  }
+
+  onMctsAnalysisUpdate(optAnalysis: Option<MctsAnalysis>): void {
+    if (this.hasMounted) {
+      this.setState({ mctsAnalysis: optAnalysis });
+    }
+  }
+
+  isMctsAnalysisUpToDate({ bestAtomic }: MctsAnalysis): boolean {
+    return getAnalyzer(this.state.gameState).tryPerform(bestAtomic).isOk();
   }
 }
 
 function loadState(): AppState {
-  const gameState = stateSaver.getState().unwrapOrElse(() => {
+  const gameState = gameStateSaver.getState().unwrapOrElse(() => {
     const newGameState = gameUtil.getRandomGameState();
-    stateSaver.setState(newGameState);
+    gameStateSaver.setState(newGameState);
     return newGameState;
   });
+  const futureSubPlyStack = futureSubPlyStackSaver
+    .getState()
+    .unwrapOrElse(() => {
+      const newStack: FutureSubPlyStack = {
+        stateVersion: STATE_VERSION,
+        atomics: [],
+      };
+      futureSubPlyStackSaver.setState(newStack);
+      return newStack;
+    });
 
   return {
-    gameState: gameState,
+    gameState,
     ux: {
       selectedCardType: option.none(),
-      futureSubPlyStack: { pendingAnimalStep: option.none(), plies: [] },
+      futureSubPlyStack,
     },
+    mctsAnalysis: option.none(),
   };
 }
 

@@ -5,25 +5,38 @@ import { Option, Result } from "rusty-ts";
  * to state interfaces to ensure seralized state
  * compatibility detection will continue to work.
  */
-export const STATE_VERSION = 10;
+export const STATE_VERSION = 14;
 
 export interface AppState {
   gameState: GameState;
   ux: {
     selectedCardType: Option<CardType>;
-    futureSubPlyStack: {
-      plies: Ply[];
-      pendingAnimalStep: Option<AnimalStep>;
-    };
+    futureSubPlyStack: FutureSubPlyStack;
   };
+  mctsAnalysis: Option<MctsAnalysis>;
 }
 
 export interface GameState {
+  stateVersion: typeof STATE_VERSION;
   initialBoard: Int32Array;
   currentBoard: Int32Array;
   turn: Player;
   plies: number[];
   pendingAnimalStep: number;
+}
+
+export interface FutureSubPlyStack {
+  stateVersion: typeof STATE_VERSION;
+  atomics: Atomic[];
+}
+
+export interface MctsAnalysis {
+  currentStateValue: number;
+  currentStateRollouts: number;
+
+  bestAtomic: Atomic;
+  bestAtomicValue: number;
+  bestAtomicRollouts: number;
 }
 
 export interface GameAnalyzer {
@@ -35,8 +48,6 @@ export interface GameAnalyzer {
   getWinner(): Option<Player>;
   getTurn(): Player;
   getCardLocation(cardType: CardType): CardLocation;
-  tryDrop(drop: Drop): Result<GameState, IllegalGameStateUpdate>;
-  tryAnimalStep(step: AnimalStep): Result<GameState, IllegalGameStateUpdate>;
   tryUndoSubPly(): Result<
     { newState: GameState; undone: SnipeStep | Drop | AnimalStep },
     IllegalGameStateUpdate
@@ -45,7 +56,8 @@ export interface GameAnalyzer {
   serialize(): string;
   toNodeKey(): string;
   setState(state: GameState): void;
-  getStatesAfterPerformingOneAtomic(): GameState[];
+  getLegalAtomics(): Atomic[];
+  forcePerform(atomic: Atomic): GameState;
 }
 
 export enum CardLocation {
@@ -243,7 +255,21 @@ export type Row =
   | CardLocation.Row5
   | CardLocation.Row6;
 
-export enum IllegalGameStateUpdate {}
+export enum IllegalGameStateUpdate {
+  SnipeAlreadyCaptured,
+  AlreadyMovedAnimal,
+  StepDestinationOutOfRange,
+  CannotEmptyRowWithoutImmediatelyWinning,
+  DroppedAnimalNotInReserve,
+  CannotEmptyReserve,
+  CannotDropRetreaterOnEnemysBackTwoRows,
+  MovedCardInReserve,
+  NotYourAnimal,
+  CannotMoveSameAnimalTwice,
+  CannotCaptureOwnSnipeWithoutAlsoCapturingOpponents,
+
+  NothingToUndo,
+}
 
 export interface StateSaver<T> {
   getState(): Option<T>;
@@ -329,6 +355,32 @@ export enum TripletShift {
   Earth = 6,
   Air = 9,
   None = 12,
+}
+
+export type MctsWorkerMessage =
+  | LogNotification
+  | UpdateMctsAnalysisNotification
+  | UpdateMctsAnalyzerGameStateRequest;
+
+export enum WorkerMessageType {
+  LogNotification,
+  UpdateMctsAnalysisNotification,
+  UpdateMctsAnalyzerGameStateRequest,
+}
+
+export interface LogNotification {
+  messageType: WorkerMessageType.LogNotification;
+  data: unknown;
+}
+
+export interface UpdateMctsAnalysisNotification {
+  messageType: WorkerMessageType.UpdateMctsAnalysisNotification;
+  optAnalysis: MctsAnalysis | null;
+}
+
+export interface UpdateMctsAnalyzerGameStateRequest {
+  messageType: WorkerMessageType.UpdateMctsAnalyzerGameStateRequest;
+  gameState: GameState;
 }
 
 // export interface GameStateStruct {

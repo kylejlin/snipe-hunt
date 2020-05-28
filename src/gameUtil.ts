@@ -1,14 +1,19 @@
+import { Filter, PlyTag } from "./bitwiseUtils";
 import { cardProperties } from "./cardMaps";
+import { gameStateFactory } from "./gameStateFactory";
+import randInt from "./randInt";
 import {
+  AnimalType,
   Card,
   CardLocation,
   CardType,
   GameState,
   Player,
-  SnipeType,
+  Ply,
+  PlyType,
   Row,
+  SnipeType,
 } from "./types";
-import { gameStateFactory } from "./gameStateFactory";
 
 export function getRandomGameState(): GameState {
   const { alpha, beta } = getShuffledDecks();
@@ -105,11 +110,11 @@ function getShuffledDecks(): { alpha: Card[]; beta: Card[] } {
   shuffle(majors);
 
   const alpha: Card[] = minors
-    .slice(0, 16)
+    .slice(0, 12)
     .concat(majors.slice(0, 4))
     .map((cardType) => ({ cardType, allegiance: Player.Alpha }));
   const beta: Card[] = minors
-    .slice(16)
+    .slice(12)
     .concat(majors.slice(4))
     .map((cardType) => ({ cardType, allegiance: Player.Beta }));
 
@@ -133,12 +138,9 @@ function shuffle(arr: unknown[]): void {
   }
 }
 
-function randInt(inclMin: number, exclMax: number): number {
-  const diff = exclMax - inclMin;
-  return inclMin + Math.floor(diff * Math.random());
-}
-
-export function isReserve(location: CardLocation): boolean {
+export function isReserve(
+  location: CardLocation
+): location is CardLocation.AlphaReserve | CardLocation.BetaReserve {
   return (
     location === CardLocation.AlphaReserve ||
     location === CardLocation.BetaReserve
@@ -182,4 +184,37 @@ export function isRow(location: CardLocation): location is Row {
     location === CardLocation.AlphaReserve ||
     location === CardLocation.BetaReserve
   );
+}
+
+export function decodePly(ply: number): Ply {
+  const tag = (ply & Filter.LeastThreeBits) as PlyTag;
+  switch (tag) {
+    case PlyTag.SnipeStep: {
+      const destination = ((ply >>> 3) & Filter.LeastThreeBits) as Row;
+      return { plyType: PlyType.SnipeStep, destination };
+    }
+
+    case PlyTag.Drop: {
+      const cardType = ((ply >>> 3) & Filter.LeastFiveBits) as AnimalType;
+      const destination = ((ply >>> 8) & Filter.LeastThreeBits) as Row;
+      return {
+        plyType: PlyType.Drop,
+        dropped: cardType,
+        destination,
+      };
+    }
+
+    case PlyTag.TwoAnimalSteps: {
+      const firstCardType = ((ply >>> 3) & Filter.LeastFiveBits) as AnimalType;
+      const firstDestination = ((ply >>> 8) & Filter.LeastThreeBits) as Row;
+      const secondCardType = ((ply >>> 11) &
+        Filter.LeastFiveBits) as AnimalType;
+      const secondDestination = ((ply >>> 16) & Filter.LeastThreeBits) as Row;
+      return {
+        plyType: PlyType.TwoAnimalSteps,
+        first: { moved: firstCardType, destination: firstDestination },
+        second: { moved: secondCardType, destination: secondDestination },
+      };
+    }
+  }
 }

@@ -1,9 +1,9 @@
 import React from "react";
 import { Option } from "rusty-ts";
-import { CardType, Element, GameAnalyzer, Card } from "../types";
-import CardComponent from "./CardComponent";
-import "./styles/ElementMatrix.css";
 import { cardProperties } from "../cardMaps";
+import { Card, CardType, Element, GameAnalyzer } from "../types";
+import CardView from "./CardView";
+import "./styles/ElementMatrix.css";
 
 interface Props {
   analyzer: GameAnalyzer;
@@ -69,7 +69,8 @@ export default function ElementMatrix({
     const isSelected = selectedCard.unwrapOr(null) === card.cardType;
 
     return (
-      <CardComponent
+      <CardView
+        key={card.cardType}
         card={card}
         isSelected={isSelected}
         onCardClicked={onCardClicked}

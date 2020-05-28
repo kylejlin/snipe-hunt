@@ -1,5 +1,13 @@
 import { cardProperties } from "./cardMaps";
-import { Card, CardLocation, CardType, GameState, Player } from "./types";
+import {
+  Card,
+  CardLocation,
+  CardType,
+  GameState,
+  Player,
+  SnipeType,
+  Row,
+} from "./types";
 import { gameStateFactory } from "./gameStateFactory";
 
 export function getRandomGameState(): GameState {
@@ -139,4 +147,39 @@ export function isReserve(location: CardLocation): boolean {
 
 export function canRetreat(cardType: CardType): boolean {
   return cardProperties[cardType].canRetreat;
+}
+
+export function opponentOf(player: Player): Player {
+  switch (player) {
+    case Player.Alpha:
+      return Player.Beta;
+    case Player.Beta:
+      return Player.Alpha;
+  }
+}
+
+export function snipeOf(player: Player): SnipeType {
+  switch (player) {
+    case Player.Alpha:
+      return CardType.AlphaSnipe;
+    case Player.Beta:
+      return CardType.BetaSnipe;
+  }
+}
+
+export function oneRowForward(row: Row, player: Player): CardLocation {
+  const diff = player === Player.Alpha ? 1 : -1;
+  return row + diff;
+}
+
+export function oneRowBackward(row: Row, player: Player): CardLocation {
+  const diff = player === Player.Alpha ? -1 : 1;
+  return row + diff;
+}
+
+export function isRow(location: CardLocation): location is Row {
+  return !(
+    location === CardLocation.AlphaReserve ||
+    location === CardLocation.BetaReserve
+  );
 }

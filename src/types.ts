@@ -59,7 +59,7 @@ export enum CardLocation {
   BetaReserve = 7,
 }
 
-export const allCardLocations = [
+export const allCardLocations: CardLocation[] = [
   CardLocation.AlphaReserve,
   CardLocation.Row1,
   CardLocation.Row2,
@@ -68,6 +68,15 @@ export const allCardLocations = [
   CardLocation.Row5,
   CardLocation.Row6,
   CardLocation.BetaReserve,
+];
+
+export const allRows: Row[] = [
+  CardLocation.Row1,
+  CardLocation.Row2,
+  CardLocation.Row3,
+  CardLocation.Row4,
+  CardLocation.Row5,
+  CardLocation.Row6,
 ];
 
 export interface Board {
@@ -127,28 +136,72 @@ export enum CardType {
   BetaSnipe = 33,
 }
 
+export const allAnimalTypes: AnimalType[] = [
+  CardType.Mouse1,
+  CardType.Ox1,
+  CardType.Tiger1,
+  CardType.Rabbit1,
+  CardType.Dragon1,
+  CardType.Snake1,
+  CardType.Horse1,
+  CardType.Ram1,
+  CardType.Monkey1,
+  CardType.Rooster1,
+  CardType.Dog1,
+  CardType.Boar1,
+
+  CardType.Fish1,
+  CardType.Elephant1,
+  CardType.Squid1,
+  CardType.Frog1,
+
+  CardType.Mouse2,
+  CardType.Ox2,
+  CardType.Tiger2,
+  CardType.Rabbit2,
+  CardType.Dragon2,
+  CardType.Snake2,
+  CardType.Horse2,
+  CardType.Ram2,
+  CardType.Monkey2,
+  CardType.Rooster2,
+  CardType.Dog2,
+  CardType.Boar2,
+
+  CardType.Fish2,
+  CardType.Elephant2,
+  CardType.Squid2,
+  CardType.Frog2,
+];
+
+export type AnimalType = Exclude<CardType, SnipeType>;
+
+export type SnipeType = CardType.AlphaSnipe | CardType.BetaSnipe;
+
 export enum Player {
   Alpha = 0,
   Beta = 1,
 }
 
-// export type AnimalType =
-//   | CardType.Mouse
-//   | CardType.Ox
-//   | CardType.Tiger
-//   | CardType.Rabbit
-//   | CardType.Dragon
-//   | CardType.Snake
-//   | CardType.Horse
-//   | CardType.Ram
-//   | CardType.Monkey
-//   | CardType.Rooster
-//   | CardType.Dog
-//   | CardType.Boar
-//   | CardType.Fish
-//   | CardType.Elephant
-//   | CardType.Squid
-//   | CardType.Frog;
+export interface LegalRetreaterDrops {
+  [Player.Alpha]: Row[];
+  [Player.Beta]: Row[];
+}
+
+export const legalRetreaterDrops: LegalRetreaterDrops = {
+  [Player.Alpha]: [
+    CardLocation.Row1,
+    CardLocation.Row2,
+    CardLocation.Row3,
+    CardLocation.Row4,
+  ],
+  [Player.Beta]: [
+    CardLocation.Row3,
+    CardLocation.Row4,
+    CardLocation.Row5,
+    CardLocation.Row6,
+  ],
+};
 
 export type Ply = SnipeStep | Drop | TwoAnimalSteps;
 
@@ -165,7 +218,7 @@ export interface SnipeStep {
 
 export interface Drop {
   plyType: PlyType.Drop;
-  dropped: CardType;
+  dropped: AnimalType;
   destination: Row;
 }
 
@@ -176,7 +229,7 @@ export interface TwoAnimalSteps {
 }
 
 export interface AnimalStep {
-  moved: CardType;
+  moved: AnimalType;
   destination: Row;
 }
 
@@ -240,6 +293,8 @@ export interface CardMap<T> {
 
 export interface CardProperties {
   elements: Option<{ double: Element; single: Element }>;
+  elementCounts: number;
+  tripletShifts: [TripletShift, TripletShift];
   canRetreat: boolean;
 }
 
@@ -248,6 +303,32 @@ export enum Element {
   Water,
   Earth,
   Air,
+}
+
+export enum ElementCount {
+  F1 = 1 << 0,
+  F2 = 1 << 1,
+  F3 = 1 << 2,
+
+  W1 = 1 << 3,
+  W2 = 1 << 4,
+  W3 = 1 << 5,
+
+  E1 = 1 << 6,
+  E2 = 1 << 7,
+  E3 = 1 << 8,
+
+  A1 = 1 << 9,
+  A2 = 1 << 10,
+  A3 = 1 << 11,
+}
+
+export enum TripletShift {
+  Fire = 0,
+  Water = 3,
+  Earth = 6,
+  Air = 9,
+  None = 12,
 }
 
 // export interface GameStateStruct {

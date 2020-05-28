@@ -138,7 +138,9 @@ function randInt(inclMin: number, exclMax: number): number {
   return inclMin + Math.floor(diff * Math.random());
 }
 
-export function isReserve(location: CardLocation): boolean {
+export function isReserve(
+  location: CardLocation
+): location is CardLocation.AlphaReserve | CardLocation.BetaReserve {
   return (
     location === CardLocation.AlphaReserve ||
     location === CardLocation.BetaReserve

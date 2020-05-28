@@ -241,7 +241,17 @@ export type Row =
   | CardLocation.Row5
   | CardLocation.Row6;
 
-export enum IllegalGameStateUpdate {}
+export enum IllegalGameStateUpdate {
+  SnipeAlreadyCaptured,
+  StepDestinationOutOfRange,
+  CannotEmptyRowWithoutImmediatelyWinning,
+  DroppedAnimalNotInReserve,
+  CannotEmptyReserve,
+  CannotDropRetreaterOnEnemysBackTwoRows,
+  MovedCardInReserve,
+  NotYourAnimal,
+  CannotCaptureOwnSnipeWithoutAlsoCapturingOpponents,
+}
 
 export interface StateSaver<T> {
   getState(): Option<T>;

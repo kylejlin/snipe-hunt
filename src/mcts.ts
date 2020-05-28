@@ -33,20 +33,19 @@ export function getMctsUtils(
   return { performCycle };
 
   function performCycle(): void {
-    let parentRollouts = 0;
-    let leaf = root;
-    while (!isLeaf(leaf)) {
-      const bestChild = select(leaf.children, parentRollouts);
-      parentRollouts = leaf.rollouts;
-      leaf = bestChild;
+    let node = root;
+    while (!isLeaf(node)) {
+      const bestChild = selectBestChildAccordingToActivePlayer(node);
+      node = bestChild;
     }
+    const leaf = node;
 
     if (leaf.rollouts === 0) {
-      rolloutOrMarkAsTerminalThenBackPropagate(leaf);
+      rolloutOrMarkAsTerminalThenBackPropagate(node);
     } else {
-      const children = getChildren(leaf);
+      const children = getChildren(node);
       rolloutOrMarkAsTerminalThenBackPropagate(children[0]);
-      leaf.children = children;
+      node.children = children;
     }
   }
 
@@ -54,13 +53,16 @@ export function getMctsUtils(
     return node.children.length === 0;
   }
 
-  function select(nodes: Node[], parentRollouts: number): Node {
-    let maxScore = getScore(nodes[0], parentRollouts);
-    let bestNode = nodes[0];
+  function selectBestChildAccordingToActivePlayer(node: Node): Node {
+    const invertMeanValue = node.state.turn !== perspective;
+    const { children } = node;
 
-    for (let i = 1; i < nodes.length; i++) {
-      const node = nodes[i];
-      const score = getScore(node, parentRollouts);
+    let maxScore = getScore(children[0], node.rollouts, invertMeanValue);
+    let bestNode = children[0];
+
+    for (let i = 1; i < children.length; i++) {
+      const node = children[i];
+      const score = getScore(node, node.rollouts, invertMeanValue);
       if (score > maxScore) {
         maxScore = score;
         bestNode = node;
@@ -74,14 +76,19 @@ export function getMctsUtils(
    * Upper confidence bound (UCB1) as described in
    * https://www.youtube.com/watch?v=UXW2yZndl7U
    */
-  function getScore(node: Node, parentRollouts: number) {
+  function getScore(
+    node: Node,
+    parentRollouts: number,
+    invertMeanValue: boolean
+  ) {
     if (node.rollouts === 0 || parentRollouts === 0) {
       return Infinity;
     }
 
-    const v = node.value / node.rollouts;
+    const rawMeanValue = node.value / node.rollouts;
+    const meanValue = invertMeanValue ? 1 - rawMeanValue : rawMeanValue;
     return (
-      v +
+      meanValue +
       EXPLORATION_CONSTANT * Math.sqrt(Math.log(parentRollouts) / node.rollouts)
     );
   }
@@ -94,13 +101,13 @@ export function getMctsUtils(
       some: (winner) => {
         if (winner === perspective) {
           return {
-            valueIncrease: BIG_NUMBER - node.value,
-            rolloutIncrease: BIG_NUMBER - node.value,
+            valueIncrease: BIG_NUMBER,
+            rolloutIncrease: BIG_NUMBER,
           };
         } else {
           return {
-            valueIncrease: -BIG_NUMBER - node.value,
-            rolloutIncrease: -BIG_NUMBER - node.value,
+            valueIncrease: 0,
+            rolloutIncrease: BIG_NUMBER,
           };
         }
       },

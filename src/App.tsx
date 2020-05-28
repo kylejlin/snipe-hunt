@@ -22,6 +22,7 @@ import {
   Row,
   SnipeStep,
   GameState,
+  AnimalType,
 } from "./types";
 import { getAnalyzer } from "./analyzer";
 
@@ -438,19 +439,31 @@ export default class App extends React.Component<{}, AppState> {
 
   onRowNumberClicked(row: Row): void {
     const analyzer = getAnalyzer(this.state.gameState);
+
+    if (analyzer.isGameOver()) {
+      return;
+    }
+
     const { selectedCardType: selectedCard } = this.state.ux;
 
     selectedCard.ifSome((selected) => {
       const location = analyzer.getCardLocation(selected);
       if (gameUtil.isReserve(location)) {
-        this.tryDrop(selected, row);
+        this.tryDrop(selected as AnimalType, row);
       } else {
-        this.tryAnimalStep(selected, row);
+        if (
+          selected === CardType.AlphaSnipe ||
+          selected === CardType.BetaSnipe
+        ) {
+          this.trySnipeStep(row);
+        } else {
+          this.tryAnimalStep(selected, row);
+        }
       }
     });
   }
 
-  tryDrop(selected: CardType, destination: Row): void {
+  tryDrop(selected: AnimalType, destination: Row): void {
     const analyzer = getAnalyzer(this.state.gameState);
     const drop: Drop = {
       plyType: PlyType.Drop,
@@ -458,7 +471,7 @@ export default class App extends React.Component<{}, AppState> {
       destination,
     };
 
-    const dropResult = analyzer.tryDrop(drop);
+    const dropResult = analyzer.tryPerform(drop);
     this.updateGameStateOrAlertError(dropResult);
   }
 
@@ -475,14 +488,25 @@ export default class App extends React.Component<{}, AppState> {
     });
   }
 
-  tryAnimalStep(selected: CardType, destination: Row): void {
+  trySnipeStep(destination: Row): void {
+    const analyzer = getAnalyzer(this.state.gameState);
+    const step: SnipeStep = {
+      plyType: PlyType.SnipeStep,
+      destination,
+    };
+
+    const stepResult = analyzer.tryPerform(step);
+    this.updateGameStateOrAlertError(stepResult);
+  }
+
+  tryAnimalStep(selected: AnimalType, destination: Row): void {
     const analyzer = getAnalyzer(this.state.gameState);
     const step: AnimalStep = {
       moved: selected,
       destination,
     };
 
-    const stepResult = analyzer.tryAnimalStep(step);
+    const stepResult = analyzer.tryPerform(step);
     this.updateGameStateOrAlertError(stepResult);
   }
 

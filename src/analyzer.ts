@@ -44,8 +44,6 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
     getWinner,
     getTurn,
     getCardLocation,
-    tryDrop,
-    tryAnimalStep,
     tryUndoSubPly,
     tryPerform,
     serialize,

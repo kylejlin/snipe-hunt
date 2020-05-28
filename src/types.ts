@@ -35,8 +35,6 @@ export interface GameAnalyzer {
   getWinner(): Option<Player>;
   getTurn(): Player;
   getCardLocation(cardType: CardType): CardLocation;
-  tryDrop(drop: Drop): Result<GameState, IllegalGameStateUpdate>;
-  tryAnimalStep(step: AnimalStep): Result<GameState, IllegalGameStateUpdate>;
   tryUndoSubPly(): Result<
     { newState: GameState; undone: SnipeStep | Drop | AnimalStep },
     IllegalGameStateUpdate

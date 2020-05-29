@@ -105,11 +105,11 @@ function getShuffledDecks(): { alpha: Card[]; beta: Card[] } {
   shuffle(majors);
 
   const alpha: Card[] = minors
-    .slice(0, 16)
+    .slice(0, 12)
     .concat(majors.slice(0, 4))
     .map((cardType) => ({ cardType, allegiance: Player.Alpha }));
   const beta: Card[] = minors
-    .slice(16)
+    .slice(12)
     .concat(majors.slice(4))
     .map((cardType) => ({ cardType, allegiance: Player.Beta }));
 

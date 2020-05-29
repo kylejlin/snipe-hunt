@@ -1,30 +1,29 @@
 import React from "react";
 import { option, Result } from "rusty-ts";
+import { getAnalyzer } from "./analyzer";
 import "./App.css";
 import { cardEmojis } from "./cardMaps";
+import AnimalStepComponent from "./components/AnimalStepComponent";
 import CardComponent from "./components/CardComponent";
 import ElementMatrix from "./components/ElementMatrix";
 import PlyComponent from "./components/PlyComponent";
-import AnimalStepComponent from "./components/AnimalStepComponent";
 import * as gameUtil from "./gameUtil";
 import stateSaver from "./stateSaver";
 import {
-  Card,
   AnimalStep,
+  AnimalType,
   AppState,
-  CardType,
+  Card,
   CardLocation,
+  CardType,
   Drop,
-  GameAnalyzer,
+  GameState,
   IllegalGameStateUpdate,
   Player,
   PlyType,
   Row,
   SnipeStep,
-  GameState,
-  AnimalType,
 } from "./types";
-import { getAnalyzer } from "./analyzer";
 
 export default class App extends React.Component<{}, AppState> {
   constructor(props: {}) {
@@ -52,14 +51,12 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   renderMatrixView(): React.ReactElement {
-    const { gameState, ux } = this.state;
-
     const analyzer = getAnalyzer(this.state.gameState);
     const initialBoard = getAnalyzer(analyzer.getInitialState()).getBoard();
     const currentBoard = analyzer.getBoard();
     const plies = analyzer.getPlies();
 
-    const { selectedCardType: selectedCard, futureSubPlyStack } = ux;
+    const { selectedCardType: selectedCard, futureSubPlyStack } = this.state.ux;
 
     return (
       <div className="SnipeHunt">

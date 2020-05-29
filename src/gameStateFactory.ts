@@ -1,6 +1,13 @@
-import { Option } from "rusty-ts";
+import { Option, option } from "rusty-ts";
 import { Offset } from "./bitwiseUtils";
-import { allCardLocations, Board, CardType, GameState, Player } from "./types";
+import {
+  allCardLocations,
+  Board,
+  CardType,
+  GameState,
+  Player,
+  STATE_VERSION,
+} from "./types";
 
 export interface GameStateFactory {
   fromString(s: string): Option<GameState>;
@@ -9,7 +16,21 @@ export interface GameStateFactory {
 
 export const gameStateFactory: GameStateFactory = { fromString, fromBoard };
 
-function fromString(s: string): Option<GameState> {}
+function fromString(s: string): Option<GameState> {
+  const parsed = JSON.parse(s, (key, value) => {
+    if (key === "initialBoard" || key === "currentBoard") {
+      return new Int32Array(value);
+    } else {
+      return value;
+    }
+  });
+
+  if (parsed.version !== STATE_VERSION) {
+    return option.none();
+  }
+
+  return option.some(parsed);
+}
 
 function fromBoard(board: Board): GameState {
   const initialBoard = new Int32Array(24);
@@ -36,6 +57,7 @@ function fromBoard(board: Board): GameState {
   }
 
   const data: GameState = {
+    stateVersion: STATE_VERSION,
     initialBoard,
     currentBoard: initialBoard,
     turn: Player.Beta,

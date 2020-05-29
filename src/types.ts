@@ -5,7 +5,7 @@ import { Option, Result } from "rusty-ts";
  * to state interfaces to ensure seralized state
  * compatibility detection will continue to work.
  */
-export const STATE_VERSION = 10;
+export const STATE_VERSION = 11;
 
 export interface AppState {
   gameState: GameState;
@@ -19,6 +19,7 @@ export interface AppState {
 }
 
 export interface GameState {
+  stateVersion: typeof STATE_VERSION;
   initialBoard: Int32Array;
   currentBoard: Int32Array;
   turn: Player;

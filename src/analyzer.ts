@@ -1,7 +1,21 @@
-import { Option, Result, option, result } from "rusty-ts";
+import { Option, option, Result, result } from "rusty-ts";
 import { Filter, Offset, PlyTag } from "./bitwiseUtils";
+import { cardProperties } from "./cardMaps";
 import {
+  canRetreat,
+  isReserve,
+  isRow,
+  oneRowBackward,
+  oneRowForward,
+  opponentOf,
+  snipeOf,
+} from "./gameUtil";
+import {
+  allAnimalTypes,
+  allCardLocations,
+  allRows,
   AnimalStep,
+  AnimalType,
   Atomic,
   Board,
   CardLocation,
@@ -10,28 +24,14 @@ import {
   GameAnalyzer,
   GameState,
   IllegalGameStateUpdate,
+  legalRetreaterDrops,
   Player,
   Ply,
-  SnipeStep,
-  allCardLocations,
-  allAnimalTypes,
-  Row,
   PlyType,
+  Row,
+  SnipeStep,
   SnipeType,
-  AnimalType,
-  allRows,
-  legalRetreaterDrops,
 } from "./types";
-import {
-  opponentOf,
-  snipeOf,
-  oneRowForward,
-  isRow,
-  oneRowBackward,
-  canRetreat,
-  isReserve,
-} from "./gameUtil";
-import { cardProperties } from "./cardMaps";
 
 export function getAnalyzer(initState: GameState): GameAnalyzer {
   let state = initState;
@@ -56,6 +56,7 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
 
   function getInitialState(): GameState {
     return {
+      stateVersion: state.stateVersion,
       initialBoard: state.initialBoard,
       currentBoard: state.initialBoard,
       turn: Player.Beta,
@@ -647,6 +648,7 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
 
   function cloneState(src: GameState): GameState {
     return {
+      stateVersion: src.stateVersion,
       initialBoard: new Int32Array(src.initialBoard),
       currentBoard: new Int32Array(src.currentBoard),
       turn: src.turn,

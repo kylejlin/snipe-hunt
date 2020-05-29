@@ -437,6 +437,11 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   onCardClicked(clicked: Card): void {
+    const analyzer = getAnalyzer(this.state.gameState);
+    if (clicked.allegiance !== analyzer.getTurn()) {
+      return;
+    }
+
     const { selectedCardType } = this.state.ux;
     const isClickedCardAlreadySelected = selectedCardType.someSatisfies(
       (selectedType) => selectedType === clicked.cardType

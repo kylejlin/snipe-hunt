@@ -356,7 +356,9 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
     for (const cardType of allAnimalTypes) {
       if ((1 << cardType) & oldAnimals) {
         console.log(
+          "cardType",
           CardType[cardType],
+          "cardElementCounts",
           cardProperties[cardType].elementCounts.toString(2)
         );
         rowElementCounts |= cardProperties[cardType].elementCounts;
@@ -364,7 +366,7 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
     }
 
     const [shift1, shift2] = cardProperties[newAnimal].tripletShifts;
-    console.log(rowElementCounts.toString(2));
+    console.log("rowElementCounts", rowElementCounts.toString(2));
     return (
       ((rowElementCounts >>> shift1) & 0b111) === 0b111 ||
       ((rowElementCounts >>> shift2) & 0b111) === 0b111
@@ -446,9 +448,11 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
     let undone: SnipeStep | Drop | AnimalStep;
 
     if (ply.plyType === PlyType.TwoAnimalSteps) {
+      console.log("ply", ply);
       const encodedFirstStep =
         (ply.first.destination << 8) | (ply.first.moved << 3) | 0b001;
       outOfSyncState.pendingAnimalStep = encodedFirstStep;
+      console.log("encoded subply", encodedFirstStep.toString(2));
 
       undone = ply.second;
     } else {
@@ -474,6 +478,7 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
 
     mutState.plies = [];
     mutState.pendingAnimalStep = 0;
+    mutState.turn = Player.Beta;
 
     plies.forEach((ply) => {
       if (ply.plyType === PlyType.TwoAnimalSteps) {
@@ -491,7 +496,7 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
       analyzer.setState(mutState);
       const step: AnimalStep = {
         moved: (encodedPendingAnimalStep >>> 3) & Filter.LeastFiveBits,
-        destination: (encodedPendingAnimalStep >>> 5) & Filter.LeastThreeBits,
+        destination: (encodedPendingAnimalStep >>> 8) & Filter.LeastThreeBits,
       };
       mutState = analyzer.forcePerform(step);
     }

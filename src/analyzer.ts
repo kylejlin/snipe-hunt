@@ -120,7 +120,7 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
       }
 
       case PlyTag.Drop: {
-        const cardType = ((ply >>> 3) & Filter.LeastThreeBits) as AnimalType;
+        const cardType = ((ply >>> 3) & Filter.LeastFiveBits) as AnimalType;
         const destination = ((ply >>> 8) & Filter.LeastThreeBits) as Row;
         return {
           plyType: PlyType.Drop,

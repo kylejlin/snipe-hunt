@@ -25,7 +25,7 @@ function fromString(s: string): Option<GameState> {
     }
   });
 
-  if (parsed.version !== STATE_VERSION) {
+  if (parsed.stateVersion !== STATE_VERSION) {
     return option.none();
   }
 

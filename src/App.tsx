@@ -261,6 +261,16 @@ export default class App extends React.Component<{}, AppState> {
                 />
               ),
             })}
+
+            {analyzer.getWinner().match({
+              none: () => null,
+              some: (winner) => {
+                const winnerEmoji = cardEmojis[gameUtil.snipeOf(winner)];
+                const loserEmoji =
+                  cardEmojis[gameUtil.snipeOf(gameUtil.opponentOf(winner))];
+                return winnerEmoji + ">" + loserEmoji;
+              },
+            })}
           </ol>
           <h4>Future sub plies</h4>
           <ol className="Plies">

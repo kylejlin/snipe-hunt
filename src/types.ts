@@ -245,6 +245,7 @@ export type Row =
 
 export enum IllegalGameStateUpdate {
   SnipeAlreadyCaptured,
+  AlreadyMovedAnimal,
   StepDestinationOutOfRange,
   CannotEmptyRowWithoutImmediatelyWinning,
   DroppedAnimalNotInReserve,
@@ -252,6 +253,7 @@ export enum IllegalGameStateUpdate {
   CannotDropRetreaterOnEnemysBackTwoRows,
   MovedCardInReserve,
   NotYourAnimal,
+  CannotMoveSameAnimalTwice,
   CannotCaptureOwnSnipeWithoutAlsoCapturingOpponents,
 
   NothingToUndo,

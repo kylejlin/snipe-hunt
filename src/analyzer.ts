@@ -473,6 +473,10 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
     if ("plyType" in atomic) {
       switch (atomic.plyType) {
         case PlyType.SnipeStep: {
+          if (state.pendingAnimalStep) {
+            return option.some(IllegalGameStateUpdate.AlreadyMovedAnimal);
+          }
+
           const moved = snipeOf(state.turn);
           if (!isInRange(moved, state.turn, atomic.destination)) {
             return option.some(
@@ -484,9 +488,10 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
           const animals =
             state.currentBoard[location * 3 + Offset.AlphaAnimals] |
             state.currentBoard[location * 3 + Offset.BetaAnimals];
+          const snipes = state.currentBoard[location * 3 + Offset.Snipes];
           const enemySnipeFilter =
             state.turn === Player.Alpha ? 1 << Player.Beta : 1 << Player.Alpha;
-          if (animals | enemySnipeFilter) {
+          if (!(animals | (snipes & enemySnipeFilter))) {
             return option.some(
               IllegalGameStateUpdate.CannotEmptyRowWithoutImmediatelyWinning
             );
@@ -496,6 +501,10 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
         }
 
         case PlyType.Drop: {
+          if (state.pendingAnimalStep) {
+            return option.some(IllegalGameStateUpdate.AlreadyMovedAnimal);
+          }
+
           const reserveAnimals =
             state.currentBoard[
               (state.turn === Player.Alpha
@@ -548,6 +557,13 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
 
       if (!isInRange(atomic.moved, state.turn, atomic.destination)) {
         return option.some(IllegalGameStateUpdate.StepDestinationOutOfRange);
+      }
+
+      if (
+        state.pendingAnimalStep &&
+        ((state.pendingAnimalStep >> 3) & Filter.LeastFiveBits) === atomic.moved
+      ) {
+        return option.some(IllegalGameStateUpdate.CannotMoveSameAnimalTwice);
       }
 
       const destAnimals =

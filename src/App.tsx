@@ -62,6 +62,7 @@ export default class App extends React.Component<{}, AppState> {
 
     return (
       <div className="SnipeHunt">
+        <div>Turn: {Player[analyzer.getTurn()]}</div>
         <div>
           <table className="Board">
             <tbody>
@@ -480,9 +481,11 @@ export default class App extends React.Component<{}, AppState> {
     res.match({
       ok: (newGameState) => {
         this.saveAndUpdateGameState(newGameState);
+        this.updateUxState({ selectedCardType: option.none() });
       },
       err: (errorCode) => {
         alert(IllegalGameStateUpdate[errorCode]);
+        this.updateUxState({ selectedCardType: option.none() });
       },
     });
   }

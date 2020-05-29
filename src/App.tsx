@@ -90,7 +90,14 @@ export default class App extends React.Component<{}, AppState> {
               <tr>
                 <td
                   className="BoardCell"
-                  onClick={() => this.onRowNumberClicked(1)}
+                  onClick={(e) => {
+                    if (
+                      e.target instanceof HTMLTableCellElement &&
+                      e.target.classList.contains("BoardCell")
+                    ) {
+                      this.onRowNumberClicked(1);
+                    }
+                  }}
                 >
                   1{this.renderSnipesIn(currentBoard[CardLocation.Row1])}
                 </td>
@@ -106,7 +113,14 @@ export default class App extends React.Component<{}, AppState> {
               <tr>
                 <td
                   className="BoardCell"
-                  onClick={() => this.onRowNumberClicked(2)}
+                  onClick={(e) => {
+                    if (
+                      e.target instanceof HTMLTableCellElement &&
+                      e.target.classList.contains("BoardCell")
+                    ) {
+                      this.onRowNumberClicked(2);
+                    }
+                  }}
                 >
                   2{this.renderSnipesIn(currentBoard[CardLocation.Row2])}
                 </td>
@@ -122,7 +136,14 @@ export default class App extends React.Component<{}, AppState> {
               <tr>
                 <td
                   className="BoardCell"
-                  onClick={() => this.onRowNumberClicked(3)}
+                  onClick={(e) => {
+                    if (
+                      e.target instanceof HTMLTableCellElement &&
+                      e.target.classList.contains("BoardCell")
+                    ) {
+                      this.onRowNumberClicked(3);
+                    }
+                  }}
                 >
                   3{this.renderSnipesIn(currentBoard[CardLocation.Row3])}
                 </td>
@@ -138,7 +159,14 @@ export default class App extends React.Component<{}, AppState> {
               <tr>
                 <td
                   className="BoardCell"
-                  onClick={() => this.onRowNumberClicked(4)}
+                  onClick={(e) => {
+                    if (
+                      e.target instanceof HTMLTableCellElement &&
+                      e.target.classList.contains("BoardCell")
+                    ) {
+                      this.onRowNumberClicked(4);
+                    }
+                  }}
                 >
                   4{this.renderSnipesIn(currentBoard[CardLocation.Row4])}
                 </td>
@@ -154,7 +182,14 @@ export default class App extends React.Component<{}, AppState> {
               <tr>
                 <td
                   className="BoardCell"
-                  onClick={() => this.onRowNumberClicked(5)}
+                  onClick={(e) => {
+                    if (
+                      e.target instanceof HTMLTableCellElement &&
+                      e.target.classList.contains("BoardCell")
+                    ) {
+                      this.onRowNumberClicked(5);
+                    }
+                  }}
                 >
                   5{this.renderSnipesIn(currentBoard[CardLocation.Row5])}
                 </td>
@@ -170,7 +205,14 @@ export default class App extends React.Component<{}, AppState> {
               <tr>
                 <td
                   className="BoardCell"
-                  onClick={() => this.onRowNumberClicked(6)}
+                  onClick={(e) => {
+                    if (
+                      e.target instanceof HTMLTableCellElement &&
+                      e.target.classList.contains("BoardCell")
+                    ) {
+                      this.onRowNumberClicked(6);
+                    }
+                  }}
                 >
                   6{this.renderSnipesIn(currentBoard[CardLocation.Row6])}
                 </td>

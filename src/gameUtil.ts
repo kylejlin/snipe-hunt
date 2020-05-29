@@ -7,8 +7,12 @@ import {
   Player,
   SnipeType,
   Row,
+  Ply,
+  PlyType,
+  AnimalType,
 } from "./types";
 import { gameStateFactory } from "./gameStateFactory";
+import { Filter, PlyTag } from "./bitwiseUtils";
 
 export function getRandomGameState(): GameState {
   const { alpha, beta } = getShuffledDecks();
@@ -184,4 +188,37 @@ export function isRow(location: CardLocation): location is Row {
     location === CardLocation.AlphaReserve ||
     location === CardLocation.BetaReserve
   );
+}
+
+export function decodePly(ply: number): Ply {
+  const tag = (ply & Filter.LeastThreeBits) as PlyTag;
+  switch (tag) {
+    case PlyTag.SnipeStep: {
+      const destination = ((ply >>> 3) & Filter.LeastThreeBits) as Row;
+      return { plyType: PlyType.SnipeStep, destination };
+    }
+
+    case PlyTag.Drop: {
+      const cardType = ((ply >>> 3) & Filter.LeastFiveBits) as AnimalType;
+      const destination = ((ply >>> 8) & Filter.LeastThreeBits) as Row;
+      return {
+        plyType: PlyType.Drop,
+        dropped: cardType,
+        destination,
+      };
+    }
+
+    case PlyTag.TwoAnimalSteps: {
+      const firstCardType = ((ply >>> 3) & Filter.LeastFiveBits) as AnimalType;
+      const firstDestination = ((ply >>> 8) & Filter.LeastThreeBits) as Row;
+      const secondCardType = ((ply >>> 11) &
+        Filter.LeastFiveBits) as AnimalType;
+      const secondDestination = ((ply >>> 16) & Filter.LeastThreeBits) as Row;
+      return {
+        plyType: PlyType.TwoAnimalSteps,
+        first: { moved: firstCardType, destination: firstDestination },
+        second: { moved: secondCardType, destination: secondDestination },
+      };
+    }
+  }
 }

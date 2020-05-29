@@ -3,9 +3,16 @@ import ReactDOM from "react-dom";
 import "./index.css";
 import App from "./App";
 import * as serviceWorker from "./serviceWorker";
+
 import * as analyzer from "./analyzer";
+import * as mcts from "./mcts";
+import * as gameUtil from "./gameUtil";
+import { CardType } from "./types";
 
 (window as any).analyzer = analyzer;
+(window as any).mcts = mcts;
+(window as any).gameUtil = gameUtil;
+(window as any).CardType = CardType;
 
 ReactDOM.render(
   <React.StrictMode>

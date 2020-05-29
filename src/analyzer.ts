@@ -3,6 +3,7 @@ import { Filter, Offset, PlyTag } from "./bitwiseUtils";
 import { cardProperties } from "./cardMaps";
 import {
   canRetreat,
+  decodePly,
   isReserve,
   isRow,
   oneRowBackward,
@@ -109,40 +110,6 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
 
   function getPlies(): Ply[] {
     return state.plies.map(decodePly);
-  }
-
-  function decodePly(ply: number): Ply {
-    const tag = (ply & Filter.LeastThreeBits) as PlyTag;
-    switch (tag) {
-      case PlyTag.SnipeStep: {
-        const destination = ((ply >>> 3) & Filter.LeastThreeBits) as Row;
-        return { plyType: PlyType.SnipeStep, destination };
-      }
-
-      case PlyTag.Drop: {
-        const cardType = ((ply >>> 3) & Filter.LeastFiveBits) as AnimalType;
-        const destination = ((ply >>> 8) & Filter.LeastThreeBits) as Row;
-        return {
-          plyType: PlyType.Drop,
-          dropped: cardType,
-          destination,
-        };
-      }
-
-      case PlyTag.TwoAnimalSteps: {
-        const firstCardType = ((ply >>> 3) &
-          Filter.LeastFiveBits) as AnimalType;
-        const firstDestination = ((ply >>> 8) & Filter.LeastThreeBits) as Row;
-        const secondCardType = ((ply >>> 11) &
-          Filter.LeastFiveBits) as AnimalType;
-        const secondDestination = ((ply >>> 16) & Filter.LeastThreeBits) as Row;
-        return {
-          plyType: PlyType.TwoAnimalSteps,
-          first: { moved: firstCardType, destination: firstDestination },
-          second: { moved: secondCardType, destination: secondDestination },
-        };
-      }
-    }
   }
 
   function getPendingAnimalStep(): Option<AnimalStep> {
@@ -289,14 +256,45 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
       for (const cardType of allAnimalTypes) {
         if ((1 << cardType) & friendlyAnimals) {
           if (doesRowHaveAtLeastTwoCards) {
+            const friendlySnipeFilter =
+              state.turn === Player.Alpha
+                ? 1 << Player.Alpha
+                : 1 << Player.Beta;
+
             const forward = oneRowForward(row, state.turn);
-            if (isRow(forward)) {
+            const forwardSnipes =
+              state.currentBoard[forward * 3 + Offset.Snipes];
+            if (
+              isRow(forward) &&
+              !(
+                forwardSnipes & friendlySnipeFilter &&
+                !(forwardSnipes & enemySnipeFilter) &&
+                doesStepActivateTriplet(
+                  state.currentBoard[forward * 3 + Offset.AlphaAnimals] |
+                    state.currentBoard[forward * 3 + Offset.BetaAnimals],
+                  cardType
+                )
+              )
+            ) {
               atomics.push({ moved: cardType, destination: forward });
             }
 
             if (canRetreat(cardType)) {
               const backward = oneRowBackward(row, state.turn);
-              if (isRow(backward)) {
+              const backwardSnipes =
+                state.currentBoard[backward * 3 + Offset.Snipes];
+              if (
+                isRow(backward) &&
+                !(
+                  backwardSnipes & friendlySnipeFilter &&
+                  !(backwardSnipes & enemySnipeFilter) &&
+                  doesStepActivateTriplet(
+                    state.currentBoard[backward * 3 + Offset.AlphaAnimals] |
+                      state.currentBoard[backward * 3 + Offset.BetaAnimals],
+                    cardType
+                  )
+                )
+              ) {
                 atomics.push({ moved: cardType, destination: backward });
               }
             }

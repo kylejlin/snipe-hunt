@@ -2,6 +2,7 @@ import { GameAnalyzer, GameState, StateSaver, Atomic } from "./types";
 
 export interface MctsUtils {
   performCycle(): void;
+  getRoot(): Node;
 }
 
 export interface Node {
@@ -35,7 +36,7 @@ export function getMctsUtils(
   analyzer.setState(state);
   const perspective = analyzer.getTurn();
 
-  return { performCycle };
+  return { performCycle, getRoot };
 
   function performCycle(): void {
     let node = root;
@@ -176,5 +177,9 @@ export function getMctsUtils(
       rollouts: 0,
       children: [],
     }));
+  }
+
+  function getRoot(): Node {
+    return root;
   }
 }

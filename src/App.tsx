@@ -27,6 +27,7 @@ import {
   STATE_VERSION,
   FutureSubPlyStack,
 } from "./types";
+import { getMctsUtils } from "./mcts";
 
 export default class App extends React.Component<{}, AppState> {
   constructor(props: {}) {
@@ -37,6 +38,20 @@ export default class App extends React.Component<{}, AppState> {
     this.bindMethods();
 
     (window as any).app = this;
+
+    this._mctsTest();
+  }
+
+  _mctsTest() {
+    const m = getMctsUtils(
+      this.state.gameState,
+      getAnalyzer(this.state.gameState)
+    );
+    const r = m.getRoot();
+    m.performCycle();
+    console.log("root", r);
+    (window as any).m = m;
+    (window as any).r = r;
   }
 
   bindMethods() {

@@ -5,7 +5,7 @@ import { cardEmojis } from "./cardMaps";
 import CardComponent from "./components/CardComponent";
 import ElementMatrix from "./components/ElementMatrix";
 import PlyComponent from "./components/PlyComponent";
-import SubPlyComponent from "./components/SubPlyComponent";
+import AnimalStepComponent from "./components/AnimalStepComponent";
 import * as gameUtil from "./gameUtil";
 import stateSaver from "./stateSaver";
 import {
@@ -246,10 +246,10 @@ export default class App extends React.Component<{}, AppState> {
 
             {analyzer.getPendingAnimalStep().match({
               none: () => null,
-              some: (pendingSubPly) =>
+              some: (step) =>
                 analyzer.isGameOver() ? null : (
-                  <SubPlyComponent
-                    subPly={pendingSubPly}
+                  <AnimalStepComponent
+                    step={step}
                     plyNumber={plies.length + 3}
                   />
                 ),

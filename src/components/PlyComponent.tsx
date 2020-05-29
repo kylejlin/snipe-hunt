@@ -14,32 +14,35 @@ export default function PlyComponent({
 }: Props): React.ReactElement {
   const plyMakerEmoji =
     plyNumber % 2 === 0
-      ? getEmoji(CardType.Snipe)
+      ? getEmoji(CardType.AlphaSnipe)
       : getEmoji(CardType.BetaSnipe);
   switch (ply.plyType) {
     case PlyType.SnipeStep:
       return (
         <li>
-          <div className="PlyNumber">{plyMakerEmoji + plyNumber}.</div> -
-          {getEmoji(ply.demoted)}; {getEmoji(ply.moved)}
+          <div className="PlyNumber">{plyMakerEmoji + plyNumber}.</div>{" "}
+          {plyMakerEmoji}
           {ply.destination}
-          {ply.captures.map(getEmoji)}
         </li>
       );
     case PlyType.Drop:
       return (
         <li>
-          <div className="PlyNumber">{plyMakerEmoji + plyNumber}.</div>{" "}
-          {getEmoji(ply.moved)}
+          <div className="PlyNumber">{plyMakerEmoji + plyNumber}.</div>
+          {" !"}
+          {getEmoji(ply.dropped)}
           {ply.destination}
-          {ply.captures.map(getEmoji)}; +{getEmoji(ply.promoted)}
         </li>
       );
     case PlyType.TwoAnimalSteps:
       return (
         <li>
-          <div className="PlyNumber">{plyMakerEmoji + plyNumber}.</div> !
-          {getEmoji(ply.dropped)}
+          <div className="PlyNumber">{plyMakerEmoji + plyNumber}.</div>{" "}
+          {getEmoji(ply.first.moved)}
+          {ply.first.destination}
+          {"; "}
+          {getEmoji(ply.second.moved)}
+          {ply.second.destination}
         </li>
       );
   }

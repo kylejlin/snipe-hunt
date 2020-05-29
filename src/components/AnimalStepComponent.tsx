@@ -1,16 +1,20 @@
 import React from "react";
+import { Option } from "rusty-ts";
 import { cardEmojis } from "../cardMaps";
-import { CardType, AnimalStep } from "../types";
+import * as gameUtil from "../gameUtil";
+import { AnimalStep, CardType, Player } from "../types";
 import "./styles/SubPlyComponent.css";
 
 interface Props {
   step: AnimalStep;
   plyNumber: number;
+  winner: Option<Player>;
 }
 
 export default function AnimalStepComponent({
   step,
   plyNumber,
+  winner: optWinner,
 }: Props): React.ReactElement {
   const plyMakerEmoji =
     plyNumber % 2 === 0
@@ -21,7 +25,16 @@ export default function AnimalStepComponent({
       <div className="PlyNumber">{plyMakerEmoji + plyNumber}.</div>{" "}
       {getEmoji(step.moved)}
       {step.destination}
-      {"; ..."}
+      {optWinner.match({
+        some: (winner) => {
+          const winnerEmoji = cardEmojis[gameUtil.snipeOf(winner)];
+          const loserEmoji =
+            cardEmojis[gameUtil.snipeOf(gameUtil.opponentOf(winner))];
+          return "; " + winnerEmoji + ">" + loserEmoji;
+        },
+
+        none: () => "; ...",
+      })}
     </li>
   );
 }

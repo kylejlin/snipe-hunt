@@ -246,13 +246,13 @@ export default class App extends React.Component<{}, AppState> {
 
             {analyzer.getPendingAnimalStep().match({
               none: () => null,
-              some: (step) =>
-                analyzer.isGameOver() ? null : (
-                  <AnimalStepComponent
-                    step={step}
-                    plyNumber={plies.length + 3}
-                  />
-                ),
+              some: (step) => (
+                <AnimalStepComponent
+                  step={step}
+                  plyNumber={plies.length + 3}
+                  winner={analyzer.getWinner()}
+                />
+              ),
             })}
           </ol>
           <h4>Future sub plies</h4>

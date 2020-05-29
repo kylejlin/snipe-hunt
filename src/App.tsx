@@ -9,7 +9,7 @@ import ElementMatrix from "./components/ElementMatrix";
 import FutureAnimalStepView from "./components/FutureAnimalStepView";
 import PlyView from "./components/PlyView";
 import * as gameUtil from "./gameUtil";
-import stateSaver from "./stateSaver";
+import { gameStateSaver, futureSubPlyStackSaver } from "./stateSavers";
 import {
   AnimalStep,
   AnimalType,
@@ -24,6 +24,8 @@ import {
   PlyType,
   Row,
   SnipeStep,
+  STATE_VERSION,
+  FutureSubPlyStack,
 } from "./types";
 
 export default class App extends React.Component<{}, AppState> {
@@ -45,7 +47,7 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   saveAndUpdateGameState(newGameState: GameState) {
-    stateSaver.setState(newGameState);
+    gameStateSaver.setState(newGameState);
     this.setState({ gameState: newGameState });
   }
 
@@ -263,17 +265,12 @@ export default class App extends React.Component<{}, AppState> {
           <h4>Future sub plies</h4>
           <ol className="Plies">
             {futureSubPlyStack.pendingAnimalStep.match({
-              some: (step) => {
-                const afterPerforming = getAnalyzer(
-                  analyzer.forcePerform(step)
-                );
-                return (
-                  <FutureAnimalStepView
-                    step={step}
-                    plyNumber={plies.length + 3}
-                  />
-                );
-              },
+              some: (step) => (
+                <FutureAnimalStepView
+                  step={step}
+                  plyNumber={plies.length + 3}
+                />
+              ),
               none: () => null,
             })}
             {futureSubPlyStack.plies
@@ -443,13 +440,15 @@ export default class App extends React.Component<{}, AppState> {
 
   updateUxState(newUxState: Partial<AppState["ux"]>): void {
     this.setState((prevState) => {
-      return {
+      const newState = {
         ...prevState,
         ux: {
           ...prevState.ux,
           ...newUxState,
         },
       };
+      futureSubPlyStackSaver.setState(newState.ux.futureSubPlyStack);
+      return newState;
     });
   }
 
@@ -560,6 +559,7 @@ export default class App extends React.Component<{}, AppState> {
           );
         }
         return {
+          stateVersion: stack.stateVersion,
           pendingAnimalStep: option.none(),
           plies: stack.plies.concat([
             { plyType: PlyType.TwoAnimalSteps, first: undone, second: pending },
@@ -570,12 +570,14 @@ export default class App extends React.Component<{}, AppState> {
       none: () => {
         if ("plyType" in undone) {
           return {
+            stateVersion: stack.stateVersion,
             pendingAnimalStep: option.none(),
             plies: stack.plies.concat([undone]),
           };
         }
 
         return {
+          stateVersion: stack.stateVersion,
           pendingAnimalStep: option.some(undone),
           plies: stack.plies,
         };
@@ -596,6 +598,7 @@ export default class App extends React.Component<{}, AppState> {
       some: (step) => {
         this.updateUxState({
           futureSubPlyStack: {
+            stateVersion: stack.stateVersion,
             pendingAnimalStep: option.none(),
             plies: this.state.ux.futureSubPlyStack.plies,
           },
@@ -611,6 +614,7 @@ export default class App extends React.Component<{}, AppState> {
         if (nextPly.plyType === PlyType.TwoAnimalSteps) {
           this.updateUxState({
             futureSubPlyStack: {
+              stateVersion: stack.stateVersion,
               pendingAnimalStep: option.some(nextPly.second),
               plies: newPlies,
             },
@@ -620,6 +624,7 @@ export default class App extends React.Component<{}, AppState> {
         } else {
           this.updateUxState({
             futureSubPlyStack: {
+              stateVersion: stack.stateVersion,
               pendingAnimalStep: option.none(),
               plies: newPlies,
             },
@@ -644,27 +649,42 @@ export default class App extends React.Component<{}, AppState> {
         gameState: gameUtil.getRandomGameState(),
         ux: {
           selectedCardType: option.none(),
-          futureSubPlyStack: { pendingAnimalStep: option.none(), plies: [] },
+          futureSubPlyStack: {
+            stateVersion: STATE_VERSION,
+            pendingAnimalStep: option.none(),
+            plies: [],
+          },
         },
       };
-      stateSaver.setState(state.gameState);
+      gameStateSaver.setState(state.gameState);
       this.setState(state);
     }
   }
 }
 
 function loadState(): AppState {
-  const gameState = stateSaver.getState().unwrapOrElse(() => {
+  const gameState = gameStateSaver.getState().unwrapOrElse(() => {
     const newGameState = gameUtil.getRandomGameState();
-    stateSaver.setState(newGameState);
+    gameStateSaver.setState(newGameState);
     return newGameState;
   });
+  const futureSubPlyStack = futureSubPlyStackSaver
+    .getState()
+    .unwrapOrElse(() => {
+      const newStack: FutureSubPlyStack = {
+        stateVersion: STATE_VERSION,
+        pendingAnimalStep: option.none(),
+        plies: [],
+      };
+      futureSubPlyStackSaver.setState(newStack);
+      return newStack;
+    });
 
   return {
     gameState: gameState,
     ux: {
       selectedCardType: option.none(),
-      futureSubPlyStack: { pendingAnimalStep: option.none(), plies: [] },
+      futureSubPlyStack,
     },
   };
 }

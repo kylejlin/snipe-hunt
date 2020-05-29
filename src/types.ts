@@ -11,10 +11,7 @@ export interface AppState {
   gameState: GameState;
   ux: {
     selectedCardType: Option<CardType>;
-    futureSubPlyStack: {
-      plies: Ply[];
-      pendingAnimalStep: Option<AnimalStep>;
-    };
+    futureSubPlyStack: FutureSubPlyStack;
   };
 }
 
@@ -25,6 +22,12 @@ export interface GameState {
   turn: Player;
   plies: number[];
   pendingAnimalStep: number;
+}
+
+export interface FutureSubPlyStack {
+  stateVersion: typeof STATE_VERSION;
+  plies: Ply[];
+  pendingAnimalStep: Option<AnimalStep>;
 }
 
 export interface GameAnalyzer {

@@ -62,7 +62,11 @@ export default class App extends React.Component<{}, AppState> {
 
     return (
       <div className="SnipeHunt">
-        <div>Turn: {Player[analyzer.getTurn()]}</div>
+        {analyzer.getWinner().match({
+          none: () => <div>Turn: {Player[analyzer.getTurn()]}</div>,
+          some: (winner) => <div>Winner: {Player[winner]}</div>,
+        })}
+
         <div>
           <table className="Board">
             <tbody>

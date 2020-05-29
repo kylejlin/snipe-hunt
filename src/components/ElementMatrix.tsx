@@ -70,6 +70,7 @@ export default function ElementMatrix({
 
     return (
       <CardComponent
+        key={card.cardType}
         card={card}
         isSelected={isSelected}
         onCardClicked={onCardClicked}

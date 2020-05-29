@@ -287,6 +287,7 @@ export default class App extends React.Component<{}, AppState> {
       const isSelected = selectedCardType.equalsSome(card.cardType);
       return (
         <CardComponent
+          key={card.cardType}
           card={card}
           isSelected={isSelected}
           onCardClicked={this.onCardClicked}

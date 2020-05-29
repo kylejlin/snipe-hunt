@@ -43,7 +43,8 @@ export interface GameAnalyzer {
   serialize(): string;
   toNodeKey(): string;
   setState(state: GameState): void;
-  getStatesAfterPerformingOneAtomic(): GameState[];
+  getLegalAtomics(): Atomic[];
+  forcePerform(atomic: Atomic): GameState;
 }
 
 export enum CardLocation {
@@ -251,6 +252,8 @@ export enum IllegalGameStateUpdate {
   MovedCardInReserve,
   NotYourAnimal,
   CannotCaptureOwnSnipeWithoutAlsoCapturingOpponents,
+
+  NothingToUndo,
 }
 
 export interface StateSaver<T> {

@@ -1,15 +1,20 @@
-import { GameAnalyzer, GameState } from "./types";
+import { GameAnalyzer, GameState, StateSaver, Atomic } from "./types";
 
 export interface MctsUtils {
   performCycle(): void;
 }
 
 export interface Node {
-  parent: Node | undefined;
+  edgeConnectingToParent: EdgeConnectingToParent | undefined;
   state: GameState;
   value: number;
   rollouts: number;
   children: Node[];
+}
+
+interface EdgeConnectingToParent {
+  parent: Node;
+  atomic: Atomic;
 }
 
 const EXPLORATION_CONSTANT = 2;
@@ -20,7 +25,7 @@ export function getMctsUtils(
   analyzer: GameAnalyzer
 ): MctsUtils {
   const root: Node = {
-    parent: undefined,
+    edgeConnectingToParent: undefined,
     state,
     value: 0,
     rollouts: 0,
@@ -124,11 +129,11 @@ export function getMctsUtils(
   function rollout(state: GameState): 0 | 1 {
     analyzer.setState(state);
 
-    let nextStates = analyzer.getStatesAfterPerformingOneAtomic();
-    while (nextStates.length > 0) {
-      const selected = nextStates[randInt(0, nextStates.length)];
-      analyzer.setState(selected);
-      nextStates = analyzer.getStatesAfterPerformingOneAtomic();
+    let atomics = analyzer.getLegalAtomics();
+    while (atomics.length > 0) {
+      const selected = atomics[randInt(0, atomics.length)];
+      analyzer.setState(analyzer.forcePerform(selected));
+      atomics = analyzer.getLegalAtomics();
     }
 
     const winner = analyzer
@@ -155,15 +160,18 @@ export function getMctsUtils(
     while (node !== undefined) {
       node.value += valueIncrease;
       node.rollouts += rolloutIncrease;
-      node = leaf.parent;
+      node = leaf.edgeConnectingToParent?.parent;
     }
   }
 
   function getChildren(node: Node): Node[] {
     analyzer.setState(node.state);
-    return analyzer.getStatesAfterPerformingOneAtomic().map((state) => ({
-      parent: node,
-      state,
+    return analyzer.getLegalAtomics().map((atomic) => ({
+      edgeConnectingToParent: {
+        parent: node,
+        atomic,
+      },
+      state: analyzer.forcePerform(atomic),
       value: 0,
       rollouts: 0,
       children: [],

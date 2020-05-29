@@ -50,7 +50,8 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
     serialize,
     toNodeKey,
     setState,
-    getStatesAfterPerformingOneAtomic,
+    getLegalAtomics,
+    forcePerform,
   };
 
   function getInitialState(): GameState {
@@ -414,7 +415,43 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
   function tryUndoSubPly(): Result<
     { newState: GameState; undone: SnipeStep | Drop | AnimalStep },
     IllegalGameStateUpdate
-  > {}
+  > {
+    if (state.plies.length === 0 && state.pendingAnimalStep === 0) {
+      return result.err(IllegalGameStateUpdate.NothingToUndo);
+    }
+
+    if (state.pendingAnimalStep !== 0) {
+      const newState = cloneState(state);
+      newState.pendingAnimalStep = 0;
+      recalculateOutOfSyncGameState(newState);
+
+      const undone: AnimalStep = {
+        moved: (state.pendingAnimalStep >> 3) & Filter.LeastFiveBits,
+        destination: (state.pendingAnimalStep >> 8) & Filter.LeastThreeBits,
+      };
+      return result.ok({ newState, undone });
+    }
+
+    const newState = cloneState(state);
+    const encodedPly = newState.plies.pop()!;
+    const ply = decodePly(encodedPly);
+    let undone: SnipeStep | Drop | AnimalStep;
+
+    if (ply.plyType === PlyType.TwoAnimalSteps) {
+      const encodedFirstStep =
+        (ply.first.destination << 8) | (ply.first.moved << 3) | 0b001;
+      newState.pendingAnimalStep = encodedFirstStep;
+
+      undone = ply.second;
+    } else {
+      undone = ply;
+    }
+
+    recalculateOutOfSyncGameState(newState);
+    return result.ok({ newState, undone });
+  }
+
+  function recalculateOutOfSyncGameState(mutState: GameState): void {}
 
   function tryPerform(
     atomic: Atomic
@@ -588,13 +625,126 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
     }
   }
 
-  function forcePerformSnipeStep(step: SnipeStep): GameState {}
+  function forcePerformSnipeStep(step: SnipeStep): GameState {
+    const friendlySnipeLocation = getCardLocation(snipeOf(state.turn)) as Row;
+    const friendlySnipeSet = 1 << state.turn;
+    const removeFriendlySnipeFilter = ~friendlySnipeSet;
 
-  function forcePerformDrop(drop: Drop): GameState {}
+    const newState = cloneState(state);
+    newState.currentBoard[
+      friendlySnipeLocation * 3 + Offset.Snipes
+    ] &= removeFriendlySnipeFilter;
+    newState.currentBoard[
+      step.destination * 3 + Offset.Snipes
+    ] |= friendlySnipeSet;
 
-  function forcePerformAnimalStep(step: AnimalStep): GameState {}
+    newState.plies.push((step.destination << 3) | PlyTag.SnipeStep);
 
-  function serialize(): string {}
+    newState.turn = opponentOf(newState.turn);
+
+    return newState;
+  }
+
+  function cloneState(src: GameState): GameState {
+    return {
+      initialBoard: new Int32Array(src.initialBoard),
+      currentBoard: new Int32Array(src.currentBoard),
+      turn: src.turn,
+      plies: src.plies.slice(),
+      pendingAnimalStep: src.pendingAnimalStep,
+    };
+  }
+
+  function forcePerformDrop(drop: Drop): GameState {
+    const reserve =
+      state.turn === Player.Alpha
+        ? CardLocation.AlphaReserve
+        : CardLocation.BetaReserve;
+    const friendlyOffset =
+      state.turn === Player.Alpha ? Offset.AlphaAnimals : Offset.BetaAnimals;
+    const droppedSet = 1 << drop.dropped;
+    const removeDroppedFilter = ~droppedSet;
+
+    const newState = cloneState(state);
+    newState.currentBoard[reserve * 3 + friendlyOffset] &= removeDroppedFilter;
+    newState.currentBoard[drop.destination * 3 + friendlyOffset] |= droppedSet;
+
+    newState.plies.push(
+      (drop.destination << 8) | (drop.dropped << 3) | PlyTag.Drop
+    );
+
+    newState.turn = opponentOf(newState.turn);
+
+    return newState;
+  }
+
+  function forcePerformAnimalStep(step: AnimalStep): GameState {
+    const start = getCardLocation(step.moved) as Row;
+    const friendlyOffset =
+      state.turn === Player.Alpha ? Offset.AlphaAnimals : Offset.BetaAnimals;
+
+    const destAnimalsBeforeStep =
+      state.currentBoard[step.destination * 3 + Offset.AlphaAnimals] |
+      state.currentBoard[step.destination * 3 + Offset.BetaAnimals];
+
+    const newState = cloneState(state);
+
+    const movedSet = 1 << step.moved;
+    const removeMovedFilter = ~movedSet;
+    newState.currentBoard[start * 3 + friendlyOffset] &= removeMovedFilter;
+
+    if (doesStepActivateTriplet(destAnimalsBeforeStep, step.moved)) {
+      const friendlyReserve =
+        state.turn === Player.Alpha
+          ? CardLocation.AlphaReserve
+          : CardLocation.BetaReserve;
+      const destSnipesBeforeStep =
+        state.currentBoard[step.destination * 3 + Offset.Snipes];
+      const enemyOffset =
+        state.turn === Player.Alpha ? Offset.BetaAnimals : Offset.AlphaAnimals;
+
+      newState.currentBoard[
+        friendlyReserve * 3 + friendlyOffset
+      ] |= destAnimalsBeforeStep;
+      newState.currentBoard[
+        friendlyReserve * 3 + Offset.Snipes
+      ] |= destSnipesBeforeStep;
+
+      newState.currentBoard[step.destination * 3 + friendlyOffset] = movedSet;
+      newState.currentBoard[step.destination * 3 + enemyOffset] = 0;
+      newState.currentBoard[step.destination * 3 + Offset.Snipes] = 0;
+    } else {
+      newState.currentBoard[step.destination * 3 + friendlyOffset] |= movedSet;
+    }
+
+    if (newState.pendingAnimalStep) {
+      const encodePlyWithIncorrectTag =
+        (step.destination << 16) |
+        (step.moved << 11) |
+        newState.pendingAnimalStep;
+      newState.plies.push(
+        (encodePlyWithIncorrectTag & ~Filter.LeastThreeBits) |
+          PlyTag.TwoAnimalSteps
+      );
+      newState.pendingAnimalStep = 0;
+      newState.turn = opponentOf(newState.turn);
+    } else {
+      newState.pendingAnimalStep =
+        (step.destination << 8) | (step.moved << 3) | 0b001;
+    }
+
+    return newState;
+  }
+
+  function serialize(): string {
+    return JSON.stringify(state, (_key, value) => {
+      if (value instanceof Int32Array) {
+        return Array.from(value);
+      } else {
+        return value;
+      }
+    });
+  }
 
   function toNodeKey(): string {
     const { currentBoard } = state;
@@ -651,6 +801,4 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
   function setState(newState: GameState): void {
     state = newState;
   }
-
-  function getStatesAfterPerformingOneAtomic(): GameState[] {}
 }

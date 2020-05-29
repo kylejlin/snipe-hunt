@@ -5,7 +5,7 @@ import { Option, Result } from "rusty-ts";
  * to state interfaces to ensure seralized state
  * compatibility detection will continue to work.
  */
-export const STATE_VERSION = 11;
+export const STATE_VERSION = 12;
 
 export interface AppState {
   gameState: GameState;

@@ -44,14 +44,14 @@ function fromBoard(board: Board): GameState {
       ) {
         const cardSet = card.cardType === CardType.AlphaSnipe ? 1 : 1 << 1;
         const offset = Offset.Snipes;
-        initialBoard[location + offset] |= cardSet;
+        initialBoard[location * 3 + offset] |= cardSet;
       } else {
         const cardSet = 1 << card.cardType;
         const offset =
           card.allegiance === Player.Alpha
             ? Offset.AlphaAnimals
             : Offset.BetaAnimals;
-        initialBoard[location + offset] |= cardSet;
+        initialBoard[location * 3 + offset] |= cardSet;
       }
     }
   }

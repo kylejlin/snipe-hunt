@@ -32,6 +32,8 @@ export default class App extends React.Component<{}, AppState> {
     this.state = loadState();
 
     this.bindMethods();
+
+    (window as any).app = this;
   }
 
   bindMethods() {

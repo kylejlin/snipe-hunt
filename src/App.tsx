@@ -575,6 +575,7 @@ export default class App extends React.Component<{}, AppState> {
   onRedoSubPlyClicked(): void {
     if (!this.canRedoSubPly()) {
       alert("Nothing to redo.");
+      return;
     }
 
     const analyzer = getAnalyzer(this.state.gameState);

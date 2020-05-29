@@ -3,10 +3,11 @@ import { option, Result } from "rusty-ts";
 import { getAnalyzer } from "./analyzer";
 import "./App.css";
 import { cardEmojis } from "./cardMaps";
-import AnimalStepComponent from "./components/AnimalStepComponent";
-import CardComponent from "./components/CardComponent";
+import AnimalStepView from "./components/AnimalStepView";
+import CardView from "./components/CardView";
 import ElementMatrix from "./components/ElementMatrix";
-import PlyComponent from "./components/PlyComponent";
+import FutureAnimalStepView from "./components/FutureAnimalStepView";
+import PlyView from "./components/PlyView";
 import * as gameUtil from "./gameUtil";
 import stateSaver from "./stateSaver";
 import {
@@ -24,7 +25,6 @@ import {
   Row,
   SnipeStep,
 } from "./types";
-import FutureAnimalStepView from "./components/FutureAnimalStepView";
 
 export default class App extends React.Component<{}, AppState> {
   constructor(props: {}) {
@@ -246,13 +246,13 @@ export default class App extends React.Component<{}, AppState> {
 
             {plies.map((ply, zeroBasedPlyNumber) => {
               const plyNumber = zeroBasedPlyNumber + 3;
-              return <PlyComponent ply={ply} plyNumber={plyNumber} />;
+              return <PlyView ply={ply} plyNumber={plyNumber} />;
             })}
 
             {analyzer.getPendingAnimalStep().match({
               none: () => null,
               some: (step) => (
-                <AnimalStepComponent
+                <AnimalStepView
                   step={step}
                   plyNumber={plies.length + 3}
                   winner={analyzer.getWinner()}
@@ -280,7 +280,7 @@ export default class App extends React.Component<{}, AppState> {
               .slice()
               .reverse()
               .map((ply, i) => (
-                <PlyComponent ply={ply} plyNumber={plies.length + 3 + i} />
+                <PlyView ply={ply} plyNumber={plies.length + 3 + i} />
               ))}
           </ol>
           <button onClick={this.onUndoSubPlyClicked}>Back</button>
@@ -301,7 +301,7 @@ export default class App extends React.Component<{}, AppState> {
     return snipes.map((card) => {
       const isSelected = selectedCardType.equalsSome(card.cardType);
       return (
-        <CardComponent
+        <CardView
           key={card.cardType}
           card={card}
           isSelected={isSelected}
@@ -417,7 +417,7 @@ export default class App extends React.Component<{}, AppState> {
 
   renderCards(cards: Card[]): React.ReactElement[] {
     return cards.map((card) => (
-      <CardComponent
+      <CardView
         key={card.cardType}
         card={card}
         isSelected={this.state.ux.selectedCardType.match({

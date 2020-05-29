@@ -1,17 +1,14 @@
 import React from "react";
 import { cardEmojis } from "../cardMaps";
 import { CardType, Ply, PlyType } from "../types";
-import "./styles/PlyComponent.css";
+import "./styles/PlyView.css";
 
 interface Props {
   ply: Ply;
   plyNumber: number;
 }
 
-export default function PlyComponent({
-  ply,
-  plyNumber,
-}: Props): React.ReactElement {
+export default function PlyView({ ply, plyNumber }: Props): React.ReactElement {
   const plyMakerEmoji =
     plyNumber % 2 === 0
       ? getEmoji(CardType.AlphaSnipe)

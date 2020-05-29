@@ -2,7 +2,7 @@ import React from "react";
 import { cardEmojis } from "../cardMaps";
 import * as gameUtil from "../gameUtil";
 import { Card, Player } from "../types";
-import "./styles/CardComponent.css";
+import "./styles/CardView.css";
 
 interface Props {
   card: Card;
@@ -10,7 +10,7 @@ interface Props {
   onCardClicked(card: Card): void;
 }
 
-export default function CardComponent({
+export default function CardView({
   card,
   isSelected,
   onCardClicked,
@@ -18,14 +18,12 @@ export default function CardComponent({
   return (
     <div
       className={
-        "CardComponent" +
+        "CardView" +
         (card.allegiance === Player.Alpha
-          ? " CardComponent--alpha"
-          : " CardComponent--beta") +
-        (isSelected ? " CardComponent--selected" : "") +
-        (gameUtil.canRetreat(card.cardType)
-          ? " CardComponent--canMoveBackward"
-          : "")
+          ? " CardView--alpha"
+          : " CardView--beta") +
+        (isSelected ? " CardView--selected" : "") +
+        (gameUtil.canRetreat(card.cardType) ? " CardView--canMoveBackward" : "")
       }
       onClick={() => onCardClicked(card)}
     >

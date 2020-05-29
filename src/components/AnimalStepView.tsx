@@ -3,7 +3,7 @@ import { Option } from "rusty-ts";
 import { cardEmojis } from "../cardMaps";
 import * as gameUtil from "../gameUtil";
 import { AnimalStep, CardType, Player } from "../types";
-import "./styles/SubPlyComponent.css";
+import "./styles/AnimalStepView.css";
 
 interface Props {
   step: AnimalStep;
@@ -11,7 +11,7 @@ interface Props {
   winner: Option<Player>;
 }
 
-export default function AnimalStepComponent({
+export default function AnimalStepView({
   step,
   plyNumber,
   winner: optWinner,

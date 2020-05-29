@@ -24,6 +24,7 @@ import {
   Row,
   SnipeStep,
 } from "./types";
+import FutureAnimalStepView from "./components/FutureAnimalStepView";
 
 export default class App extends React.Component<{}, AppState> {
   constructor(props: {}) {
@@ -262,7 +263,17 @@ export default class App extends React.Component<{}, AppState> {
           <h4>Future sub plies</h4>
           <ol className="Plies">
             {futureSubPlyStack.pendingAnimalStep.match({
-              some: () => <p>Todo: future animal step</p>,
+              some: (step) => {
+                const afterPerforming = getAnalyzer(
+                  analyzer.forcePerform(step)
+                );
+                return (
+                  <FutureAnimalStepView
+                    step={step}
+                    plyNumber={plies.length + 3}
+                  />
+                );
+              },
               none: () => null,
             })}
             {futureSubPlyStack.plies
@@ -565,7 +576,7 @@ export default class App extends React.Component<{}, AppState> {
         }
 
         return {
-          pendingAnimalStep: option.none(),
+          pendingAnimalStep: option.some(undone),
           plies: stack.plies,
         };
       },

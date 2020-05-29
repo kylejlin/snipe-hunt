@@ -355,11 +355,16 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
 
     for (const cardType of allAnimalTypes) {
       if ((1 << cardType) & oldAnimals) {
+        console.log(
+          CardType[cardType],
+          cardProperties[cardType].elementCounts.toString(2)
+        );
         rowElementCounts |= cardProperties[cardType].elementCounts;
       }
     }
 
     const [shift1, shift2] = cardProperties[newAnimal].tripletShifts;
+    console.log(rowElementCounts.toString(2));
     return (
       ((rowElementCounts >>> shift1) & 0b111) === 0b111 ||
       ((rowElementCounts >>> shift2) & 0b111) === 0b111
@@ -422,37 +427,77 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
     }
 
     if (state.pendingAnimalStep !== 0) {
-      const newState = cloneState(state);
-      newState.pendingAnimalStep = 0;
-      recalculateOutOfSyncGameState(newState);
+      const outOfSyncState = cloneState(state);
+      outOfSyncState.pendingAnimalStep = 0;
 
       const undone: AnimalStep = {
-        moved: (state.pendingAnimalStep >> 3) & Filter.LeastFiveBits,
-        destination: (state.pendingAnimalStep >> 8) & Filter.LeastThreeBits,
+        moved: (state.pendingAnimalStep >>> 3) & Filter.LeastFiveBits,
+        destination: (state.pendingAnimalStep >>> 8) & Filter.LeastThreeBits,
       };
-      return result.ok({ newState, undone });
+      return result.ok({
+        newState: recalculateOutOfSyncGameState(outOfSyncState),
+        undone,
+      });
     }
 
-    const newState = cloneState(state);
-    const encodedPly = newState.plies.pop()!;
+    const outOfSyncState = cloneState(state);
+    const encodedPly = outOfSyncState.plies.pop()!;
     const ply = decodePly(encodedPly);
     let undone: SnipeStep | Drop | AnimalStep;
 
     if (ply.plyType === PlyType.TwoAnimalSteps) {
       const encodedFirstStep =
         (ply.first.destination << 8) | (ply.first.moved << 3) | 0b001;
-      newState.pendingAnimalStep = encodedFirstStep;
+      outOfSyncState.pendingAnimalStep = encodedFirstStep;
 
       undone = ply.second;
     } else {
       undone = ply;
     }
 
-    recalculateOutOfSyncGameState(newState);
-    return result.ok({ newState, undone });
+    return result.ok({
+      newState: recalculateOutOfSyncGameState(outOfSyncState),
+      undone,
+    });
   }
 
-  function recalculateOutOfSyncGameState(mutState: GameState): void {}
+  function recalculateOutOfSyncGameState(
+    originalMutState: GameState
+  ): GameState {
+    let mutState = originalMutState;
+    const analyzer = getAnalyzer(mutState);
+
+    mutState.currentBoard = new Int32Array(mutState.initialBoard);
+
+    const plies = mutState.plies.map(decodePly);
+    const encodedPendingAnimalStep = mutState.pendingAnimalStep;
+
+    mutState.plies = [];
+    mutState.pendingAnimalStep = 0;
+
+    plies.forEach((ply) => {
+      if (ply.plyType === PlyType.TwoAnimalSteps) {
+        analyzer.setState(mutState);
+        mutState = analyzer.forcePerform(ply.first);
+        analyzer.setState(mutState);
+        mutState = analyzer.forcePerform(ply.second);
+      } else {
+        analyzer.setState(mutState);
+        mutState = analyzer.forcePerform(ply);
+      }
+    });
+
+    if (encodedPendingAnimalStep) {
+      analyzer.setState(mutState);
+      const step: AnimalStep = {
+        moved: (encodedPendingAnimalStep >>> 3) & Filter.LeastFiveBits,
+        destination: (encodedPendingAnimalStep >>> 5) & Filter.LeastThreeBits,
+      };
+      mutState = analyzer.forcePerform(step);
+    }
+
+    return mutState;
+  }
 
   function tryPerform(
     atomic: Atomic
@@ -561,7 +606,8 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
 
       if (
         state.pendingAnimalStep &&
-        ((state.pendingAnimalStep >> 3) & Filter.LeastFiveBits) === atomic.moved
+        ((state.pendingAnimalStep >>> 3) & Filter.LeastFiveBits) ===
+          atomic.moved
       ) {
         return option.some(IllegalGameStateUpdate.CannotMoveSameAnimalTwice);
       }

@@ -4,8 +4,8 @@
 }
 
 .ElementMatrixCell {
-  width: calc(0.07 * var(--minor-axis));
-  height: calc(0.07 * var(--minor-axis));
+  width: calc(0.12 * var(--minor-axis));
+  height: calc(0.035 * var(--minor-axis));
 
   border: 1px solid black;
   vertical-align: top;

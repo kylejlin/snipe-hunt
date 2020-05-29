@@ -462,6 +462,14 @@ export default class App extends React.Component<{}, AppState> {
     const { selectedCardType: selectedCard } = this.state.ux;
 
     selectedCard.ifSome((selected) => {
+      this.updateUxState({
+        futureSubPlyStack: {
+          stateVersion: STATE_VERSION,
+          pendingAnimalStep: option.none(),
+          plies: [],
+        },
+      });
+
       const location = analyzer.getCardLocation(selected);
       if (gameUtil.isReserve(location)) {
         this.tryDrop(selected as AnimalType, row);

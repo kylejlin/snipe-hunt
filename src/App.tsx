@@ -76,7 +76,6 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   mctsLoop(): void {
-    console.log("loop", this.state.ai);
     this.state.ai.ifSome(({ mcts, randomAtomic }) => {
       const { utils } = mcts;
 
@@ -401,6 +400,9 @@ export default class App extends React.Component<{}, AppState> {
               const afterPerformingBest = getAnalyzer(
                 analyzer.forcePerform(bestAtomic)
               );
+              const bestAtomicMeanValue =
+                ai.mcts.utils.getRoot().value /
+                ai.mcts.utils.getRoot().rollouts;
 
               const { randomAtomic } = ai;
               const afterPerformingRandom = getAnalyzer(
@@ -409,7 +411,11 @@ export default class App extends React.Component<{}, AppState> {
 
               return (
                 <>
-                  <h4>MCTS ({ai.mcts.rollouts}):</h4>
+                  <h4>
+                    MCTS (v̅ = {bestAtomicMeanValue.toFixed(2)}, n ={" "}
+                    {ai.mcts.rollouts}
+                    ):
+                  </h4>
                   {"plyType" in bestAtomic ? (
                     <PlyView ply={bestAtomic} plyNumber={plies.length + 3} />
                   ) : analyzer.getPendingAnimalStep().isSome() ? (
@@ -424,7 +430,6 @@ export default class App extends React.Component<{}, AppState> {
                       winner={afterPerformingBest.getWinner()}
                     />
                   )}
-
                   <h4>Random:</h4>
                   {"plyType" in randomAtomic ? (
                     <PlyView ply={randomAtomic} plyNumber={plies.length + 3} />

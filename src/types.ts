@@ -1,5 +1,4 @@
 import { Option, Result } from "rusty-ts";
-import { MctsUtils } from "./mcts";
 
 /**
  * Increment this when making breaking changes

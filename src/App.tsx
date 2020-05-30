@@ -33,8 +33,6 @@ import {
 } from "./types";
 import MctsWorker from "./workers/mcts.importable";
 
-const ROLLOUT_BATCH = 1000;
-
 export default class App extends React.Component<{}, AppState> {
   private mctsWorker: Worker;
   private hasMounted: boolean;
@@ -385,7 +383,7 @@ export default class App extends React.Component<{}, AppState> {
               return (
                 <>
                   <h4>
-                    MCTS (v̅ = {bestAtomicMeanValue.toFixed(2)}, n ={" "}
+                    MCTS (v̅ = {bestAtomicMeanValue.toFixed(3)}, n ={" "}
                     {analysis.rollouts}
                     ):
                   </h4>

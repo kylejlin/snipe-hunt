@@ -37,6 +37,7 @@ const ROLLOUT_BATCH = 1000;
 
 export default class App extends React.Component<{}, AppState> {
   private mctsWorker: Worker;
+  private hasMounted: boolean;
 
   constructor(props: {}) {
     super(props);
@@ -51,6 +52,12 @@ export default class App extends React.Component<{}, AppState> {
     this.mctsWorker.addEventListener("message", this.onMctsWorkerMessage);
 
     this.updateMctsAnalyzerGameState(this.state.gameState);
+
+    this.hasMounted = false;
+  }
+
+  componentDidMount(): void {
+    this.hasMounted = true;
   }
 
   bindMethods(): void {
@@ -810,7 +817,9 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   onMctsAnalysisUpdate(optAnalysis: Option<MctsAnalysis>): void {
-    this.setState({ mctsAnalysis: optAnalysis });
+    if (this.hasMounted) {
+      this.setState({ mctsAnalysis: optAnalysis });
+    }
   }
 
   isMctsAnalysisUpToDate({ bestAtomic }: MctsAnalysis): boolean {

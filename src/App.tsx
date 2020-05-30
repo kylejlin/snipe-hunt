@@ -372,7 +372,8 @@ export default class App extends React.Component<{}, AppState> {
         <div>
           <h3>Computer agents:</h3>
           {this.state.mctsAnalysis.match({
-            none: () => <p>Game over</p>,
+            none: () =>
+              analyzer.isGameOver() ? <p>Game over</p> : <p>Loading...</p>,
             some: (analysis) => {
               const { bestAtomic } = analysis;
               const afterPerformingBest = getAnalyzer(

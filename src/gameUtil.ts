@@ -1,18 +1,19 @@
+import { Filter, PlyTag } from "./bitwiseUtils";
 import { cardProperties } from "./cardMaps";
+import { gameStateFactory } from "./gameStateFactory";
+import randInt from "./randInt";
 import {
+  AnimalType,
   Card,
   CardLocation,
   CardType,
   GameState,
   Player,
-  SnipeType,
-  Row,
   Ply,
   PlyType,
-  AnimalType,
+  Row,
+  SnipeType,
 } from "./types";
-import { gameStateFactory } from "./gameStateFactory";
-import { Filter, PlyTag } from "./bitwiseUtils";
 
 export function getRandomGameState(): GameState {
   const { alpha, beta } = getShuffledDecks();
@@ -135,11 +136,6 @@ function shuffle(arr: unknown[]): void {
       arr[j] = temp;
     }
   }
-}
-
-function randInt(inclMin: number, exclMax: number): number {
-  const diff = exclMax - inclMin;
-  return inclMin + Math.floor(diff * Math.random());
 }
 
 export function isReserve(

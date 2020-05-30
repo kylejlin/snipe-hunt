@@ -1,8 +1,9 @@
 import { Option, option } from "rusty-ts";
+import randInt from "./randInt";
 import { Atomic, GameAnalyzer, GameState } from "./types";
 
 export interface MctsUtils {
-  performCycle(): void;
+  performRollout(): void;
   getRoot(): Node;
   getBestAtomic(): Option<Atomic>;
 }
@@ -37,9 +38,9 @@ export function getMctsUtils(
   analyzer.setState(state);
   const perspective = analyzer.getTurn();
 
-  return { performCycle, getRoot, getBestAtomic };
+  return { performRollout, getRoot, getBestAtomic };
 
-  function performCycle(): void {
+  function performRollout(): void {
     let node = root;
     while (!isLeaf(node)) {
       const bestChild = selectBestChildAccordingToActivePlayer(node);
@@ -148,11 +149,6 @@ export function getMctsUtils(
     } else {
       return 0;
     }
-  }
-
-  function randInt(inclMin: number, exclMax: number): number {
-    const diff = exclMax - inclMin;
-    return inclMin + Math.floor(diff * Math.random());
   }
 
   function updateAndBackPropagate(leaf: Node, valueIncrease: number): void {

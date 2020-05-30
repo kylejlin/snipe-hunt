@@ -28,6 +28,9 @@ import {
   FutureSubPlyStack,
 } from "./types";
 import { getMctsUtils } from "./mcts";
+import randInt from "./randInt";
+
+const ROLLOUT_BATCH = 1000;
 
 export default class App extends React.Component<{}, AppState> {
   constructor(props: {}) {
@@ -43,23 +46,13 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   _mctsTest() {
-    const m = getMctsUtils(
-      this.state.gameState,
-      getAnalyzer(this.state.gameState)
-    );
-    const r = m.getRoot();
-    m.performCycle();
-    console.log("root", r);
-    (window as any).m = m;
-    (window as any).r = r;
-
     const f = (reps: number) => {
       const m = getMctsUtils(
         this.state.gameState,
         getAnalyzer(this.state.gameState)
       );
       for (let i = 0; i < reps; i++) {
-        m.performCycle();
+        m.performRollout();
       }
       return m.getBestAtomic().unwrapOr("none");
     };
@@ -71,6 +64,40 @@ export default class App extends React.Component<{}, AppState> {
     this.onResetClicked = this.onResetClicked.bind(this);
     this.onUndoSubPlyClicked = this.onUndoSubPlyClicked.bind(this);
     this.onRedoSubPlyClicked = this.onRedoSubPlyClicked.bind(this);
+    this.mctsLoop = this.mctsLoop.bind(this);
+  }
+
+  componentDidMount(): void {
+    this.startMctsLoop();
+  }
+
+  startMctsLoop(): void {
+    requestAnimationFrame(this.mctsLoop);
+  }
+
+  mctsLoop(): void {
+    console.log("loop", this.state.ai);
+    this.state.ai.ifSome(({ mcts, randomAtomic }) => {
+      const { utils } = mcts;
+
+      for (let i = 0; i < ROLLOUT_BATCH; i++) {
+        utils.performRollout();
+      }
+
+      this.setState((prevState) => ({
+        ...prevState,
+        ai: option.some({
+          mcts: {
+            utils,
+            bestAtomic: utils.getBestAtomic().unwrap(),
+            rollouts: utils.getRoot().rollouts,
+          },
+          randomAtomic,
+        }),
+      }));
+    });
+
+    requestAnimationFrame(this.mctsLoop);
   }
 
   saveAndUpdateGameState(newGameState: GameState) {
@@ -363,6 +390,59 @@ export default class App extends React.Component<{}, AppState> {
           <button onClick={this.onRedoSubPlyClicked}>Forward</button>
         </div>
         <button onClick={this.onResetClicked}>Reset</button>
+        <div>
+          <h3>Computer agents:</h3>
+          {this.state.ai.match({
+            none: () => <p>Game over</p>,
+            some: (ai) => {
+              const { bestAtomic } = ai.mcts;
+              const afterPerformingBest = getAnalyzer(
+                analyzer.forcePerform(bestAtomic)
+              );
+
+              const { randomAtomic } = ai;
+              const afterPerformingRandom = getAnalyzer(
+                analyzer.forcePerform(randomAtomic)
+              );
+
+              return (
+                <>
+                  <h4>MCTS ({ai.mcts.rollouts}):</h4>
+                  {"plyType" in bestAtomic ? (
+                    <PlyView ply={bestAtomic} plyNumber={plies.length + 3} />
+                  ) : analyzer.getPendingAnimalStep().isSome() ? (
+                    <FutureAnimalStepView
+                      step={bestAtomic}
+                      plyNumber={plies.length + 3}
+                    />
+                  ) : (
+                    <AnimalStepView
+                      step={bestAtomic}
+                      plyNumber={plies.length + 3}
+                      winner={afterPerformingBest.getWinner()}
+                    />
+                  )}
+
+                  <h4>Random:</h4>
+                  {"plyType" in randomAtomic ? (
+                    <PlyView ply={randomAtomic} plyNumber={plies.length + 3} />
+                  ) : analyzer.getPendingAnimalStep().isSome() ? (
+                    <FutureAnimalStepView
+                      step={randomAtomic}
+                      plyNumber={plies.length + 3}
+                    />
+                  ) : (
+                    <AnimalStepView
+                      step={randomAtomic}
+                      plyNumber={plies.length + 3}
+                      winner={afterPerformingRandom.getWinner()}
+                    />
+                  )}
+                </>
+              );
+            },
+          })}
+        </div>
       </div>
     );
   }
@@ -737,8 +817,9 @@ export default class App extends React.Component<{}, AppState> {
 
   onResetClicked(): void {
     if (window.confirm("Are you sure you want to reset?")) {
+      const gameState = gameUtil.getRandomGameState();
       const state: AppState = {
-        gameState: gameUtil.getRandomGameState(),
+        gameState,
         ux: {
           selectedCardType: option.none(),
           futureSubPlyStack: {
@@ -747,6 +828,7 @@ export default class App extends React.Component<{}, AppState> {
             plies: [],
           },
         },
+        ai: getAi(gameState),
       };
       gameStateSaver.setState(state.gameState);
       this.setState(state);
@@ -773,11 +855,12 @@ function loadState(): AppState {
     });
 
   return {
-    gameState: gameState,
+    gameState,
     ux: {
       selectedCardType: option.none(),
       futureSubPlyStack,
     },
+    ai: getAi(gameState),
   };
 }
 
@@ -787,4 +870,27 @@ function isAlpha(card: Card): boolean {
 
 function isBeta(card: Card): boolean {
   return card.allegiance === Player.Beta;
+}
+
+function getAi(gameState: GameState): AppState["ai"] {
+  const analyzer = getAnalyzer(gameState);
+  if (analyzer.isGameOver()) {
+    return option.none();
+  }
+
+  const mctsUtils = getMctsUtils(gameState, getAnalyzer(gameState));
+  mctsUtils.performRollout();
+  mctsUtils.performRollout();
+  const mcts = {
+    utils: mctsUtils,
+    bestAtomic: mctsUtils
+      .getBestAtomic()
+      .expect("Impossible: No legal atomic after two rollouts."),
+    rollouts: mctsUtils.getRoot().rollouts,
+  };
+
+  const legalAtomics = analyzer.getLegalAtomics();
+  const randomAtomic = legalAtomics[randInt(0, legalAtomics.length)];
+
+  return option.some({ mcts, randomAtomic });
 }

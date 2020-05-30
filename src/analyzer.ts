@@ -254,6 +254,13 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
         state.turn === Player.Alpha ? 1 << Player.Beta : 1 << Player.Alpha;
 
       for (const cardType of allAnimalTypes) {
+        if (
+          state.pendingAnimalStep &&
+          ((state.pendingAnimalStep >>> 3) & Filter.LeastFiveBits) === cardType
+        ) {
+          continue;
+        }
+
         if ((1 << cardType) & friendlyAnimals) {
           if (doesRowHaveAtLeastTwoCards) {
             const friendlySnipeFilter =

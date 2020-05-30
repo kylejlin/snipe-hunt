@@ -1,4 +1,5 @@
 import { Option, Result } from "rusty-ts";
+import { MctsUtils } from "./mcts";
 
 /**
  * Increment this when making breaking changes
@@ -13,6 +14,10 @@ export interface AppState {
     selectedCardType: Option<CardType>;
     futureSubPlyStack: FutureSubPlyStack;
   };
+  ai: Option<{
+    mcts: { utils: MctsUtils; bestAtomic: Atomic; rollouts: number };
+    randomAtomic: Atomic;
+  }>;
 }
 
 export interface GameState {

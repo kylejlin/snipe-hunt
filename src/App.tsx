@@ -103,7 +103,7 @@ export default class App extends React.Component<{}, AppState> {
 
   saveAndUpdateGameState(newGameState: GameState) {
     gameStateSaver.setState(newGameState);
-    this.setState({ gameState: newGameState });
+    this.setState({ gameState: newGameState, ai: getAi(newGameState) });
   }
 
   render(): React.ReactElement {

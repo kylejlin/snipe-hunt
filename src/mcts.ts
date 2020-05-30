@@ -78,11 +78,11 @@ export function getMctsUtils(
     let bestNode = children[0];
 
     for (let i = 1; i < children.length; i++) {
-      const node = children[i];
-      const score = getScore(node, node.rollouts, invertMeanValue);
+      const child = children[i];
+      const score = getScore(child, node.rollouts, invertMeanValue);
       if (score > maxScore) {
         maxScore = score;
-        bestNode = node;
+        bestNode = child;
       }
     }
 

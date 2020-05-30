@@ -804,6 +804,9 @@ export default class App extends React.Component<{}, AppState> {
     if ("object" === typeof data && data !== null) {
       const message: MctsWorkerMessage = data;
       switch (message.messageType) {
+        case WorkerMessageType.LogNotification:
+          console.log("MCTS Worker Log:", message.data);
+          break;
         case WorkerMessageType.UpdateMctsAnalysisNotification:
           this.onMctsAnalysisUpdate(
             option

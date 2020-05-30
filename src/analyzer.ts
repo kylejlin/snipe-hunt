@@ -180,7 +180,7 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
         const snipes = state.currentBoard[snipeLocation * 3 + Offset.Snipes];
         const enemySnipeFilter = 1 << opponentOf(state.turn);
         if ((snipes & enemySnipeFilter) | animals) {
-          const forward = oneRowForward(snipeLocation, Player.Alpha);
+          const forward = oneRowForward(snipeLocation, state.turn);
           if (isRow(forward)) {
             atomics.push({
               plyType: PlyType.SnipeStep,
@@ -188,7 +188,7 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
             });
           }
 
-          const backward = oneRowBackward(snipeLocation, Player.Alpha);
+          const backward = oneRowBackward(snipeLocation, state.turn);
           if (isRow(backward)) {
             atomics.push({
               plyType: PlyType.SnipeStep,

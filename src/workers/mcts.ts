@@ -26,6 +26,14 @@ let lastPosted = 0;
 self.addEventListener("message", (e) => {
   const data = e.data;
   if ("object" === typeof data && data !== null) {
+    {
+      if (data.x) {
+        self.postMessage({
+          messageType: WorkerMessageType.LogNotification,
+          data: optMctsAnalyzer.unwrap().getRoot(),
+        });
+      }
+    }
     const message: MctsWorkerMessage = data;
     switch (message.messageType) {
       case WorkerMessageType.UpdateMctsAnalyzerGameStateRequest:

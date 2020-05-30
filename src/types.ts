@@ -356,12 +356,19 @@ export enum TripletShift {
 }
 
 export type MctsWorkerMessage =
+  | LogNotification
   | UpdateMctsAnalysisNotification
   | UpdateMctsAnalyzerGameStateRequest;
 
 export enum WorkerMessageType {
+  LogNotification,
   UpdateMctsAnalysisNotification,
   UpdateMctsAnalyzerGameStateRequest,
+}
+
+export interface LogNotification {
+  messageType: WorkerMessageType.LogNotification;
+  data: unknown;
 }
 
 export interface UpdateMctsAnalysisNotification {

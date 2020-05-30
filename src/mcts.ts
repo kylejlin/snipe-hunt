@@ -21,7 +21,6 @@ interface EdgeConnectingToParent {
 }
 
 const EXPLORATION_CONSTANT = 2;
-const BIG_NUMBER = 1e7;
 
 export function getMctsUtils(
   state: GameState,
@@ -49,13 +48,20 @@ export function getMctsUtils(
     const leaf = node;
 
     if (leaf.rollouts === 0) {
-      rolloutOrMarkAsTerminalThenBackPropagate(leaf);
-    } else if (leaf.rollouts < BIG_NUMBER) {
-      const children = getChildren(leaf);
-      rolloutOrMarkAsTerminalThenBackPropagate(children[0]);
-      leaf.children = children;
+      rolloutIfNonTerminalThenBackPropagate(leaf);
     } else {
-      // Done
+      analyzer.setState(leaf.state);
+      analyzer.getWinner().match({
+        some: (winner) => {
+          const valueIncrease = winner === perspective ? 1 : 0;
+          updateAndBackPropagate(leaf, valueIncrease);
+        },
+        none: () => {
+          const children = getChildren(leaf);
+          rolloutIfNonTerminalThenBackPropagate(children[0]);
+          leaf.children = children;
+        },
+      });
     }
   }
 
@@ -103,32 +109,25 @@ export function getMctsUtils(
     );
   }
 
-  function rolloutOrMarkAsTerminalThenBackPropagate(node: Node): void {
+  function rolloutIfNonTerminalThenBackPropagate(node: Node): void {
     analyzer.setState(node.state);
     const winner = analyzer.getWinner();
 
-    const { valueIncrease, rolloutIncrease } = winner.match({
+    const valueIncrease = winner.match({
       some: (winner) => {
         if (winner === perspective) {
-          return {
-            valueIncrease: BIG_NUMBER,
-            rolloutIncrease: BIG_NUMBER,
-          };
+          return 1;
         } else {
-          return {
-            valueIncrease: 0,
-            rolloutIncrease: BIG_NUMBER,
-          };
+          return 0;
         }
       },
 
       none: () => {
-        const valueIncrease = rollout(node.state);
-        return { valueIncrease, rolloutIncrease: 1 };
+        return rollout(node.state);
       },
     });
 
-    updateAndBackPropagate(node, valueIncrease, rolloutIncrease);
+    updateAndBackPropagate(node, valueIncrease);
   }
 
   function rollout(state: GameState): 0 | 1 {
@@ -156,15 +155,11 @@ export function getMctsUtils(
     return inclMin + Math.floor(diff * Math.random());
   }
 
-  function updateAndBackPropagate(
-    leaf: Node,
-    valueIncrease: number,
-    rolloutIncrease: number
-  ): void {
+  function updateAndBackPropagate(leaf: Node, valueIncrease: number): void {
     let node: Node | undefined = leaf;
     while (node !== undefined) {
       node.value += valueIncrease;
-      node.rollouts += rolloutIncrease;
+      node.rollouts += 1;
       node = node.edgeConnectingToParent?.parent;
     }
   }

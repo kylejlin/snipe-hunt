@@ -1,8 +1,10 @@
-import { GameAnalyzer, GameState, StateSaver, Atomic } from "./types";
+import { Option, option } from "rusty-ts";
+import { Atomic, GameAnalyzer, GameState } from "./types";
 
 export interface MctsUtils {
   performCycle(): void;
   getRoot(): Node;
+  getBestAtomic(): Option<Atomic>;
 }
 
 export interface Node {
@@ -36,7 +38,7 @@ export function getMctsUtils(
   analyzer.setState(state);
   const perspective = analyzer.getTurn();
 
-  return { performCycle, getRoot };
+  return { performCycle, getRoot, getBestAtomic };
 
   function performCycle(): void {
     let node = root;
@@ -47,11 +49,13 @@ export function getMctsUtils(
     const leaf = node;
 
     if (leaf.rollouts === 0) {
-      rolloutOrMarkAsTerminalThenBackPropagate(node);
-    } else {
-      const children = getChildren(node);
+      rolloutOrMarkAsTerminalThenBackPropagate(leaf);
+    } else if (leaf.rollouts < BIG_NUMBER) {
+      const children = getChildren(leaf);
       rolloutOrMarkAsTerminalThenBackPropagate(children[0]);
-      node.children = children;
+      leaf.children = children;
+    } else {
+      // Done
     }
   }
 
@@ -161,7 +165,7 @@ export function getMctsUtils(
     while (node !== undefined) {
       node.value += valueIncrease;
       node.rollouts += rolloutIncrease;
-      node = leaf.edgeConnectingToParent?.parent;
+      node = node.edgeConnectingToParent?.parent;
     }
   }
 
@@ -181,5 +185,18 @@ export function getMctsUtils(
 
   function getRoot(): Node {
     return root;
+  }
+
+  function getBestAtomic(): Option<Atomic> {
+    let best: Atomic | undefined = undefined;
+    let bestScore = -Infinity;
+    for (const child of root.children) {
+      const childScore = child.value / child.rollouts;
+      if (childScore > bestScore) {
+        best = child.edgeConnectingToParent!.atomic;
+        bestScore = childScore;
+      }
+    }
+    return option.fromVoidable(best);
   }
 }

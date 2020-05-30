@@ -52,6 +52,18 @@ export default class App extends React.Component<{}, AppState> {
     console.log("root", r);
     (window as any).m = m;
     (window as any).r = r;
+
+    const f = (reps: number) => {
+      const m = getMctsUtils(
+        this.state.gameState,
+        getAnalyzer(this.state.gameState)
+      );
+      for (let i = 0; i < reps; i++) {
+        m.performCycle();
+      }
+      return m.getBestAtomic().unwrapOr("none");
+    };
+    (window as any).f = f;
   }
 
   bindMethods() {

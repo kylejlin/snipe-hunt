@@ -1,5 +1,5 @@
 import React from "react";
-import { option, Result } from "rusty-ts";
+import { option, Option, Result } from "rusty-ts";
 import { getAnalyzer } from "./analyzer";
 import "./App.css";
 import { cardEmojis } from "./cardMaps";
@@ -9,7 +9,7 @@ import ElementMatrix from "./components/ElementMatrix";
 import FutureAnimalStepView from "./components/FutureAnimalStepView";
 import PlyView from "./components/PlyView";
 import * as gameUtil from "./gameUtil";
-import { gameStateSaver, futureSubPlyStackSaver } from "./stateSavers";
+import { futureSubPlyStackSaver, gameStateSaver } from "./stateSavers";
 import {
   AnimalStep,
   AnimalType,
@@ -18,22 +18,26 @@ import {
   CardLocation,
   CardType,
   Drop,
+  FutureSubPlyStack,
   GameState,
   IllegalGameStateUpdate,
+  MctsWorkerMessage,
   Player,
   PlyType,
   Row,
   SnipeStep,
   STATE_VERSION,
-  FutureSubPlyStack,
+  WorkerMessageType,
+  MctsAnalysis,
+  UpdateMctsAnalyzerGameStateRequest,
 } from "./types";
-import { getMctsUtils } from "./mcts";
-import randInt from "./randInt";
 import MctsWorker from "./workers/mcts.importable";
 
 const ROLLOUT_BATCH = 1000;
 
 export default class App extends React.Component<{}, AppState> {
+  private mctsWorker: Worker;
+
   constructor(props: {}) {
     super(props);
 
@@ -43,74 +47,36 @@ export default class App extends React.Component<{}, AppState> {
 
     (window as any).app = this;
 
-    this._mctsTest();
+    this.mctsWorker = new MctsWorker();
+    this.mctsWorker.addEventListener("message", this.onMctsWorkerMessage);
 
-    console.log("worker");
-    const w: Worker = new MctsWorker();
-    w.addEventListener("message", (e) => {
-      console.log("in window, got message", e.data);
-    });
+    this.updateMctsAnalyzerGameState(this.state.gameState);
   }
 
-  _mctsTest() {
-    const f = (reps: number) => {
-      const m = getMctsUtils(
-        this.state.gameState,
-        getAnalyzer(this.state.gameState)
-      );
-      for (let i = 0; i < reps; i++) {
-        m.performRollout();
-      }
-      return m.getBestAtomic().unwrapOr("none");
-    };
-    (window as any).f = f;
-  }
-
-  bindMethods() {
+  bindMethods(): void {
     this.onCardClicked = this.onCardClicked.bind(this);
     this.onResetClicked = this.onResetClicked.bind(this);
     this.onUndoSubPlyClicked = this.onUndoSubPlyClicked.bind(this);
     this.onRedoSubPlyClicked = this.onRedoSubPlyClicked.bind(this);
-    this.mctsLoop = this.mctsLoop.bind(this);
+    this.onMctsWorkerMessage = this.onMctsWorkerMessage.bind(this);
+    this.isMctsAnalysisUpToDate = this.isMctsAnalysisUpToDate.bind(this);
   }
 
-  componentDidMount(): void {
-    this.startMctsLoop();
-  }
-
-  startMctsLoop(): void {
-    requestAnimationFrame(this.mctsLoop);
-  }
-
-  mctsLoop(): void {
-    this.state.ai.ifSome(({ mcts, randomAtomic }) => {
-      const { utils } = mcts;
-
-      for (let i = 0; i < ROLLOUT_BATCH; i++) {
-        utils.performRollout();
-      }
-
-      this.setState((prevState) => ({
-        ...prevState,
-        ai: option.some({
-          mcts: {
-            utils,
-            bestAtomic: utils.getBestAtomic().unwrap(),
-            rollouts: utils.getRoot().rollouts,
-          },
-          randomAtomic,
-        }),
-      }));
-
-      if (utils.getRoot().rollouts < 0.5e6) {
-        requestAnimationFrame(this.mctsLoop);
-      }
-    });
+  updateMctsAnalyzerGameState(gameState: GameState): void {
+    const message: UpdateMctsAnalyzerGameStateRequest = {
+      messageType: WorkerMessageType.UpdateMctsAnalyzerGameStateRequest,
+      gameState,
+    };
+    this.mctsWorker.postMessage(message);
   }
 
   saveAndUpdateGameState(newGameState: GameState) {
     gameStateSaver.setState(newGameState);
-    this.setState({ gameState: newGameState, ai: getAi(newGameState) });
+    this.setState({
+      gameState: newGameState,
+    });
+
+    this.updateMctsAnalyzerGameState(newGameState);
   }
 
   render(): React.ReactElement {
@@ -400,27 +366,20 @@ export default class App extends React.Component<{}, AppState> {
         <button onClick={this.onResetClicked}>Reset</button>
         <div>
           <h3>Computer agents:</h3>
-          {this.state.ai.match({
+          {this.state.mctsAnalysis.match({
             none: () => <p>Game over</p>,
-            some: (ai) => {
-              const { bestAtomic } = ai.mcts;
+            some: (analysis) => {
+              const { bestAtomic } = analysis;
               const afterPerformingBest = getAnalyzer(
                 analyzer.forcePerform(bestAtomic)
               );
-              const bestAtomicMeanValue =
-                ai.mcts.utils.getRoot().value /
-                ai.mcts.utils.getRoot().rollouts;
-
-              const { randomAtomic } = ai;
-              const afterPerformingRandom = getAnalyzer(
-                analyzer.forcePerform(randomAtomic)
-              );
+              const bestAtomicMeanValue = analysis.value / analysis.rollouts;
 
               return (
                 <>
                   <h4>
                     MCTS (v̅ = {bestAtomicMeanValue.toFixed(2)}, n ={" "}
-                    {ai.mcts.rollouts}
+                    {analysis.rollouts}
                     ):
                   </h4>
                   {"plyType" in bestAtomic ? (
@@ -435,21 +394,6 @@ export default class App extends React.Component<{}, AppState> {
                       step={bestAtomic}
                       plyNumber={plies.length + 3}
                       winner={afterPerformingBest.getWinner()}
-                    />
-                  )}
-                  <h4>Random:</h4>
-                  {"plyType" in randomAtomic ? (
-                    <PlyView ply={randomAtomic} plyNumber={plies.length + 3} />
-                  ) : analyzer.getPendingAnimalStep().isSome() ? (
-                    <FutureAnimalStepView
-                      step={randomAtomic}
-                      plyNumber={plies.length + 3}
-                    />
-                  ) : (
-                    <AnimalStepView
-                      step={randomAtomic}
-                      plyNumber={plies.length + 3}
-                      winner={afterPerformingRandom.getWinner()}
                     />
                   )}
                 </>
@@ -842,11 +786,35 @@ export default class App extends React.Component<{}, AppState> {
             plies: [],
           },
         },
-        ai: getAi(gameState),
+        mctsAnalysis: option.none(),
       };
       gameStateSaver.setState(state.gameState);
       this.setState(state);
     }
+  }
+
+  onMctsWorkerMessage(event: MessageEvent): void {
+    const { data } = event;
+    if ("object" === typeof data && data !== null) {
+      const message: MctsWorkerMessage = data;
+      switch (message.messageType) {
+        case WorkerMessageType.UpdateMctsAnalysisNotification:
+          this.onMctsAnalysisUpdate(
+            option
+              .fromVoidable(message.optAnalysis)
+              .filter(this.isMctsAnalysisUpToDate)
+          );
+          break;
+      }
+    }
+  }
+
+  onMctsAnalysisUpdate(optAnalysis: Option<MctsAnalysis>): void {
+    this.setState({ mctsAnalysis: optAnalysis });
+  }
+
+  isMctsAnalysisUpToDate({ bestAtomic }: MctsAnalysis): boolean {
+    return getAnalyzer(this.state.gameState).tryPerform(bestAtomic).isOk();
   }
 }
 
@@ -874,7 +842,7 @@ function loadState(): AppState {
       selectedCardType: option.none(),
       futureSubPlyStack,
     },
-    ai: getAi(gameState),
+    mctsAnalysis: option.none(),
   };
 }
 
@@ -884,27 +852,4 @@ function isAlpha(card: Card): boolean {
 
 function isBeta(card: Card): boolean {
   return card.allegiance === Player.Beta;
-}
-
-function getAi(gameState: GameState): AppState["ai"] {
-  const analyzer = getAnalyzer(gameState);
-  if (analyzer.isGameOver()) {
-    return option.none();
-  }
-
-  const mctsUtils = getMctsUtils(gameState, getAnalyzer(gameState));
-  mctsUtils.performRollout();
-  mctsUtils.performRollout();
-  const mcts = {
-    utils: mctsUtils,
-    bestAtomic: mctsUtils
-      .getBestAtomic()
-      .expect("Impossible: No legal atomic after two rollouts."),
-    rollouts: mctsUtils.getRoot().rollouts,
-  };
-
-  const legalAtomics = analyzer.getLegalAtomics();
-  const randomAtomic = legalAtomics[randInt(0, legalAtomics.length)];
-
-  return option.some({ mcts, randomAtomic });
 }

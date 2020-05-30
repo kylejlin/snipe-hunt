@@ -14,10 +14,7 @@ export interface AppState {
     selectedCardType: Option<CardType>;
     futureSubPlyStack: FutureSubPlyStack;
   };
-  ai: Option<{
-    mcts: { utils: MctsUtils; bestAtomic: Atomic; rollouts: number };
-    randomAtomic: Atomic;
-  }>;
+  mctsAnalysis: Option<MctsAnalysis>;
 }
 
 export interface GameState {
@@ -33,6 +30,12 @@ export interface FutureSubPlyStack {
   stateVersion: typeof STATE_VERSION;
   plies: Ply[];
   pendingAnimalStep: Option<AnimalStep>;
+}
+
+export interface MctsAnalysis {
+  bestAtomic: Atomic;
+  value: number;
+  rollouts: number;
 }
 
 export interface GameAnalyzer {
@@ -353,8 +356,23 @@ export enum TripletShift {
   None = 12,
 }
 
+export type MctsWorkerMessage =
+  | UpdateMctsAnalysisNotification
+  | UpdateMctsAnalyzerGameStateRequest;
+
 export enum WorkerMessageType {
-  UpdateAi,
+  UpdateMctsAnalysisNotification,
+  UpdateMctsAnalyzerGameStateRequest,
+}
+
+export interface UpdateMctsAnalysisNotification {
+  messageType: WorkerMessageType.UpdateMctsAnalysisNotification;
+  optAnalysis: MctsAnalysis | null;
+}
+
+export interface UpdateMctsAnalyzerGameStateRequest {
+  messageType: WorkerMessageType.UpdateMctsAnalyzerGameStateRequest;
+  gameState: GameState;
 }
 
 // export interface GameStateStruct {

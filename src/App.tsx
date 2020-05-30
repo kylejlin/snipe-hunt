@@ -95,9 +95,11 @@ export default class App extends React.Component<{}, AppState> {
           randomAtomic,
         }),
       }));
-    });
 
-    requestAnimationFrame(this.mctsLoop);
+      if (utils.getRoot().rollouts < 0.5e6) {
+        requestAnimationFrame(this.mctsLoop);
+      }
+    });
   }
 
   saveAndUpdateGameState(newGameState: GameState) {

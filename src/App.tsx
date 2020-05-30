@@ -29,6 +29,7 @@ import {
 } from "./types";
 import { getMctsUtils } from "./mcts";
 import randInt from "./randInt";
+import MctsWorker from "./workers/mcts.importable";
 
 const ROLLOUT_BATCH = 1000;
 
@@ -43,6 +44,12 @@ export default class App extends React.Component<{}, AppState> {
     (window as any).app = this;
 
     this._mctsTest();
+
+    console.log("worker");
+    const w: Worker = new MctsWorker();
+    w.addEventListener("message", (e) => {
+      console.log("in window, got message", e.data);
+    });
   }
 
   _mctsTest() {

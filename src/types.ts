@@ -353,6 +353,10 @@ export enum TripletShift {
   None = 12,
 }
 
+export enum WorkerMessageType {
+  UpdateAi,
+}
+
 // export interface GameStateStruct {
 //   stateVersion: typeof STATE_VERSION;
 

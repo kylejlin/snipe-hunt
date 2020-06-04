@@ -16,7 +16,7 @@ const UNCERTAINTY_THRESHOLD = 1e-3;
 const MAX_MEAN_VALUE_BEFORE_DECLARING_VICTORY = 1 - UNCERTAINTY_THRESHOLD;
 const MIN_MEAN_VALUE_BEFORE_DECLARING_DEFEAT = UNCERTAINTY_THRESHOLD;
 const MIN_ROLLOUTS_NEEDED_TO_DECLARE_STATE_TERMINAL = 1e6;
-const MILLISECONDS_BETWEEN_TERMINAL_POSTS = 0.1e3;
+const MIN_MILLISECONDS_BETWEEN_POSTS = 0.2e3;
 
 declare const self: Worker;
 
@@ -78,17 +78,18 @@ function analysisUpdateLoop() {
         root.rollouts >= MIN_ROLLOUTS_NEEDED_TO_DECLARE_STATE_TERMINAL &&
         (meanValue > MAX_MEAN_VALUE_BEFORE_DECLARING_VICTORY ||
           meanValue < MIN_MEAN_VALUE_BEFORE_DECLARING_DEFEAT);
-      if (isTerminal) {
-        const now = Date.now();
-        if (now > lastPosted + MILLISECONDS_BETWEEN_TERMINAL_POSTS) {
-          postAnalysisUpdate(analyzer);
-        }
-        lastPosted = now;
-      } else {
+
+      if (!isTerminal) {
         for (let i = 0; i < ROLLOUT_BATCH_SIZE; i++) {
           analyzer.performRollout();
         }
+      }
+
+      const now = Date.now();
+      const shouldPost = now > lastPosted + MIN_MILLISECONDS_BETWEEN_POSTS;
+      if (shouldPost) {
         postAnalysisUpdate(analyzer);
+        lastPosted = now;
       }
     },
   });

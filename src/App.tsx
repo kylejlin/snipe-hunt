@@ -379,14 +379,19 @@ export default class App extends React.Component<{}, AppState> {
               const afterPerformingBest = getAnalyzer(
                 analyzer.forcePerform(bestAtomic)
               );
-              const bestAtomicMeanValue = analysis.value / analysis.rollouts;
+              const currentStateMeanValue =
+                analysis.currentStateValue / analysis.currentStateRollouts;
+              const bestAtomicMeanValue =
+                analysis.bestAtomicValue / analysis.bestAtomicRollouts;
 
               return (
                 <>
                   <h4>
-                    MCTS (v̅ = {bestAtomicMeanValue.toFixed(3)}, n ={" "}
-                    {analysis.rollouts}
-                    ):
+                    MCTS (before: [v̅ = {currentStateMeanValue.toFixed(3)}, n ={" "}
+                    {analysis.currentStateRollouts}
+                    ], after: [v̅ = {bestAtomicMeanValue.toFixed(3)}, n ={" "}
+                    {analysis.bestAtomicRollouts}
+                    ]):
                   </h4>
                   {"plyType" in bestAtomic ? (
                     <PlyView ply={bestAtomic} plyNumber={plies.length + 3} />

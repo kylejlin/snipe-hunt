@@ -2,10 +2,11 @@ import { Option, option } from "rusty-ts";
 import randInt from "./randInt";
 import { Atomic, GameAnalyzer, GameState } from "./types";
 
-export interface MctsUtils {
+export interface MctsAnalyzer {
   performRollout(): void;
   getRoot(): Node;
   getBestAtomic(): Option<Atomic>;
+  getChildWithBestAtomic(): Option<Node>;
 }
 
 export interface Node {
@@ -26,7 +27,7 @@ const EXPLORATION_CONSTANT = 2;
 export function getMctsUtils(
   state: GameState,
   analyzer: GameAnalyzer
-): MctsUtils {
+): MctsAnalyzer {
   const root: Node = {
     edgeConnectingToParent: undefined,
     state,
@@ -38,7 +39,7 @@ export function getMctsUtils(
   analyzer.setState(state);
   const perspective = analyzer.getTurn();
 
-  return { performRollout, getRoot, getBestAtomic };
+  return { performRollout, getRoot, getBestAtomic, getChildWithBestAtomic };
 
   function performRollout(): void {
     let node = root;
@@ -186,6 +187,21 @@ export function getMctsUtils(
       if (childScore > bestScore) {
         best = child.edgeConnectingToParent!.atomic;
         bestScore = childScore;
+      }
+    }
+    return option.fromVoidable(best);
+  }
+
+  function getChildWithBestAtomic(): Option<Node> {
+    let best: Node | undefined = undefined;
+    for (const child of root.children) {
+      if (best === undefined) {
+        best = child;
+        continue;
+      }
+
+      if (child.value / child.rollouts > best.value / best.rollouts) {
+        best = child;
       }
     }
     return option.fromVoidable(best);

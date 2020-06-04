@@ -32,9 +32,12 @@ export interface FutureSubPlyStack {
 }
 
 export interface MctsAnalysis {
+  currentStateValue: number;
+  currentStateRollouts: number;
+
   bestAtomic: Atomic;
-  value: number;
-  rollouts: number;
+  bestAtomicValue: number;
+  bestAtomicRollouts: number;
 }
 
 export interface GameAnalyzer {

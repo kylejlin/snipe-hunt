@@ -1,6 +1,6 @@
 import { option, Option } from "rusty-ts";
 import { getAnalyzer } from "../analyzer";
-import { getMctsUtils, MctsUtils } from "../mcts";
+import { getMctsUtils, MctsAnalyzer } from "../mcts";
 import {
   GameState,
   MctsWorkerMessage,
@@ -20,7 +20,7 @@ const MIN_MILLISECONDS_BETWEEN_POSTS = 0.2e3;
 
 declare const self: Worker;
 
-let optMctsAnalyzer: Option<MctsUtils> = option.none();
+let optMctsAnalyzer: Option<MctsAnalyzer> = option.none();
 let lastPosted = 0;
 
 self.addEventListener("message", (e) => {
@@ -49,7 +49,7 @@ function onGameStateUpdateRequest(
   optMctsAnalyzer = getMctsAnalyzer(message.gameState);
 }
 
-function getMctsAnalyzer(gameState: GameState): Option<MctsUtils> {
+function getMctsAnalyzer(gameState: GameState): Option<MctsAnalyzer> {
   const gameAnalyzer = getAnalyzer(gameState);
   if (gameAnalyzer.isGameOver()) {
     return option.none();
@@ -97,17 +97,19 @@ function analysisUpdateLoop() {
   requestAnimationFrame(analysisUpdateLoop);
 }
 
-function postAnalysisUpdate(analyzer: MctsUtils): void {
+function postAnalysisUpdate(analyzer: MctsAnalyzer): void {
+  const [bestAtomic, childWithBestAtomic] = option
+    .all([analyzer.getBestAtomic(), analyzer.getChildWithBestAtomic()])
+    .expect("Impossible: optMctsAnalyzer is some when game has already eneded");
   const message: UpdateMctsAnalysisNotification = {
     messageType: WorkerMessageType.UpdateMctsAnalysisNotification,
     optAnalysis: {
-      bestAtomic: analyzer
-        .getBestAtomic()
-        .expect(
-          "Impossible: optMctsAnalyzer is some when game has already eneded"
-        ),
-      value: analyzer.getRoot().value,
-      rollouts: analyzer.getRoot().rollouts,
+      currentStateValue: analyzer.getRoot().value,
+      currentStateRollouts: analyzer.getRoot().rollouts,
+
+      bestAtomic,
+      bestAtomicValue: childWithBestAtomic.value,
+      bestAtomicRollouts: childWithBestAtomic.rollouts,
     },
   };
   self.postMessage(message);

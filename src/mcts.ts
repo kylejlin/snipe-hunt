@@ -22,7 +22,7 @@ interface EdgeConnectingToParent {
   atomic: Atomic;
 }
 
-const EXPLORATION_CONSTANT = 2;
+const EXPLORATION_CONSTANT = Math.sqrt(2);
 
 export function getMctsUtils(
   state: GameState,

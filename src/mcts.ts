@@ -104,9 +104,9 @@ export function getMctsUtils(
     }
 
     const rawMeanValue = node.value / node.rollouts;
-    const meanValue = invertMeanValue ? 1 - rawMeanValue : rawMeanValue;
+    const adjustedMeanValue = invertMeanValue ? 1 - rawMeanValue : rawMeanValue;
     return (
-      meanValue +
+      adjustedMeanValue +
       EXPLORATION_CONSTANT * Math.sqrt(Math.log(parentRollouts) / node.rollouts)
     );
   }
@@ -180,30 +180,23 @@ export function getMctsUtils(
   }
 
   function getBestAtomic(): Option<Atomic> {
-    let best: Atomic | undefined = undefined;
-    let bestScore = -Infinity;
-    for (const child of root.children) {
-      const childScore = child.value / child.rollouts;
-      if (childScore > bestScore) {
-        best = child.edgeConnectingToParent!.atomic;
-        bestScore = childScore;
-      }
-    }
-    return option.fromVoidable(best);
+    return getChildWithBestAtomic().map(
+      (child) => child.edgeConnectingToParent!.atomic
+    );
   }
 
   function getChildWithBestAtomic(): Option<Node> {
-    let best: Node | undefined = undefined;
+    let bestChild: Node | undefined = undefined;
     for (const child of root.children) {
-      if (best === undefined) {
-        best = child;
+      if (bestChild === undefined) {
+        bestChild = child;
         continue;
       }
 
-      if (child.value / child.rollouts > best.value / best.rollouts) {
-        best = child;
+      if (child.rollouts > bestChild.rollouts) {
+        bestChild = child;
       }
     }
-    return option.fromVoidable(best);
+    return option.fromVoidable(bestChild);
   }
 }

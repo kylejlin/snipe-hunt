@@ -34,7 +34,7 @@ import {
 import MctsWorker from "./workers/mcts.importable";
 
 export default class App extends React.Component<{}, AppState> {
-  private mctsWorker: Worker;
+  private mctsWorker: Worker | undefined;
   private hasMounted: boolean;
 
   constructor(props: {}) {
@@ -46,15 +46,16 @@ export default class App extends React.Component<{}, AppState> {
 
     (window as any).app = this;
 
-    this.mctsWorker = new MctsWorker();
-    this.mctsWorker.addEventListener("message", this.onMctsWorkerMessage);
-
-    this.updateMctsAnalyzerGameState(this.state.gameState);
-
     this.hasMounted = false;
   }
 
   componentDidMount(): void {
+    const mctsWorker = new MctsWorker();
+    mctsWorker.addEventListener("message", this.onMctsWorkerMessage);
+    this.mctsWorker = mctsWorker;
+
+    this.updateMctsAnalyzerGameState(this.state.gameState);
+
     this.hasMounted = true;
   }
 
@@ -68,6 +69,12 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   updateMctsAnalyzerGameState(gameState: GameState): void {
+    if (this.mctsWorker === undefined) {
+      throw new Error(
+        "Cannot updateMctsAnalyzerGameState() because mctsAnalyzer has not been initialized yet."
+      );
+    }
+
     const message: UpdateMctsAnalyzerGameStateRequest = {
       messageType: WorkerMessageType.UpdateMctsAnalyzerGameStateRequest,
       gameState,

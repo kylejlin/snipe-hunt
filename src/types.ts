@@ -27,8 +27,7 @@ export interface GameState {
 
 export interface FutureSubPlyStack {
   stateVersion: typeof STATE_VERSION;
-  plies: Ply[];
-  pendingAnimalStep: Option<AnimalStep>;
+  atomics: Atomic[];
 }
 
 export interface MctsAnalysis {

@@ -30,6 +30,8 @@ import {
   WorkerMessageType,
   MctsAnalysis,
   UpdateMctsAnalyzerGameStateRequest,
+  Ply,
+  Atomic,
 } from "./types";
 import MctsWorker from "./workers/mcts.importable";
 
@@ -101,7 +103,7 @@ export default class App extends React.Component<{}, AppState> {
     const currentBoard = analyzer.getBoard();
     const plies = analyzer.getPlies();
 
-    const { selectedCardType: selectedCard, futureSubPlyStack } = this.state.ux;
+    const { selectedCardType: selectedCard } = this.state.ux;
 
     return (
       <div className="SnipeHunt">
@@ -355,23 +357,7 @@ export default class App extends React.Component<{}, AppState> {
             })}
           </ol>
           <h4>Future sub plies</h4>
-          <ol className="Plies">
-            {futureSubPlyStack.pendingAnimalStep.match({
-              some: (step) => (
-                <FutureAnimalStepView
-                  step={step}
-                  plyNumber={plies.length + 3}
-                />
-              ),
-              none: () => null,
-            })}
-            {futureSubPlyStack.plies
-              .slice()
-              .reverse()
-              .map((ply, i) => (
-                <PlyView ply={ply} plyNumber={plies.length + 3 + i} />
-              ))}
-          </ol>
+          <ol className="Plies">{this.renderFutureSubPlies()}</ol>
           <button onClick={this.onUndoSubPlyClicked}>Back</button>
           <button onClick={this.onRedoSubPlyClicked}>Forward</button>
         </div>
@@ -561,6 +547,87 @@ export default class App extends React.Component<{}, AppState> {
     ));
   }
 
+  renderFutureSubPlies() {
+    const chronological = this.state.ux.futureSubPlyStack.atomics
+      .slice()
+      .reverse();
+    let preTurnsAnimalStep: Option<AnimalStep> = option.none();
+    const turns: Ply[] = [];
+    let postTurnsAnimalStep: Option<AnimalStep> = option.none();
+
+    let i = 0;
+    while (i < chronological.length) {
+      const next = chronological[i];
+
+      if ("plyType" in next) {
+        turns.push(next);
+        i++;
+      } else if (i + 1 < chronological.length) {
+        i++;
+        const nextNext = chronological[i];
+
+        if ("plyType" in nextNext) {
+          preTurnsAnimalStep = option.some(next);
+
+          turns.push(nextNext);
+          i++;
+        } else {
+          turns.push({
+            plyType: PlyType.TwoAnimalSteps,
+            first: next,
+            second: nextNext,
+          });
+          i++;
+        }
+      } else {
+        postTurnsAnimalStep = option.some(next);
+        i++;
+      }
+    }
+
+    const { plies } = this.state.gameState;
+    const analyzer = getAnalyzer(this.state.gameState);
+
+    return (
+      <>
+        {preTurnsAnimalStep.match({
+          none: () => null,
+          some: (step) => (
+            <FutureAnimalStepView step={step} plyNumber={plies.length + 3} />
+          ),
+        })}
+
+        {turns.map((ply, i) => (
+          <PlyView
+            ply={ply}
+            plyNumber={
+              plies.length +
+              3 +
+              preTurnsAnimalStep.match({ none: () => 0, some: () => 1 }) +
+              i
+            }
+          />
+        ))}
+
+        {postTurnsAnimalStep.match({
+          none: () => null,
+          some: (step) => (
+            <AnimalStepView
+              step={step}
+              plyNumber={
+                plies.length +
+                3 +
+                preTurnsAnimalStep.match({ none: () => 0, some: () => 1 }) +
+                turns.length
+              }
+              winner={getAnalyzer(analyzer.forcePerform(step)).getWinner()}
+            />
+          ),
+        })}
+      </>
+    );
+  }
+
   onCardClicked(clicked: Card): void {
     const analyzer = getAnalyzer(this.state.gameState);
     if (clicked.allegiance !== analyzer.getTurn()) {
@@ -605,8 +672,7 @@ export default class App extends React.Component<{}, AppState> {
       this.updateUxState({
         futureSubPlyStack: {
           stateVersion: STATE_VERSION,
-          pendingAnimalStep: option.none(),
-          plies: [],
+          atomics: this.state.ux.futureSubPlyStack.atomics.slice(0, -1),
         },
       });
 
@@ -682,7 +748,7 @@ export default class App extends React.Component<{}, AppState> {
     undoResult.match({
       ok: ({ newState: newGameState, undone }) => {
         this.updateUxState({
-          futureSubPlyStack: this.getNewFutureSubPlyStack(undone),
+          futureSubPlyStack: this.getFutureSubPlyStackAfterUndoing(undone),
         });
 
         this.saveAndUpdateGameState(newGameState);
@@ -694,101 +760,40 @@ export default class App extends React.Component<{}, AppState> {
     });
   }
 
-  getNewFutureSubPlyStack(
-    undone: SnipeStep | Drop | AnimalStep
+  getFutureSubPlyStackAfterUndoing(
+    undone: Atomic
   ): AppState["ux"]["futureSubPlyStack"] {
     const stack = this.state.ux.futureSubPlyStack;
 
-    return stack.pendingAnimalStep.match({
-      some: (pending) => {
-        if ("plyType" in undone) {
-          throw new Error(
-            "Unreachable: Cannot undo a non-animal-step atomic if there is an animal step was just undone."
-          );
-        }
-        return {
-          stateVersion: stack.stateVersion,
-          pendingAnimalStep: option.none(),
-          plies: stack.plies.concat([
-            { plyType: PlyType.TwoAnimalSteps, first: undone, second: pending },
-          ]),
-        };
-      },
-
-      none: () => {
-        if ("plyType" in undone) {
-          return {
-            stateVersion: stack.stateVersion,
-            pendingAnimalStep: option.none(),
-            plies: stack.plies.concat([undone]),
-          };
-        }
-
-        return {
-          stateVersion: stack.stateVersion,
-          pendingAnimalStep: option.some(undone),
-          plies: stack.plies,
-        };
-      },
-    });
+    return {
+      stateVersion: stack.stateVersion,
+      atomics: stack.atomics.concat([undone]),
+    };
   }
 
   onRedoSubPlyClicked(): void {
-    if (!this.canRedoSubPly()) {
+    const { futureSubPlyStack } = this.state.ux;
+    const { atomics } = futureSubPlyStack;
+
+    if (atomics.length === 0) {
       alert("Nothing to redo.");
       return;
     }
 
+    const nextAtomic = atomics[atomics.length - 1];
     const analyzer = getAnalyzer(this.state.gameState);
-    const stack = this.state.ux.futureSubPlyStack;
-
-    const redoResult = stack.pendingAnimalStep.match({
-      some: (step) => {
-        this.updateUxState({
-          futureSubPlyStack: {
-            stateVersion: stack.stateVersion,
-            pendingAnimalStep: option.none(),
-            plies: this.state.ux.futureSubPlyStack.plies,
-          },
-        });
-
-        return analyzer.tryPerform(step);
-      },
-
-      none: () => {
-        const nextPly = stack.plies[stack.plies.length - 1];
-        const newPlies = stack.plies.slice(0, -1);
-
-        if (nextPly.plyType === PlyType.TwoAnimalSteps) {
-          this.updateUxState({
-            futureSubPlyStack: {
-              stateVersion: stack.stateVersion,
-              pendingAnimalStep: option.some(nextPly.second),
-              plies: newPlies,
-            },
-          });
-
-          return analyzer.tryPerform(nextPly.first);
-        } else {
-          this.updateUxState({
-            futureSubPlyStack: {
-              stateVersion: stack.stateVersion,
-              pendingAnimalStep: option.none(),
-              plies: newPlies,
-            },
-          });
-
-          return analyzer.tryPerform(nextPly);
-        }
-      },
-    });
+    const redoResult = analyzer.tryPerform(nextAtomic);
 
     this.updateGameStateOrAlertError(redoResult);
-  }
 
-  canRedoSubPly(): boolean {
-    const stack = this.state.ux.futureSubPlyStack;
-    return stack.pendingAnimalStep.isSome() || stack.plies.length > 0;
+    redoResult.ifOk(() => {
+      this.updateUxState({
+        futureSubPlyStack: {
+          stateVersion: futureSubPlyStack.stateVersion,
+          atomics: atomics.slice(0, -1),
+        },
+      });
+    });
   }
 
   onResetClicked(): void {
@@ -800,8 +805,7 @@ export default class App extends React.Component<{}, AppState> {
           selectedCardType: option.none(),
           futureSubPlyStack: {
             stateVersion: STATE_VERSION,
-            pendingAnimalStep: option.none(),
-            plies: [],
+            atomics: [],
           },
         },
         mctsAnalysis: option.none(),
@@ -852,8 +856,7 @@ function loadState(): AppState {
     .unwrapOrElse(() => {
       const newStack: FutureSubPlyStack = {
         stateVersion: STATE_VERSION,
-        pendingAnimalStep: option.none(),
-        plies: [],
+        atomics: [],
       };
       futureSubPlyStackSaver.setState(newStack);
       return newStack;

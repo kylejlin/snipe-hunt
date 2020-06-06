@@ -49,8 +49,7 @@ export const futureSubPlyStackSaver: StateSaver<FutureSubPlyStack> = {
   setState(state: FutureSubPlyStack) {
     const jsonified = {
       stateVersion: state.stateVersion,
-      pendingAnimalStep: state.pendingAnimalStep.unwrapOr(null),
-      plies: state.plies,
+      atomics: state.atomics,
     };
     const stateStr = JSON.stringify(jsonified);
     localStorage.setItem(LocalStorageKeys.FutureSubPlyStack, stateStr);

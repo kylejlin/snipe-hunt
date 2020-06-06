@@ -811,6 +811,7 @@ export default class App extends React.Component<{}, AppState> {
         mctsAnalysis: option.none(),
       };
       gameStateSaver.setState(state.gameState);
+      futureSubPlyStackSaver.setState(state.ux.futureSubPlyStack);
       this.setState(state);
     }
   }

@@ -1,8 +1,6 @@
 import { option, Option } from "rusty-ts";
-import { getAnalyzer } from "../analyzer";
-import { getMctsUtils, MctsAnalyzer } from "../mcts";
+import { getMctsAnalyzerIfStateIsNonTerminal, MctsAnalyzer } from "../mcts";
 import {
-  GameState,
   MctsWorkerMessage,
   UpdateMctsAnalysisNotification,
   UpdateMctsAnalyzerGameStateRequest,
@@ -46,19 +44,7 @@ self.addEventListener("message", (e) => {
 function onGameStateUpdateRequest(
   message: UpdateMctsAnalyzerGameStateRequest
 ): void {
-  optMctsAnalyzer = getMctsAnalyzer(message.gameState);
-}
-
-function getMctsAnalyzer(gameState: GameState): Option<MctsAnalyzer> {
-  const gameAnalyzer = getAnalyzer(gameState);
-  if (gameAnalyzer.isGameOver()) {
-    return option.none();
-  }
-
-  const mctsAnalyzer = getMctsUtils(gameState, getAnalyzer(gameState));
-  mctsAnalyzer.performRollout();
-  mctsAnalyzer.performRollout();
-  return option.some(mctsAnalyzer);
+  optMctsAnalyzer = getMctsAnalyzerIfStateIsNonTerminal(message.gameState);
 }
 
 function analysisUpdateLoop() {

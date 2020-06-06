@@ -1,6 +1,7 @@
 import { Option, option } from "rusty-ts";
+import { getAnalyzer } from "./analyzer";
 import randInt from "./randInt";
-import { Atomic, GameAnalyzer, GameState } from "./types";
+import { Atomic, GameAnalyzer, GameState, Player } from "./types";
 
 export interface MctsAnalyzer {
   performRollout(): void;
@@ -11,7 +12,7 @@ export interface MctsAnalyzer {
 
 export interface Node {
   edgeConnectingToParent: EdgeConnectingToParent | undefined;
-  state: GameState;
+  state: MinimalGameState;
   value: number;
   rollouts: number;
   children: Node[];
@@ -22,9 +23,26 @@ interface EdgeConnectingToParent {
   atomic: Atomic;
 }
 
+export interface MinimalGameState {
+  currentBoard: Int32Array;
+  turn: Player;
+  pendingAnimalStep: number;
+}
+
 const EXPLORATION_CONSTANT = Math.sqrt(2);
 
-export function getMctsUtils(
+export function getMctsAnalyzerIfStateIsNonTerminal(
+  state: GameState
+): Option<MctsAnalyzer> {
+  const analyzer = getAnalyzer(state);
+  if (analyzer.isGameOver()) {
+    return option.none();
+  } else {
+    return option.some(getMctsAnalyzerForNonTerminalState(state, analyzer));
+  }
+}
+
+function getMctsAnalyzerForNonTerminalState(
   state: GameState,
   analyzer: GameAnalyzer
 ): MctsAnalyzer {
@@ -37,7 +55,6 @@ export function getMctsUtils(
   };
 
   analyzer.setState(state);
-  const perspective = analyzer.getTurn();
 
   return { performRollout, getRoot, getBestAtomic, getChildWithBestAtomic };
 
@@ -49,13 +66,14 @@ export function getMctsUtils(
     }
     const leaf = node;
 
-    if (leaf.rollouts === 0) {
+    if (leaf.rollouts === 0 && leaf !== root) {
       rolloutIfNonTerminalThenBackPropagate(leaf);
     } else {
       analyzer.setState(leaf.state);
       analyzer.getWinner().match({
         some: (winner) => {
-          const valueIncrease = winner === perspective ? 1 : 0;
+          const valueIncrease =
+            winner === leaf.edgeConnectingToParent!.parent.state.turn ? 1 : 0;
           updateAndBackPropagate(leaf, valueIncrease);
         },
         none: () => {
@@ -72,15 +90,14 @@ export function getMctsUtils(
   }
 
   function selectBestChildAccordingToActivePlayer(node: Node): Node {
-    const invertMeanValue = node.state.turn !== perspective;
     const { children } = node;
 
-    let maxScore = getScore(children[0], node.rollouts, invertMeanValue);
+    let maxScore = getUcbScore(children[0], node.rollouts);
     let bestNode = children[0];
 
     for (let i = 1; i < children.length; i++) {
       const child = children[i];
-      const score = getScore(child, node.rollouts, invertMeanValue);
+      const score = getUcbScore(child, node.rollouts);
       if (score > maxScore) {
         maxScore = score;
         bestNode = child;
@@ -91,27 +108,24 @@ export function getMctsUtils(
   }
 
   /**
-   * Upper confidence bound (UCB1) as described in
+   * Upper confidence bound (UCB1) based on
    * https://www.youtube.com/watch?v=UXW2yZndl7U
    */
-  function getScore(
-    node: Node,
-    parentRollouts: number,
-    invertMeanValue: boolean
-  ) {
+  function getUcbScore(node: Node, parentRollouts: number) {
     if (node.rollouts === 0 || parentRollouts === 0) {
       return Infinity;
     }
 
-    const rawMeanValue = node.value / node.rollouts;
-    const adjustedMeanValue = invertMeanValue ? 1 - rawMeanValue : rawMeanValue;
+    const meanValue = node.value / node.rollouts;
     return (
-      adjustedMeanValue +
+      meanValue +
       EXPLORATION_CONSTANT * Math.sqrt(Math.log(parentRollouts) / node.rollouts)
     );
   }
 
   function rolloutIfNonTerminalThenBackPropagate(node: Node): void {
+    const perspective = node.edgeConnectingToParent!.parent.state.turn;
+
     analyzer.setState(node.state);
     const winner = analyzer.getWinner();
 
@@ -125,14 +139,18 @@ export function getMctsUtils(
       },
 
       none: () => {
-        return rollout(node.state);
+        return rollout(node.state, perspective);
       },
     });
 
     updateAndBackPropagate(node, valueIncrease);
   }
 
-  function rollout(state: GameState): 0 | 1 {
+  function setAnalyzerState(state: MinimalGameState): void {
+    analyzer.setState(state as GameState);
+  }
+
+  function rollout(state: GameState, perspective: Player): 0 | 1 {
     analyzer.setState(state);
 
     let atomics = analyzer.getLegalAtomics();

@@ -212,7 +212,7 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
                 : Offset.BetaAnimals)
           ];
 
-        if (friendlyAnimals) {
+        if (bitCount(friendlyAnimals) > 1) {
           for (const cardType of allAnimalTypes) {
             if ((1 << cardType) & friendlyAnimals) {
               const desinations = canRetreat(cardType)

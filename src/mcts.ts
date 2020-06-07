@@ -53,8 +53,14 @@ function getMctsAnalyzerForNonTerminalState(
     rollouts: 0,
     children: [],
   };
+  return getMctsAnalyzerForNonTerminalStateFromRoot(root, analyzer);
+}
 
-  analyzer.setState(state);
+export function getMctsAnalyzerForNonTerminalStateFromRoot(
+  root: Node,
+  analyzer: MinimalGameAnalyzer
+): MctsAnalyzer {
+  analyzer.setState(root.state);
 
   return { performRollout, getRoot, getBestAtomic, getChildWithBestAtomic };
 

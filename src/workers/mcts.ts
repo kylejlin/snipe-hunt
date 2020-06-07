@@ -1,11 +1,17 @@
 import { option, Option } from "rusty-ts";
-import { getMctsAnalyzerIfStateIsNonTerminal, MctsAnalyzer } from "../mcts";
+import {
+  getMctsAnalyzerIfStateIsNonTerminal,
+  MctsAnalyzer,
+  getMctsAnalyzerForNonTerminalStateFromRoot,
+} from "../mcts";
 import {
   MctsWorkerMessage,
   UpdateMctsAnalysisNotification,
   UpdateMctsAnalyzerGameStateRequest,
   WorkerMessageType,
 } from "../types";
+import { getAnalyzer } from "../analyzer";
+import { getMinimalGameStateAnalyzer } from "../minimalAnalyzer";
 
 export {};
 
@@ -44,7 +50,33 @@ self.addEventListener("message", (e) => {
 function onGameStateUpdateRequest(
   message: UpdateMctsAnalyzerGameStateRequest
 ): void {
-  optMctsAnalyzer = getMctsAnalyzerIfStateIsNonTerminal(message.gameState);
+  const newGameState = message.gameState;
+
+  const optRecycledAnalyzer = optMctsAnalyzer.andThen((mctsAnalyzer) => {
+    const selectedChild = mctsAnalyzer
+      .getRoot()
+      .children.find(
+        (child) =>
+          getMinimalGameStateAnalyzer(child.state).toNodeKey() ===
+          getMinimalGameStateAnalyzer(newGameState).toNodeKey()
+      );
+
+    if (selectedChild !== undefined) {
+      selectedChild.edgeConnectingToParent = undefined;
+      return option.some(
+        getMctsAnalyzerForNonTerminalStateFromRoot(
+          selectedChild,
+          getMinimalGameStateAnalyzer(selectedChild.state)
+        )
+      );
+    } else {
+      return option.none();
+    }
+  });
+
+  optMctsAnalyzer = optRecycledAnalyzer.orElse(() => {
+    return getMctsAnalyzerIfStateIsNonTerminal(newGameState);
+  });
 }
 
 function analysisUpdateLoop() {

@@ -1,7 +1,13 @@
 import { Option, option } from "rusty-ts";
-import { getAnalyzer } from "./analyzer";
+import { getMinimalGameStateAnalyzer } from "./minimalAnalyzer";
 import randInt from "./randInt";
-import { Atomic, GameAnalyzer, GameState, Player } from "./types";
+import {
+  Atomic,
+  GameState,
+  MinimalGameState,
+  Player,
+  MinimalGameAnalyzer,
+} from "./types";
 
 export interface MctsAnalyzer {
   performRollout(): void;
@@ -23,18 +29,12 @@ interface EdgeConnectingToParent {
   atomic: Atomic;
 }
 
-export interface MinimalGameState {
-  currentBoard: Int32Array;
-  turn: Player;
-  pendingAnimalStep: number;
-}
-
 const EXPLORATION_CONSTANT = Math.sqrt(2);
 
 export function getMctsAnalyzerIfStateIsNonTerminal(
   state: GameState
 ): Option<MctsAnalyzer> {
-  const analyzer = getAnalyzer(state);
+  const analyzer = getMinimalGameStateAnalyzer(state);
   if (analyzer.isGameOver()) {
     return option.none();
   } else {
@@ -44,7 +44,7 @@ export function getMctsAnalyzerIfStateIsNonTerminal(
 
 function getMctsAnalyzerForNonTerminalState(
   state: GameState,
-  analyzer: GameAnalyzer
+  analyzer: MinimalGameAnalyzer
 ): MctsAnalyzer {
   const root: Node = {
     edgeConnectingToParent: undefined,
@@ -72,9 +72,7 @@ function getMctsAnalyzerForNonTerminalState(
       analyzer.setState(leaf.state);
       analyzer.getWinner().match({
         some: (winner) => {
-          const valueIncrease =
-            winner === leaf.edgeConnectingToParent!.parent.state.turn ? 1 : 0;
-          updateAndBackPropagate(leaf, valueIncrease);
+          updateAndBackPropagate(leaf, winner);
         },
         none: () => {
           const children = getChildren(leaf);
@@ -124,33 +122,15 @@ function getMctsAnalyzerForNonTerminalState(
   }
 
   function rolloutIfNonTerminalThenBackPropagate(node: Node): void {
-    const perspective = node.edgeConnectingToParent!.parent.state.turn;
-
     analyzer.setState(node.state);
-    const winner = analyzer.getWinner();
+    const optWinner = analyzer.getWinner();
 
-    const valueIncrease = winner.match({
-      some: (winner) => {
-        if (winner === perspective) {
-          return 1;
-        } else {
-          return 0;
-        }
-      },
+    const winner = optWinner.unwrapOrElse(() => rollout(node.state));
 
-      none: () => {
-        return rollout(node.state, perspective);
-      },
-    });
-
-    updateAndBackPropagate(node, valueIncrease);
+    updateAndBackPropagate(node, winner);
   }
 
-  function setAnalyzerState(state: MinimalGameState): void {
-    analyzer.setState(state as GameState);
-  }
-
-  function rollout(state: GameState, perspective: Player): 0 | 1 {
+  function rollout(state: MinimalGameState): Player {
     analyzer.setState(state);
 
     let atomics = analyzer.getLegalAtomics();
@@ -160,23 +140,25 @@ function getMctsAnalyzerForNonTerminalState(
       atomics = analyzer.getLegalAtomics();
     }
 
-    const winner = analyzer
+    return analyzer
       .getWinner()
       .expect("Impossible: No winner but no nextStates");
-    if (winner === perspective) {
-      return 1;
-    } else {
-      return 0;
-    }
   }
 
-  function updateAndBackPropagate(leaf: Node, valueIncrease: number): void {
-    let node: Node | undefined = leaf;
-    while (node !== undefined) {
-      node.value += valueIncrease;
+  function updateAndBackPropagate(leaf: Node, winner: Player): void {
+    let node = leaf;
+    let parent = node.edgeConnectingToParent?.parent;
+
+    while (parent !== undefined) {
+      node.value += winner === parent.state.turn ? 1 : 0;
       node.rollouts += 1;
-      node = node.edgeConnectingToParent?.parent;
+
+      node = parent;
+      parent = node.edgeConnectingToParent?.parent;
     }
+
+    node.value += winner === node.state.turn ? 1 : 0;
+    node.rollouts += 1;
   }
 
   function getChildren(node: Node): Node[] {

@@ -10,7 +10,6 @@ import {
   UpdateMctsAnalyzerGameStateRequest,
   WorkerMessageType,
 } from "../types";
-import { getAnalyzer } from "../analyzer";
 import { getMinimalGameStateAnalyzer } from "../minimalAnalyzer";
 
 export {};
@@ -62,7 +61,15 @@ function onGameStateUpdateRequest(
       );
 
     if (selectedChild !== undefined) {
+      if (
+        selectedChild.edgeConnectingToParent!.parent.state.turn !==
+        selectedChild.state.turn
+      ) {
+        selectedChild.value = selectedChild.rollouts - selectedChild.value;
+      }
+
       selectedChild.edgeConnectingToParent = undefined;
+
       return option.some(
         getMctsAnalyzerForNonTerminalStateFromRoot(
           selectedChild,

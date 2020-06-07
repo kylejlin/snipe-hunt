@@ -8,6 +8,7 @@ import {
   Player,
   MinimalGameAnalyzer,
 } from "./types";
+import { opponentOf } from "./gameUtil";
 
 export interface MctsAnalyzer {
   performRollout(): void;
@@ -19,6 +20,7 @@ export interface MctsAnalyzer {
 export interface Node {
   edgeConnectingToParent: EdgeConnectingToParent | undefined;
   state: MinimalGameState;
+  effectiveWinner: Player | undefined;
   value: number;
   rollouts: number;
   children: Node[];
@@ -49,6 +51,7 @@ function getMctsAnalyzerForNonTerminalState(
   const root: Node = {
     edgeConnectingToParent: undefined,
     state,
+    effectiveWinner: undefined,
     value: 0,
     rollouts: 0,
     children: [],
@@ -78,7 +81,8 @@ export function getMctsAnalyzerForNonTerminalStateFromRoot(
       analyzer.setState(leaf.state);
       analyzer.getWinner().match({
         some: (winner) => {
-          updateAndBackPropagate(leaf, winner);
+          updateAndBackPropagateRollout(leaf, winner);
+          markAsTerminal(leaf, winner);
         },
         none: () => {
           const children = getChildren(leaf);
@@ -94,6 +98,9 @@ export function getMctsAnalyzerForNonTerminalStateFromRoot(
   }
 
   function selectBestChildAccordingToActivePlayer(node: Node): Node {
+    const activePlayer = node.state.turn;
+    const activePlayerOpponent = opponentOf(activePlayer);
+
     const { children } = node;
 
     let maxScore = getUcbScore(children[0], node.rollouts);
@@ -101,11 +108,24 @@ export function getMctsAnalyzerForNonTerminalStateFromRoot(
 
     for (let i = 1; i < children.length; i++) {
       const child = children[i];
+
+      if (child.effectiveWinner === activePlayer) {
+        return child;
+      }
+
       const score = getUcbScore(child, node.rollouts);
-      if (score > maxScore) {
+      if (
+        score > maxScore ||
+        (bestNode.effectiveWinner === activePlayerOpponent &&
+          child.effectiveWinner !== activePlayerOpponent)
+      ) {
         maxScore = score;
         bestNode = child;
       }
+    }
+
+    if (bestNode.effectiveWinner === activePlayerOpponent) {
+      markAsTerminal(node, activePlayerOpponent);
     }
 
     return bestNode;
@@ -131,9 +151,13 @@ export function getMctsAnalyzerForNonTerminalStateFromRoot(
     analyzer.setState(node.state);
     const optWinner = analyzer.getWinner();
 
+    optWinner.ifSome((winner) => {
+      markAsTerminal(node, winner);
+    });
+
     const winner = optWinner.unwrapOrElse(() => rollout(node.state));
 
-    updateAndBackPropagate(node, winner);
+    updateAndBackPropagateRollout(node, winner);
   }
 
   function rollout(state: MinimalGameState): Player {
@@ -151,7 +175,7 @@ export function getMctsAnalyzerForNonTerminalStateFromRoot(
       .expect("Impossible: No winner but no nextStates");
   }
 
-  function updateAndBackPropagate(leaf: Node, winner: Player): void {
+  function updateAndBackPropagateRollout(leaf: Node, winner: Player): void {
     let node = leaf;
     let parent = node.edgeConnectingToParent?.parent;
 
@@ -167,6 +191,20 @@ export function getMctsAnalyzerForNonTerminalStateFromRoot(
     node.rollouts += 1;
   }
 
+  function markAsTerminal(leaf: Node, winner: Player): void {
+    let node = leaf;
+    let parent = node.edgeConnectingToParent?.parent;
+
+    while (parent !== undefined && parent.state.turn === winner) {
+      node.effectiveWinner = winner;
+
+      node = parent;
+      parent = node.edgeConnectingToParent?.parent;
+    }
+
+    node.effectiveWinner = winner;
+  }
+
   function getChildren(node: Node): Node[] {
     analyzer.setState(node.state);
     return analyzer.getLegalAtomics().map((atomic) => ({
@@ -175,6 +213,7 @@ export function getMctsAnalyzerForNonTerminalStateFromRoot(
         atomic,
       },
       state: analyzer.forcePerform(atomic),
+      effectiveWinner: undefined,
       value: 0,
       rollouts: 0,
       children: [],

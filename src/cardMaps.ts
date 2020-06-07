@@ -31,7 +31,7 @@ export const cardProperties: CardMap<CardProperties> = {
     elements: option.some({ double: Element.Air, single: Element.Water }),
     elementCounts: ElementCount.A2 | ElementCount.W1,
     tripletShifts: [TripletShift.Air, TripletShift.Water],
-    canRetreat: false,
+    canRetreat: true,
   },
   [CardType.Dragon1]: {
     elements: option.some({ double: Element.Air, single: Element.Air }),
@@ -129,7 +129,7 @@ export const cardProperties: CardMap<CardProperties> = {
     elements: option.some({ double: Element.Air, single: Element.Water }),
     elementCounts: ElementCount.A2 | ElementCount.W1,
     tripletShifts: [TripletShift.Air, TripletShift.Water],
-    canRetreat: false,
+    canRetreat: true,
   },
   [CardType.Dragon2]: {
     elements: option.some({ double: Element.Air, single: Element.Air }),

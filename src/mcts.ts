@@ -106,6 +106,10 @@ export function getMctsAnalyzerForNonTerminalStateFromRoot(
     let maxScore = getUcbScore(children[0], node.rollouts);
     let bestNode = children[0];
 
+    if (bestNode.effectiveWinner === activePlayer) {
+      return bestNode;
+    }
+
     for (let i = 1; i < children.length; i++) {
       const child = children[i];
 

@@ -1,5 +1,5 @@
 import { Option, option, Result, result } from "rusty-ts";
-import { Filter, Offset, PlyTag } from "./bitwiseUtils";
+import { bitCount, Filter, Offset, PlyTag } from "./bitwiseUtils";
 import { cardProperties } from "./cardMaps";
 import {
   canRetreat,
@@ -343,13 +343,6 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
 
   function isEitherSnipeCaptured() {
     return isAlphaSnipeCapturedByBeta() || isBetaSnipeCapturedByAlpha();
-  }
-
-  // https://stackoverflow.com/a/43122214/7215455
-  function bitCount(n: number): number {
-    n = n - ((n >> 1) & 0x55555555);
-    n = (n & 0x33333333) + ((n >> 2) & 0x33333333);
-    return (((n + (n >> 4)) & 0xf0f0f0f) * 0x1010101) >> 24;
   }
 
   function doesStepActivateTriplet(

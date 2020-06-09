@@ -1,10 +1,16 @@
 import { option, Option } from "rusty-ts";
-import { getMctsAnalyzerIfStateIsNonTerminal, MctsAnalyzerV2 } from "../mcts2";
+import {
+  getMctsAnalyzerIfStateIsNonTerminal,
+  MctsAnalyzerV2,
+  NODE_SIZE_IN_I32S,
+} from "../mcts2";
 import {
   MctsWorkerMessage,
   UpdateMctsAnalysisNotification,
   UpdateMctsAnalyzerGameStateRequest,
   WorkerMessageType,
+  TransferMctsAnalyzerRequest,
+  TransferMctsAnalyzerResponse,
 } from "../types";
 
 export {};
@@ -24,19 +30,13 @@ let lastPosted = 0;
 self.addEventListener("message", (e) => {
   const data = e.data;
   if ("object" === typeof data && data !== null) {
-    {
-      if (data.x) {
-        self.postMessage({
-          messageType: WorkerMessageType.LogNotification,
-          data: optMctsAnalyzer.unwrap().getRootSummary(),
-        });
-      }
-    }
     const message: MctsWorkerMessage = data;
     switch (message.messageType) {
       case WorkerMessageType.UpdateMctsAnalyzerGameStateRequest:
         onGameStateUpdateRequest(message);
         break;
+      case WorkerMessageType.TransferMctsAnalyzerRequest:
+        onTransferHeapRequest(message);
     }
   }
 });
@@ -49,8 +49,21 @@ function onGameStateUpdateRequest(
   optMctsAnalyzer = getMctsAnalyzerIfStateIsNonTerminal(
     newGameState,
     newGameState.plies.length + 3,
-    22 * 5e6
+    NODE_SIZE_IN_I32S * 2e7
   );
+}
+
+function onTransferHeapRequest(_message: TransferMctsAnalyzerRequest): void {
+  optMctsAnalyzer.ifSome((mctsAnalyzer) => {
+    const internalData = mctsAnalyzer.getInternalData();
+    optMctsAnalyzer = option.none();
+
+    const message: TransferMctsAnalyzerResponse = {
+      messageType: WorkerMessageType.TransferMctsAnalyzerResponse,
+      internalData,
+    };
+    self.postMessage(message, [internalData.heapBuffer]);
+  });
 }
 
 function analysisUpdateLoop() {

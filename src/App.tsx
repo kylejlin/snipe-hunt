@@ -33,7 +33,8 @@ import {
   Ply,
   Atomic,
 } from "./types";
-import MctsWorker from "./workers/mcts.importable";
+import MctsWorker from "./workers/mcts2.importable";
+import { getMctsAnalyzerFromHeapWithoutInitializing } from "./mcts2";
 
 export default class App extends React.Component<{}, AppState> {
   private mctsWorker: Worker | undefined;
@@ -831,6 +832,16 @@ export default class App extends React.Component<{}, AppState> {
               .filter(this.isMctsAnalysisUpToDate)
           );
           break;
+        case WorkerMessageType.TransferMctsAnalyzerResponse: {
+          const mctsHeap = new Int32Array(message.internalData.heapBuffer);
+          (window as any).mctsHeap = mctsHeap;
+          (window as any).mctsAnalyzer = getMctsAnalyzerFromHeapWithoutInitializing(
+            mctsHeap,
+            message.internalData.mallocIndex
+          );
+          console.log("MCTS Analyzer successfully transferred.");
+          break;
+        }
       }
     }
   }
@@ -842,7 +853,13 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   isMctsAnalysisUpToDate({ bestAtomic }: MctsAnalysis): boolean {
-    return getAnalyzer(this.state.gameState).tryPerform(bestAtomic).isOk();
+    const legal = getAnalyzer(this.state.gameState)
+      .tryPerform(bestAtomic)
+      .isOk();
+    if (!legal) {
+      console.log("outdated best atomic", bestAtomic);
+    }
+    return legal;
   }
 }
 

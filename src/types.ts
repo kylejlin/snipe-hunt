@@ -1,4 +1,5 @@
 import { Option, Result } from "rusty-ts";
+import { MctsAnalyzerV2InternalData } from "./mcts2";
 
 /**
  * Increment this when making breaking changes
@@ -381,12 +382,16 @@ export enum TripletShift {
 export type MctsWorkerMessage =
   | LogNotification
   | UpdateMctsAnalysisNotification
-  | UpdateMctsAnalyzerGameStateRequest;
+  | UpdateMctsAnalyzerGameStateRequest
+  | TransferMctsAnalyzerRequest
+  | TransferMctsAnalyzerResponse;
 
 export enum WorkerMessageType {
   LogNotification,
   UpdateMctsAnalysisNotification,
   UpdateMctsAnalyzerGameStateRequest,
+  TransferMctsAnalyzerRequest,
+  TransferMctsAnalyzerResponse,
 }
 
 export interface LogNotification {
@@ -404,58 +409,11 @@ export interface UpdateMctsAnalyzerGameStateRequest {
   gameState: GameState;
 }
 
-// export interface GameStateStruct {
-//   stateVersion: typeof STATE_VERSION;
+export interface TransferMctsAnalyzerRequest {
+  messageType: WorkerMessageType.TransferMctsAnalyzerRequest;
+}
 
-//   turn: Player;
-//   alpha: Position;
-//   beta: Position;
-//   initialPositions: { alpha: Position; beta: Position };
-//   plies: Ply[];
-
-//   pendingAnimalStep: Option<AnimalStep>;
-// }
-
-// export interface Position {
-//   reserve: Card[];
-//   backRow: Card[];
-//   frontRow: Card[];
-// }
-
-// export interface Card {
-//   cardType: CardType;
-//   instance: 0 | 1;
-//   allegiance: Player;
-// }
-
-// export type Ply = SnipeStep | Drop | TwoAnimalSteps;
-
-// export enum PlyType {
-//   SnipeStep,
-//   Drop,
-//   TwoAnimalSteps,
-// }
-
-// export interface SnipeStep {
-//   plyType: PlyType.SnipeStep;
-//   destination: RowNumber;
-// }
-
-// export interface Drop {
-//   plyType: PlyType.Drop;
-//   dropped: CardType;
-//   destination: RowNumber;
-// }
-
-// export interface TwoAnimalSteps {
-//   plyType: PlyType.TwoAnimalSteps;
-//   first: AnimalStep;
-//   second: AnimalStep;
-// }
-
-// export interface AnimalStep {
-//   moved: CardType;
-//   destination: RowNumber;
-// }
-
-// export type RowNumber = 1 | 2 | 3 | 4 | 5 | 6;
+export interface TransferMctsAnalyzerResponse {
+  messageType: WorkerMessageType.TransferMctsAnalyzerResponse;
+  internalData: MctsAnalyzerV2InternalData;
+}

@@ -19,6 +19,8 @@ import {
   SnipeStep,
 } from "./types";
 
+export const NODE_SIZE_IN_I32S = 22;
+
 const ROOT_NODE_INDEX = 0;
 const NO_WINNER = -1;
 const STATE_SIZE_IN_I32S = 17;
@@ -33,12 +35,19 @@ export interface MctsAnalyzerV2 {
   getRootSummary(): NodeSummary;
   getBestAtomic(): Atomic;
   getSummaryOfChildWithBestAtomic(): NodeSummary;
+  getInternalData(): MctsAnalyzerV2InternalData;
+  getAtomicsOnPathToNode(nodeIndex: number): Atomic[];
 }
 
 export interface NodeSummary {
   atomic: Option<Atomic>;
   value: number;
   rollouts: number;
+}
+
+export interface MctsAnalyzerV2InternalData {
+  heapBuffer: ArrayBuffer;
+  mallocIndex: number;
 }
 
 enum NodeOffsets {
@@ -101,17 +110,19 @@ function getMctsAnalyzerForNonTerminalState(
   heapSizeInI32s: number
 ): MctsAnalyzerV2 {
   const heap = new Int32Array(heapSizeInI32s);
-  const tempState = new Int32Array(STATE_SIZE_IN_I32S);
   let mallocIndex = 0;
 
   writeRootState();
 
-  return {
-    performRollout,
-    getRootSummary,
-    getBestAtomic,
-    getSummaryOfChildWithBestAtomic,
-  };
+  const uninitialized = getMctsAnalyzerFromHeapWithoutInitializing(
+    heap,
+    mallocIndex
+  );
+
+  uninitialized.performRollout();
+  uninitialized.performRollout();
+
+  return uninitialized;
 
   function writeRootState(): void {
     if (mallocIndex !== 0) {
@@ -158,7 +169,32 @@ function getMctsAnalyzerForNonTerminalState(
       (currentBoard[8] << 4) |
       (currentBoard[5] << 2) |
       currentBoard[2];
+
+    heap[NodeOffsets.ParentIndex] = -1;
+    heap[NodeOffsets.Atomic] = -1;
+    heap[NodeOffsets.Value] = 0;
+    heap[NodeOffsets.Rollouts] = 0;
+    heap[NodeOffsets.ChildListStartIndex] = -1;
+
+    mallocIndex = 22;
   }
+}
+
+export function getMctsAnalyzerFromHeapWithoutInitializing(
+  heap: Int32Array,
+  initialMallocIndex: number
+): MctsAnalyzerV2 {
+  const tempState = new Int32Array(STATE_SIZE_IN_I32S);
+  let mallocIndex = initialMallocIndex;
+
+  return {
+    performRollout,
+    getRootSummary,
+    getBestAtomic,
+    getSummaryOfChildWithBestAtomic,
+    getInternalData,
+    getAtomicsOnPathToNode,
+  };
 
   function performRollout(): void {
     let nodeIndex = ROOT_NODE_INDEX;
@@ -173,7 +209,7 @@ function getMctsAnalyzerForNonTerminalState(
       const winner = getImmediateWinner(heap, leafIndex);
       if (~winner) {
         updateAndBackPropagateRollout(leafIndex, winner);
-        markAsTerminal(leafIndex, winner);
+        markAsEffectivelyTerminal(leafIndex, winner);
       } else {
         addChildrenAndRolloutFirstChild(leafIndex);
       }
@@ -247,7 +283,7 @@ function getMctsAnalyzerForNonTerminalState(
     const winner = getImmediateWinner(heap, nodeIndex);
 
     if (~winner) {
-      markAsTerminal(nodeIndex, winner);
+      markAsEffectivelyTerminal(nodeIndex, winner);
     }
 
     const rolledOutWinner = ~winner ? winner : rollout(nodeIndex);
@@ -287,36 +323,42 @@ function getMctsAnalyzerForNonTerminalState(
     if (getOptMovedAnimal(out) === NO_MOVED_ANIMAL) {
       // Snipe steps
       {
-        const activeSnipeLocation: number = getActiveSnipeLocation(
-          etc,
-          activePlayer
-        );
-        const enemySnipeSet =
-          (etc >>> (activeSnipeLocation << 1)) & (1 << inactivePlayer);
-        const animalSet = out[(activeSnipeLocation << 1) + activePlayer];
-        if (enemySnipeSet | animalSet) {
-          const forward = oneRowForward(activeSnipeLocation, activePlayer);
-          if (isRow(forward)) {
-            atomics.push({
-              plyType: PlyType.SnipeStep,
-              destination: forward,
+        if (snipeCannotBeFound(etc, activePlayer)) {
+          console.log("etc", etc);
+          debugger;
+        }
 
-              qp_atomicType: QuicklyPerformableAtomicType.SnipeStep,
-              qp_activePlayer: activePlayer,
-              qp_snipeLocation: activeSnipeLocation,
-            });
-          }
+        const activeSnipeLocation = getActiveSnipeLocation(etc, activePlayer);
+        if (isRow(activeSnipeLocation)) {
+          const enemySnipeSet =
+            (etc >>> (activeSnipeLocation << 1)) & (1 << inactivePlayer);
+          const animalSet =
+            out[(activeSnipeLocation << 1) | activePlayer] |
+            out[(activeSnipeLocation << 1) | inactivePlayer];
+          if (enemySnipeSet | animalSet) {
+            const forward = oneRowForward(activeSnipeLocation, activePlayer);
+            if (isRow(forward)) {
+              atomics.push({
+                plyType: PlyType.SnipeStep,
+                destination: forward,
 
-          const backward = oneRowForward(activeSnipeLocation, activePlayer);
-          if (isRow(backward)) {
-            atomics.push({
-              plyType: PlyType.SnipeStep,
-              destination: backward,
+                qp_atomicType: QuicklyPerformableAtomicType.SnipeStep,
+                qp_activePlayer: activePlayer,
+                qp_snipeLocation: activeSnipeLocation,
+              });
+            }
 
-              qp_atomicType: QuicklyPerformableAtomicType.SnipeStep,
-              qp_activePlayer: activePlayer,
-              qp_snipeLocation: activeSnipeLocation,
-            });
+            const backward = oneRowBackward(activeSnipeLocation, activePlayer);
+            if (isRow(backward)) {
+              atomics.push({
+                plyType: PlyType.SnipeStep,
+                destination: backward,
+
+                qp_atomicType: QuicklyPerformableAtomicType.SnipeStep,
+                qp_activePlayer: activePlayer,
+                qp_snipeLocation: activeSnipeLocation,
+              });
+            }
           }
         }
       }
@@ -364,7 +406,7 @@ function getMctsAnalyzerForNonTerminalState(
 
       const forward = oneRowForward(row, activePlayer);
       const isForwardRow = forward !== 0 && forward !== 7;
-      const isForwardNotRow: 0 | 2 = (((isForwardRow as unknown) as 0 | 1) <<
+      const isForwardNotRow: 0 | 2 = (((!isForwardRow as unknown) as 0 | 1) <<
         1) as 0 | 2;
       const forwardSnipesAndExtraneousGreaterBits = etc >>> (forward << 1);
       const isFriendlySnipeInForwardRow =
@@ -375,8 +417,8 @@ function getMctsAnalyzerForNonTerminalState(
         isForwardNotRow;
 
       const backward = oneRowBackward(row, activePlayer);
-      const isBackwardRow = backward === 0 || backward === 7;
-      const isBackwardNotRow: 0 | 2 = (((isBackwardRow as unknown) as 0 | 1) <<
+      const isBackwardRow = backward !== 0 && backward !== 7;
+      const isBackwardNotRow: 0 | 2 = (((!isBackwardRow as unknown) as 0 | 1) <<
         1) as 0 | 2;
       const backwardSnipesAndExtraneousGreaterBits = etc >>> (backward << 1);
       const isFriendlySnipeInBackwardRow =
@@ -387,7 +429,7 @@ function getMctsAnalyzerForNonTerminalState(
         isBackwardNotRow;
 
       for (let animalType = 0; animalType <= 31; animalType++) {
-        if (previouslyMovedAnimal === activePlayer) {
+        if (previouslyMovedAnimal === animalType) {
           continue;
         }
 
@@ -400,7 +442,7 @@ function getMctsAnalyzerForNonTerminalState(
           const canThisAnimalRetreat = canRetreat(animalType);
           const canThisAnimalActivateTripletByRetreating =
             canThisAnimalRetreat &&
-            doesStepActivateTriplet(forward, animalType, out);
+            doesStepActivateTriplet(backward, animalType, out);
 
           if (doesRowHaveAtLeastTwoCards) {
             if (
@@ -495,15 +537,26 @@ function getMctsAnalyzerForNonTerminalState(
     activePlayer: Player
   ): CardLocation {
     const activeSnipe = 1 << activePlayer;
-    for (let i = 0; i <= 7; i++) {
+    for (let i = 0; i <= 14; i += 2) {
       if ((etc >>> i) & activeSnipe) {
-        return i;
+        return i >>> 1;
       }
     }
 
     throw new Error(
       "Impossible: " + Player[activePlayer] + " snipe cannot be found."
     );
+  }
+
+  function snipeCannotBeFound(etc: number, activePlayer: Player): boolean {
+    const activeSnipe = 1 << activePlayer;
+    for (let i = 0; i <= 14; i += 2) {
+      if ((etc >>> i) & activeSnipe) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   function getReserveAnimalSet(player: Player, out: Int32Array): number {
@@ -556,20 +609,44 @@ function getMctsAnalyzerForNonTerminalState(
   function performSnipeStep(
     atomic: QuicklyPerformableSnipeStep,
     out: Int32Array
-  ) {
-    const snipe =
-      (1 << atomic.qp_activePlayer) << (atomic.qp_snipeLocation << 1);
-    out[NodeOffsets.SnipeSetsTurnNumberAndMovedAnimal] &= ~snipe;
-    out[NodeOffsets.SnipeSetsTurnNumberAndMovedAnimal] |= snipe;
+  ): void {
+    const debug_before = out[NodeOffsets.SnipeSetsTurnNumberAndMovedAnimal];
+
+    const snipe = 1 << atomic.qp_activePlayer;
+    out[NodeOffsets.SnipeSetsTurnNumberAndMovedAnimal] &= ~(
+      snipe <<
+      (atomic.qp_snipeLocation << 1)
+    );
+    out[NodeOffsets.SnipeSetsTurnNumberAndMovedAnimal] |=
+      snipe << (atomic.destination << 1);
+
+    const debug_after = out[NodeOffsets.SnipeSetsTurnNumberAndMovedAnimal];
+
+    if (
+      snipeCannotBeFound(debug_after, 0) ||
+      snipeCannotBeFound(debug_after, 1)
+    ) {
+      console.log(
+        "before",
+        debug_before,
+        "after",
+        debug_after,
+        "was already broken",
+        snipeCannotBeFound(debug_before, 0) ||
+          snipeCannotBeFound(debug_before, 1),
+        "atomic",
+        atomic
+      );
+    }
 
     const etc = out[NodeOffsets.SnipeSetsTurnNumberAndMovedAnimal];
     const turnNumber = (etc >>> 16) & Filter.LeastTenBits;
     out[NodeOffsets.SnipeSetsTurnNumberAndMovedAnimal] =
-      (etc & ~0b0000_0011_1111_1111_0000_0000_0000_0000) |
+      (etc & 0b1111_1100_0000_0000_1111_1111_1111_1111) |
       ((turnNumber + 1) << 16);
   }
 
-  function performDrop(atomic: QuicklyPerformableDrop, out: Int32Array) {
+  function performDrop(atomic: QuicklyPerformableDrop, out: Int32Array): void {
     const reserveIndex = getReserveIndex(atomic.qp_activePlayer);
     const droppedSet = 1 << atomic.dropped;
 
@@ -579,7 +656,7 @@ function getMctsAnalyzerForNonTerminalState(
     const etc = out[NodeOffsets.SnipeSetsTurnNumberAndMovedAnimal];
     const turnNumber = (etc >>> 16) & Filter.LeastTenBits;
     out[NodeOffsets.SnipeSetsTurnNumberAndMovedAnimal] =
-      (etc & ~0b0000_0011_1111_1111_0000_0000_0000_0000) |
+      (etc & 0b1111_1100_0000_0000_1111_1111_1111_1111) |
       ((turnNumber + 1) << 16);
   }
 
@@ -601,26 +678,26 @@ function getMctsAnalyzerForNonTerminalState(
       out[destAlphaIndex | atomic.qp_inactivePlayer] = 0;
 
       const etc = out[NodeOffsets.SnipeSetsTurnNumberAndMovedAnimal];
-      const capturedSnipeSets = (etc >>> destAlphaIndex) & Filter.LeastTwoBits;
+      const capturedSnipesSet = (etc >>> destAlphaIndex) & Filter.LeastTwoBits;
       out[NodeOffsets.SnipeSetsTurnNumberAndMovedAnimal] =
-        (etc & ~(0b11 << (startIndex >>> 2))) |
-        (capturedSnipeSets << (atomic.qp_activePlayer ? 14 : 0));
+        (etc & ~(0b11 << destAlphaIndex)) |
+        (capturedSnipesSet << (atomic.qp_activePlayer ? 14 : 0));
     } else {
-      out[destAlphaIndex | atomic.qp_activePlayer] = movedSet;
+      out[destAlphaIndex | atomic.qp_activePlayer] |= movedSet;
     }
 
     const etc = out[NodeOffsets.SnipeSetsTurnNumberAndMovedAnimal];
     if (etc >>> 31) {
       // If moved animal does not exist, set moved animal to atomic.moved.
       out[NodeOffsets.SnipeSetsTurnNumberAndMovedAnimal] =
-        (etc & ~0b1111_1100_0000_0000_0000_0000_0000_0000) |
+        (etc & 0b0000_0011_1111_1111_1111_1111_1111_1111) |
         (atomic.moved << 26);
     } else {
       // If moved animal exists, set moved animal to null and increment the turn number.
       out[NodeOffsets.SnipeSetsTurnNumberAndMovedAnimal] =
-        (((etc & ~0b1111_1100_0000_0000_0000_0000_0000_0000) |
+        (((etc & 0b0000_0011_1111_1111_1111_1111_1111_1111) |
           0b1000_0000_0000_0000_0000_0000_0000_0000) &
-          ~0b0000_0011_1111_1111_0000_0000_0000_0000) |
+          0b1111_1100_0000_0000_1111_1111_1111_1111) |
         ((((etc >>> 16) & Filter.LeastTenBits) + 1) << 16);
     }
   }
@@ -663,7 +740,7 @@ function getMctsAnalyzerForNonTerminalState(
     const etc = out[NodeOffsets.SnipeSetsTurnNumberAndMovedAnimal];
 
     if ((etc & 0b10) | ((etc >>> 14) & 0b1)) {
-      false;
+      return false;
     }
 
     const activePlayer: Player = (etc >>> 16) & 0b1;
@@ -674,22 +751,28 @@ function getMctsAnalyzerForNonTerminalState(
     if (getOptMovedAnimal(out) === NO_MOVED_ANIMAL) {
       // Snipe steps
       {
-        const activeSnipeLocation: number = getActiveSnipeLocation(
-          etc,
-          activePlayer
-        );
-        const enemySnipeSet =
-          (etc >>> (activeSnipeLocation << 1)) & (1 << inactivePlayer);
-        const animalSet = out[(activeSnipeLocation << 1) + activePlayer];
-        if (enemySnipeSet | animalSet) {
-          const forward = oneRowForward(activeSnipeLocation, activePlayer);
-          if (isRow(forward)) {
-            return true;
-          }
+        if (snipeCannotBeFound(etc, activePlayer)) {
+          console.log("etc", etc);
+          debugger;
+        }
 
-          const backward = oneRowForward(activeSnipeLocation, activePlayer);
-          if (isRow(backward)) {
-            return true;
+        const activeSnipeLocation = getActiveSnipeLocation(etc, activePlayer);
+        if (isRow(activeSnipeLocation)) {
+          const enemySnipeSet =
+            (etc >>> (activeSnipeLocation << 1)) & (1 << inactivePlayer);
+          const animalSet =
+            out[(activeSnipeLocation << 1) | activePlayer] |
+            out[(activeSnipeLocation << 1) | inactivePlayer];
+          if (enemySnipeSet | animalSet) {
+            const forward = oneRowForward(activeSnipeLocation, activePlayer);
+            if (isRow(forward)) {
+              return true;
+            }
+
+            const backward = oneRowBackward(activeSnipeLocation, activePlayer);
+            if (isRow(backward)) {
+              return true;
+            }
           }
         }
       }
@@ -730,7 +813,7 @@ function getMctsAnalyzerForNonTerminalState(
 
       const forward = oneRowForward(row, activePlayer);
       const isForwardRow = forward !== 0 && forward !== 7;
-      const isForwardNotRow: 0 | 2 = (((isForwardRow as unknown) as 0 | 1) <<
+      const isForwardNotRow: 0 | 2 = (((!isForwardRow as unknown) as 0 | 1) <<
         1) as 0 | 2;
       const forwardSnipesAndExtraneousGreaterBits = etc >>> (forward << 1);
       const isFriendlySnipeInForwardRow =
@@ -741,8 +824,8 @@ function getMctsAnalyzerForNonTerminalState(
         isForwardNotRow;
 
       const backward = oneRowBackward(row, activePlayer);
-      const isBackwardRow = backward === 0 || backward === 7;
-      const isBackwardNotRow: 0 | 2 = (((isBackwardRow as unknown) as 0 | 1) <<
+      const isBackwardRow = backward !== 0 && backward !== 7;
+      const isBackwardNotRow: 0 | 2 = (((!isBackwardRow as unknown) as 0 | 1) <<
         1) as 0 | 2;
       const backwardSnipesAndExtraneousGreaterBits = etc >>> (backward << 1);
       const isFriendlySnipeInBackwardRow =
@@ -753,7 +836,7 @@ function getMctsAnalyzerForNonTerminalState(
         isBackwardNotRow;
 
       for (let animalType = 0; animalType <= 31; animalType++) {
-        if (previouslyMovedAnimal === activePlayer) {
+        if (previouslyMovedAnimal === animalType) {
           continue;
         }
 
@@ -766,7 +849,7 @@ function getMctsAnalyzerForNonTerminalState(
           const canThisAnimalRetreat = canRetreat(animalType);
           const canThisAnimalActivateTripletByRetreating =
             canThisAnimalRetreat &&
-            doesStepActivateTriplet(forward, animalType, out);
+            doesStepActivateTriplet(backward, animalType, out);
 
           if (doesRowHaveAtLeastTwoCards) {
             if (
@@ -825,26 +908,36 @@ function getMctsAnalyzerForNonTerminalState(
     const atomicsLen = atomics.length;
     for (let i = 0; i < atomicsLen; i++) {
       const atomic = atomics[i];
-      childIndexes.push(mallocIndex);
-      createChildOf(nodeIndex, atomic, mallocIndex);
-      mallocIndex += 22;
+
+      const childIndex = malloc(NODE_SIZE_IN_I32S);
+      childIndexes.push(childIndex);
+      createChildOf(nodeIndex, atomic, childIndex);
     }
 
-    const childListStartIndex = mallocIndex;
-    mallocIndex++;
+    const childIndexesLen = childIndexes.length;
+    const childListStartIndex = malloc(1 + childIndexesLen);
 
     heap[nodeIndex + NodeOffsets.ChildListStartIndex] = childListStartIndex;
 
-    heap[childListStartIndex] = childIndexes.length;
-    const childIndexesLen = childIndexes.length;
+    heap[childListStartIndex] = childIndexesLen;
+
     for (let i = 0; i < childIndexesLen; i++) {
-      heap[mallocIndex] = childIndexes[i];
-      mallocIndex++;
+      heap[childListStartIndex + 1 + i] = childIndexes[i];
     }
 
     if (childIndexesLen) {
       rolloutIfNonTerminalThenBackPropagate(childIndexes[0]);
     }
+  }
+
+  function malloc(space: number): number {
+    if (mallocIndex > heap.length - space) {
+      throw new Error("Monte Carlo Tree heap has ran out of space.");
+    }
+
+    const address = mallocIndex;
+    mallocIndex += space;
+    return address;
   }
 
   function createChildOf(
@@ -921,7 +1014,7 @@ function getMctsAnalyzerForNonTerminalState(
     let nodeIndex = leafIndex;
     let parentIndex = heap[nodeIndex + NodeOffsets.ParentIndex];
 
-    while (~parent) {
+    while (~parentIndex) {
       heap[nodeIndex + NodeOffsets.Value] += ((winner ===
         getActivePlayerOfNonTerminalState(parentIndex)) as unknown) as 1 | 0;
       heap[nodeIndex + NodeOffsets.Rollouts] += 1;
@@ -929,6 +1022,10 @@ function getMctsAnalyzerForNonTerminalState(
       nodeIndex = parentIndex;
       parentIndex = heap[nodeIndex + NodeOffsets.ParentIndex];
     }
+
+    heap[nodeIndex + NodeOffsets.Value] += ((winner ===
+      getActivePlayerOfNonTerminalState(nodeIndex)) as unknown) as 1 | 0;
+    heap[nodeIndex + NodeOffsets.Rollouts] += 1;
   }
 
   function getActivePlayerOfNonTerminalState(nodeIndex: number): Player {
@@ -938,13 +1035,19 @@ function getMctsAnalyzerForNonTerminalState(
     );
   }
 
-  function markAsTerminal(leafIndex: number, winner: Player): void {
-    const winnerBits = (0b11_1111_1110 & winner) << 16;
+  function markAsEffectivelyTerminal(leafIndex: number, winner: Player): void {
+    const winnerBits = (0b11_1111_1110 | winner) << 16;
 
     let nodeIndex = leafIndex;
     let parentIndex = getParentIndex(nodeIndex);
 
-    while (~parentIndex) {
+    while (
+      ~parentIndex &&
+      ((heap[parentIndex + NodeOffsets.SnipeSetsTurnNumberAndMovedAnimal] >>>
+        16) &
+        0b1) ===
+        winner
+    ) {
       const etcIndex =
         nodeIndex + NodeOffsets.SnipeSetsTurnNumberAndMovedAnimal;
       const etc = heap[etcIndex];
@@ -980,6 +1083,24 @@ function getMctsAnalyzerForNonTerminalState(
   }
 
   function getSummaryOfChildWithBestAtomic(): NodeSummary {
+    const bestChildIndex = getIndexOfChildWithBestAtomic();
+
+    return {
+      atomic: option.some(
+        decodeAtomic(heap[bestChildIndex + NodeOffsets.Atomic])
+      ),
+      value: heap[bestChildIndex + NodeOffsets.Value],
+      rollouts: heap[bestChildIndex + NodeOffsets.Rollouts],
+    };
+  }
+
+  function getIndexOfChildWithBestAtomic(): number {
+    const rootActivePlayer =
+      (heap[ROOT_NODE_INDEX + NodeOffsets.SnipeSetsTurnNumberAndMovedAnimal] >>>
+        16) &
+      0b1;
+    const rootInactivePlayer = ~rootActivePlayer & 0b1;
+
     const rootChildListStartIndex =
       heap[ROOT_NODE_INDEX + NodeOffsets.ChildListStartIndex];
     const rootChildListLen = heap[rootChildListStartIndex];
@@ -993,9 +1114,20 @@ function getMctsAnalyzerForNonTerminalState(
         continue;
       }
 
+      const winner = getEffectiveWinner(childIndex);
+
+      if (winner === rootActivePlayer) {
+        return childIndex;
+      }
+
+      if (winner === rootInactivePlayer) {
+        continue;
+      }
+
       if (
         heap[childIndex + NodeOffsets.Rollouts] >
-        heap[bestChildIndex + NodeOffsets.Rollouts]
+          heap[bestChildIndex + NodeOffsets.Rollouts] ||
+        getEffectiveWinner(bestChildIndex) === rootInactivePlayer
       ) {
         bestChildIndex = childIndex;
       }
@@ -1005,12 +1137,25 @@ function getMctsAnalyzerForNonTerminalState(
       throw new Error("Impossible: Root node has no children.");
     }
 
-    return {
-      atomic: option.some(
-        decodeAtomic(heap[bestChildIndex + NodeOffsets.Atomic])
-      ),
-      value: heap[bestChildIndex + NodeOffsets.Value],
-      rollouts: heap[bestChildIndex + NodeOffsets.Rollouts],
-    };
+    return bestChildIndex;
+  }
+
+  function getInternalData(): MctsAnalyzerV2InternalData {
+    return { heapBuffer: heap.buffer, mallocIndex };
+  }
+
+  function getAtomicsOnPathToNode(leafIndex: number): Atomic[] {
+    const atomics: Atomic[] = [];
+
+    let nodeIndex = leafIndex;
+    let parentIndex = getParentIndex(nodeIndex);
+    while (~parentIndex) {
+      atomics.push(decodeAtomic(heap[nodeIndex + NodeOffsets.Atomic]));
+
+      nodeIndex = parentIndex;
+      parentIndex = getParentIndex(nodeIndex);
+    }
+
+    return atomics.reverse();
   }
 }

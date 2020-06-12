@@ -9,11 +9,14 @@ import ElementMatrix from "./components/ElementMatrix";
 import FutureAnimalStepView from "./components/FutureAnimalStepView";
 import PlyView from "./components/PlyView";
 import * as gameUtil from "./gameUtil";
+import { MctsAnalyzer } from "./mcts";
+import { getMctsService } from "./mctsService";
 import { futureSubPlyStackSaver, gameStateSaver } from "./stateSavers";
 import {
   AnimalStep,
   AnimalType,
   AppState,
+  Atomic,
   Card,
   CardLocation,
   CardType,
@@ -21,24 +24,18 @@ import {
   FutureSubPlyStack,
   GameState,
   IllegalGameStateUpdate,
-  MctsWorkerMessage,
+  MctsAnalysis,
+  MctsService,
   Player,
+  Ply,
   PlyType,
   Row,
   SnipeStep,
   STATE_VERSION,
-  WorkerMessageType,
-  MctsAnalysis,
-  UpdateMctsAnalyzerGameStateRequest,
-  Ply,
-  Atomic,
 } from "./types";
-import MctsWorker from "./workers/mcts.importable";
-import { getMctsAnalyzerFromHeapWithoutInitializing } from "./mcts";
 
 export default class App extends React.Component<{}, AppState> {
-  private mctsWorker: Worker | undefined;
-  private hasMounted: boolean;
+  private mctsService: MctsService;
 
   constructor(props: {}) {
     super(props);
@@ -49,17 +46,14 @@ export default class App extends React.Component<{}, AppState> {
 
     (window as any).app = this;
 
-    this.hasMounted = false;
+    this.mctsService = getMctsService();
   }
 
   componentDidMount(): void {
-    const mctsWorker = new MctsWorker();
-    mctsWorker.addEventListener("message", this.onMctsWorkerMessage);
-    this.mctsWorker = mctsWorker;
+    this.mctsService.updateGameState(this.state.gameState);
 
-    this.updateMctsAnalyzerGameState(this.state.gameState);
-
-    this.hasMounted = true;
+    this.mctsService.onSnapshot(this.onMctsServiceSnapshot);
+    this.mctsService.onPause(this.onMctsServicePause);
   }
 
   bindMethods(): void {
@@ -67,22 +61,9 @@ export default class App extends React.Component<{}, AppState> {
     this.onResetClicked = this.onResetClicked.bind(this);
     this.onUndoSubPlyClicked = this.onUndoSubPlyClicked.bind(this);
     this.onRedoSubPlyClicked = this.onRedoSubPlyClicked.bind(this);
-    this.onMctsWorkerMessage = this.onMctsWorkerMessage.bind(this);
-    this.isMctsAnalysisUpToDate = this.isMctsAnalysisUpToDate.bind(this);
-  }
-
-  updateMctsAnalyzerGameState(gameState: GameState): void {
-    if (this.mctsWorker === undefined) {
-      throw new Error(
-        "Cannot updateMctsAnalyzerGameState() because mctsAnalyzer has not been initialized yet."
-      );
-    }
-
-    const message: UpdateMctsAnalyzerGameStateRequest = {
-      messageType: WorkerMessageType.UpdateMctsAnalyzerGameStateRequest,
-      gameState,
-    };
-    this.mctsWorker.postMessage(message);
+    this.isBestAtomicLegal = this.isBestAtomicLegal.bind(this);
+    this.onMctsServiceSnapshot = this.onMctsServiceSnapshot.bind(this);
+    this.onMctsServicePause = this.onMctsServicePause.bind(this);
   }
 
   saveAndUpdateGameState(newGameState: GameState) {
@@ -91,7 +72,7 @@ export default class App extends React.Component<{}, AppState> {
       gameState: newGameState,
     });
 
-    this.updateMctsAnalyzerGameState(newGameState);
+    this.mctsService.updateGameState(newGameState);
   }
 
   render(): React.ReactElement {
@@ -817,42 +798,7 @@ export default class App extends React.Component<{}, AppState> {
     }
   }
 
-  onMctsWorkerMessage(event: MessageEvent): void {
-    const { data } = event;
-    if ("object" === typeof data && data !== null) {
-      const message: MctsWorkerMessage = data;
-      switch (message.messageType) {
-        case WorkerMessageType.LogNotification:
-          console.log("MCTS Worker Log:", message.data);
-          break;
-        case WorkerMessageType.UpdateMctsAnalysisNotification:
-          this.onMctsAnalysisUpdate(
-            option
-              .fromVoidable(message.optAnalysis)
-              .filter(this.isMctsAnalysisUpToDate)
-          );
-          break;
-        case WorkerMessageType.TransferMctsAnalyzerResponse: {
-          const mctsHeap = new Int32Array(message.internalData.heapBuffer);
-          (window as any).mctsHeap = mctsHeap;
-          (window as any).mctsAnalyzer = getMctsAnalyzerFromHeapWithoutInitializing(
-            mctsHeap,
-            message.internalData.mallocIndex
-          );
-          console.log("MCTS Analyzer successfully transferred.");
-          break;
-        }
-      }
-    }
-  }
-
-  onMctsAnalysisUpdate(optAnalysis: Option<MctsAnalysis>): void {
-    if (this.hasMounted) {
-      this.setState({ mctsAnalysis: optAnalysis });
-    }
-  }
-
-  isMctsAnalysisUpToDate({ bestAtomic }: MctsAnalysis): boolean {
+  isBestAtomicLegal({ bestAtomic }: MctsAnalysis): boolean {
     const legal = getAnalyzer(this.state.gameState)
       .tryPerform(bestAtomic)
       .isOk();
@@ -860,6 +806,16 @@ export default class App extends React.Component<{}, AppState> {
       console.log("outdated best atomic", bestAtomic);
     }
     return legal;
+  }
+
+  onMctsServiceSnapshot(analysis: Option<MctsAnalysis>): void {
+    this.setState({
+      mctsAnalysis: analysis.filter(this.isBestAtomicLegal),
+    });
+  }
+
+  onMctsServicePause(analyzer: MctsAnalyzer): void {
+    // TODO
   }
 }
 

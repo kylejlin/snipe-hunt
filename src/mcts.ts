@@ -114,9 +114,12 @@ function getMctsAnalyzerForNonTerminalState(
 
   writeRootState();
 
-  const uninitialized = getMctsAnalyzerFromHeapWithoutInitializing(
-    heap,
-    mallocIndex
+  const internalData: MctsAnalyzerInternalData = {
+    heapBuffer: heap.buffer,
+    mallocIndex,
+  };
+  const uninitialized = getMctsAnalyzerFromInternalDataWithoutInitializing(
+    internalData
   );
 
   uninitialized.performRollout();
@@ -180,12 +183,12 @@ function getMctsAnalyzerForNonTerminalState(
   }
 }
 
-export function getMctsAnalyzerFromHeapWithoutInitializing(
-  heap: Int32Array,
-  initialMallocIndex: number
+export function getMctsAnalyzerFromInternalDataWithoutInitializing(
+  internalData: MctsAnalyzerInternalData
 ): MctsAnalyzer {
+  const heap = new Int32Array(internalData.heapBuffer);
   const tempState = new Int32Array(STATE_SIZE_IN_I32S);
-  let mallocIndex = initialMallocIndex;
+  let mallocIndex = internalData.mallocIndex;
 
   return {
     performRollout,

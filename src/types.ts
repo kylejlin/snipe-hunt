@@ -1,5 +1,5 @@
 import { Option, Result } from "rusty-ts";
-import { MctsAnalyzerInternalData } from "./mcts";
+import { MctsAnalyzerInternalData, MctsAnalyzer } from "./mcts";
 
 /**
  * Increment this when making breaking changes
@@ -44,6 +44,14 @@ export interface MctsAnalysis {
   bestAtomic: Atomic;
   bestAtomicValue: number;
   bestAtomicRollouts: number;
+}
+
+export interface MctsService {
+  updateGameState(state: GameState): void;
+  pause(): void;
+
+  onSnapshot(listener: (analysis: Option<MctsAnalysis>) => void): void;
+  onPause(listener: (analyzer: MctsAnalyzer) => void): void;
 }
 
 export interface GameAnalyzer {
@@ -381,39 +389,39 @@ export enum TripletShift {
 
 export type MctsWorkerMessage =
   | LogNotification
-  | UpdateMctsAnalysisNotification
-  | UpdateMctsAnalyzerGameStateRequest
-  | TransferMctsAnalyzerRequest
-  | TransferMctsAnalyzerResponse;
+  | UpdateSnapshotNotification
+  | UpdateGameStateRequest
+  | TransferAnalyzerRequest
+  | TransferAnalyzerResponse;
 
-export enum WorkerMessageType {
+export enum MctsWorkerMessageType {
   LogNotification,
-  UpdateMctsAnalysisNotification,
-  UpdateMctsAnalyzerGameStateRequest,
-  TransferMctsAnalyzerRequest,
-  TransferMctsAnalyzerResponse,
+  UpdateSnapshotNotification,
+  UpdateGameStateRequest,
+  TransferAnalyzerRequest,
+  TransferAnalyzerResponse,
 }
 
 export interface LogNotification {
-  messageType: WorkerMessageType.LogNotification;
+  messageType: MctsWorkerMessageType.LogNotification;
   data: unknown;
 }
 
-export interface UpdateMctsAnalysisNotification {
-  messageType: WorkerMessageType.UpdateMctsAnalysisNotification;
+export interface UpdateSnapshotNotification {
+  messageType: MctsWorkerMessageType.UpdateSnapshotNotification;
   optAnalysis: MctsAnalysis | null;
 }
 
-export interface UpdateMctsAnalyzerGameStateRequest {
-  messageType: WorkerMessageType.UpdateMctsAnalyzerGameStateRequest;
+export interface UpdateGameStateRequest {
+  messageType: MctsWorkerMessageType.UpdateGameStateRequest;
   gameState: GameState;
 }
 
-export interface TransferMctsAnalyzerRequest {
-  messageType: WorkerMessageType.TransferMctsAnalyzerRequest;
+export interface TransferAnalyzerRequest {
+  messageType: MctsWorkerMessageType.TransferAnalyzerRequest;
 }
 
-export interface TransferMctsAnalyzerResponse {
-  messageType: WorkerMessageType.TransferMctsAnalyzerResponse;
+export interface TransferAnalyzerResponse {
+  messageType: MctsWorkerMessageType.TransferAnalyzerResponse;
   internalData: MctsAnalyzerInternalData;
 }

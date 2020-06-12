@@ -6,9 +6,9 @@ import {
 } from "../oldMcts";
 import {
   MctsWorkerMessage,
-  UpdateMctsAnalysisNotification,
-  UpdateMctsAnalyzerGameStateRequest,
-  WorkerMessageType,
+  UpdateSnapshotNotification,
+  UpdateGameStateRequest,
+  MctsWorkerMessageType,
 } from "../types";
 import { getMinimalGameStateAnalyzer } from "../minimalAnalyzer";
 
@@ -32,23 +32,21 @@ self.addEventListener("message", (e) => {
     {
       if (data.x) {
         self.postMessage({
-          messageType: WorkerMessageType.LogNotification,
+          messageType: MctsWorkerMessageType.LogNotification,
           data: optMctsAnalyzer.unwrap().getRoot(),
         });
       }
     }
     const message: MctsWorkerMessage = data;
     switch (message.messageType) {
-      case WorkerMessageType.UpdateMctsAnalyzerGameStateRequest:
+      case MctsWorkerMessageType.UpdateGameStateRequest:
         onGameStateUpdateRequest(message);
         break;
     }
   }
 });
 
-function onGameStateUpdateRequest(
-  message: UpdateMctsAnalyzerGameStateRequest
-): void {
+function onGameStateUpdateRequest(message: UpdateGameStateRequest): void {
   const newGameState = message.gameState;
 
   const optRecycledAnalyzer = optMctsAnalyzer.andThen((mctsAnalyzer) => {
@@ -89,8 +87,8 @@ function onGameStateUpdateRequest(
 function analysisUpdateLoop() {
   optMctsAnalyzer.match({
     none: () => {
-      const message: UpdateMctsAnalysisNotification = {
-        messageType: WorkerMessageType.UpdateMctsAnalysisNotification,
+      const message: UpdateSnapshotNotification = {
+        messageType: MctsWorkerMessageType.UpdateSnapshotNotification,
         optAnalysis: null,
       };
       self.postMessage(message);
@@ -126,8 +124,8 @@ function postAnalysisUpdate(analyzer: OldMctsAnalyzer): void {
   const [bestAtomic, childWithBestAtomic] = option
     .all([analyzer.getBestAtomic(), analyzer.getChildWithBestAtomic()])
     .expect("Impossible: optMctsAnalyzer is some when game has already eneded");
-  const message: UpdateMctsAnalysisNotification = {
-    messageType: WorkerMessageType.UpdateMctsAnalysisNotification,
+  const message: UpdateSnapshotNotification = {
+    messageType: MctsWorkerMessageType.UpdateSnapshotNotification,
     optAnalysis: {
       currentStateValue: analyzer.getRoot().value,
       currentStateRollouts: analyzer.getRoot().rollouts,

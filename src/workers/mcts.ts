@@ -6,11 +6,11 @@ import {
 } from "../mcts";
 import {
   MctsWorkerMessage,
-  UpdateMctsAnalysisNotification,
-  UpdateMctsAnalyzerGameStateRequest,
-  WorkerMessageType,
-  TransferMctsAnalyzerRequest,
-  TransferMctsAnalyzerResponse,
+  UpdateSnapshotNotification,
+  UpdateGameStateRequest,
+  MctsWorkerMessageType,
+  TransferAnalyzerRequest,
+  TransferAnalyzerResponse,
 } from "../types";
 
 export {};
@@ -32,18 +32,16 @@ self.addEventListener("message", (e) => {
   if ("object" === typeof data && data !== null) {
     const message: MctsWorkerMessage = data;
     switch (message.messageType) {
-      case WorkerMessageType.UpdateMctsAnalyzerGameStateRequest:
+      case MctsWorkerMessageType.UpdateGameStateRequest:
         onGameStateUpdateRequest(message);
         break;
-      case WorkerMessageType.TransferMctsAnalyzerRequest:
+      case MctsWorkerMessageType.TransferAnalyzerRequest:
         onTransferHeapRequest(message);
     }
   }
 });
 
-function onGameStateUpdateRequest(
-  message: UpdateMctsAnalyzerGameStateRequest
-): void {
+function onGameStateUpdateRequest(message: UpdateGameStateRequest): void {
   const newGameState = message.gameState;
 
   optMctsAnalyzer = getMctsAnalyzerIfStateIsNonTerminal(
@@ -53,13 +51,13 @@ function onGameStateUpdateRequest(
   );
 }
 
-function onTransferHeapRequest(_message: TransferMctsAnalyzerRequest): void {
+function onTransferHeapRequest(_message: TransferAnalyzerRequest): void {
   optMctsAnalyzer.ifSome((mctsAnalyzer) => {
     const internalData = mctsAnalyzer.getInternalData();
     optMctsAnalyzer = option.none();
 
-    const message: TransferMctsAnalyzerResponse = {
-      messageType: WorkerMessageType.TransferMctsAnalyzerResponse,
+    const message: TransferAnalyzerResponse = {
+      messageType: MctsWorkerMessageType.TransferAnalyzerResponse,
       internalData,
     };
     self.postMessage(message, [internalData.heapBuffer]);
@@ -69,8 +67,8 @@ function onTransferHeapRequest(_message: TransferMctsAnalyzerRequest): void {
 function analysisUpdateLoop() {
   optMctsAnalyzer.match({
     none: () => {
-      const message: UpdateMctsAnalysisNotification = {
-        messageType: WorkerMessageType.UpdateMctsAnalysisNotification,
+      const message: UpdateSnapshotNotification = {
+        messageType: MctsWorkerMessageType.UpdateSnapshotNotification,
         optAnalysis: null,
       };
       self.postMessage(message);
@@ -107,8 +105,8 @@ function postAnalysisUpdate(analyzer: MctsAnalyzer): void {
   const bestAtomic = analyzer.getBestAtomic();
   const childWithBestAtomic = analyzer.getSummaryOfChildWithBestAtomic();
 
-  const message: UpdateMctsAnalysisNotification = {
-    messageType: WorkerMessageType.UpdateMctsAnalysisNotification,
+  const message: UpdateSnapshotNotification = {
+    messageType: MctsWorkerMessageType.UpdateSnapshotNotification,
     optAnalysis: {
       currentStateValue: root.value,
       currentStateRollouts: root.rollouts,

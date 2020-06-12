@@ -7,13 +7,13 @@ import * as serviceWorker from "./serviceWorker";
 import * as analyzer from "./analyzer";
 import * as mcts from "./mcts";
 import * as gameUtil from "./gameUtil";
-import { CardType, WorkerMessageType } from "./types";
+import { CardType, MctsWorkerMessageType } from "./types";
 
 (window as any).analyzer = analyzer;
 (window as any).mcts = mcts;
 (window as any).gameUtil = gameUtil;
 (window as any).CardType = CardType;
-(window as any).WorkerMessageType = WorkerMessageType;
+(window as any).WorkerMessageType = MctsWorkerMessageType;
 
 ReactDOM.render(
   <React.StrictMode>

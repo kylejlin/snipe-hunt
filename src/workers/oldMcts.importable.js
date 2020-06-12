@@ -1,4 +1,4 @@
 // eslint-disable-next-line import/no-webpack-loader-syntax
-import MctsWorker from "worker-loader!./mcts2";
+import MctsWorker from "worker-loader!./oldMcts";
 
 export default MctsWorker;

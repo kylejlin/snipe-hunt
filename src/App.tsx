@@ -33,8 +33,8 @@ import {
   Ply,
   Atomic,
 } from "./types";
-import MctsWorker from "./workers/mcts2.importable";
-import { getMctsAnalyzerFromHeapWithoutInitializing } from "./mcts2";
+import MctsWorker from "./workers/mcts.importable";
+import { getMctsAnalyzerFromHeapWithoutInitializing } from "./mcts";
 
 export default class App extends React.Component<{}, AppState> {
   private mctsWorker: Worker | undefined;

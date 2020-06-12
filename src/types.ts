@@ -1,5 +1,5 @@
 import { Option, Result } from "rusty-ts";
-import { MctsAnalyzerV2InternalData } from "./mcts2";
+import { MctsAnalyzerInternalData } from "./mcts";
 
 /**
  * Increment this when making breaking changes
@@ -415,5 +415,5 @@ export interface TransferMctsAnalyzerRequest {
 
 export interface TransferMctsAnalyzerResponse {
   messageType: WorkerMessageType.TransferMctsAnalyzerResponse;
-  internalData: MctsAnalyzerV2InternalData;
+  internalData: MctsAnalyzerInternalData;
 }

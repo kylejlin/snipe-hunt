@@ -5,7 +5,7 @@ import App from "./App";
 import * as serviceWorker from "./serviceWorker";
 
 import * as analyzer from "./analyzer";
-import * as mcts from "./mcts2";
+import * as mcts from "./mcts";
 import * as gameUtil from "./gameUtil";
 import { CardType, WorkerMessageType } from "./types";
 

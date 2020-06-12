@@ -2,15 +2,16 @@ import { option, Option } from "rusty-ts";
 import {
   getMctsAnalyzerIfStateIsNonTerminal,
   MctsAnalyzer,
-  getMctsAnalyzerForNonTerminalStateFromRoot,
+  NODE_SIZE_IN_I32S,
 } from "../mcts";
 import {
   MctsWorkerMessage,
   UpdateMctsAnalysisNotification,
   UpdateMctsAnalyzerGameStateRequest,
   WorkerMessageType,
+  TransferMctsAnalyzerRequest,
+  TransferMctsAnalyzerResponse,
 } from "../types";
-import { getMinimalGameStateAnalyzer } from "../minimalAnalyzer";
 
 export {};
 
@@ -29,19 +30,13 @@ let lastPosted = 0;
 self.addEventListener("message", (e) => {
   const data = e.data;
   if ("object" === typeof data && data !== null) {
-    {
-      if (data.x) {
-        self.postMessage({
-          messageType: WorkerMessageType.LogNotification,
-          data: optMctsAnalyzer.unwrap().getRoot(),
-        });
-      }
-    }
     const message: MctsWorkerMessage = data;
     switch (message.messageType) {
       case WorkerMessageType.UpdateMctsAnalyzerGameStateRequest:
         onGameStateUpdateRequest(message);
         break;
+      case WorkerMessageType.TransferMctsAnalyzerRequest:
+        onTransferHeapRequest(message);
     }
   }
 });
@@ -51,38 +46,23 @@ function onGameStateUpdateRequest(
 ): void {
   const newGameState = message.gameState;
 
-  const optRecycledAnalyzer = optMctsAnalyzer.andThen((mctsAnalyzer) => {
-    const selectedChild = mctsAnalyzer
-      .getRoot()
-      .children.find(
-        (child) =>
-          getMinimalGameStateAnalyzer(child.state).toNodeKey() ===
-          getMinimalGameStateAnalyzer(newGameState).toNodeKey()
-      );
+  optMctsAnalyzer = getMctsAnalyzerIfStateIsNonTerminal(
+    newGameState,
+    newGameState.plies.length + 3,
+    NODE_SIZE_IN_I32S * 2e7
+  );
+}
 
-    if (selectedChild !== undefined) {
-      if (
-        selectedChild.edgeConnectingToParent!.parent.state.turn !==
-        selectedChild.state.turn
-      ) {
-        selectedChild.value = selectedChild.rollouts - selectedChild.value;
-      }
+function onTransferHeapRequest(_message: TransferMctsAnalyzerRequest): void {
+  optMctsAnalyzer.ifSome((mctsAnalyzer) => {
+    const internalData = mctsAnalyzer.getInternalData();
+    optMctsAnalyzer = option.none();
 
-      selectedChild.edgeConnectingToParent = undefined;
-
-      return option.some(
-        getMctsAnalyzerForNonTerminalStateFromRoot(
-          selectedChild,
-          getMinimalGameStateAnalyzer(selectedChild.state)
-        )
-      );
-    } else {
-      return option.none();
-    }
-  });
-
-  optMctsAnalyzer = optRecycledAnalyzer.orElse(() => {
-    return getMctsAnalyzerIfStateIsNonTerminal(newGameState);
+    const message: TransferMctsAnalyzerResponse = {
+      messageType: WorkerMessageType.TransferMctsAnalyzerResponse,
+      internalData,
+    };
+    self.postMessage(message, [internalData.heapBuffer]);
   });
 }
 
@@ -97,7 +77,7 @@ function analysisUpdateLoop() {
     },
 
     some: (analyzer) => {
-      const root = analyzer.getRoot();
+      const root = analyzer.getRootSummary();
       const meanValue = root.value / root.rollouts;
       const isTerminal =
         root.rollouts >= MIN_ROLLOUTS_NEEDED_TO_DECLARE_STATE_TERMINAL &&
@@ -123,14 +103,15 @@ function analysisUpdateLoop() {
 }
 
 function postAnalysisUpdate(analyzer: MctsAnalyzer): void {
-  const [bestAtomic, childWithBestAtomic] = option
-    .all([analyzer.getBestAtomic(), analyzer.getChildWithBestAtomic()])
-    .expect("Impossible: optMctsAnalyzer is some when game has already eneded");
+  const root = analyzer.getRootSummary();
+  const bestAtomic = analyzer.getBestAtomic();
+  const childWithBestAtomic = analyzer.getSummaryOfChildWithBestAtomic();
+
   const message: UpdateMctsAnalysisNotification = {
     messageType: WorkerMessageType.UpdateMctsAnalysisNotification,
     optAnalysis: {
-      currentStateValue: analyzer.getRoot().value,
-      currentStateRollouts: analyzer.getRoot().rollouts,
+      currentStateValue: root.value,
+      currentStateRollouts: root.rollouts,
 
       bestAtomic,
       bestAtomicValue: childWithBestAtomic.value,

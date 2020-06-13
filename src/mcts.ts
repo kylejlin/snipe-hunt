@@ -33,12 +33,19 @@ const EXPLORATION_CONSTANT = Math.sqrt(2);
 
 export interface MctsAnalyzer {
   performRollout(): void;
-  getRootSummary(): NodeSummary;
-  getBestAtomic(): Atomic;
-  getSummaryOfChildWithBestAtomic(): NodeSummary;
-  getInternalData(): MctsAnalyzerInternalData;
-  getAtomicsOnPathToNode(nodeIndex: number): Atomic[];
+
+  getRootPointer(): NodePointer;
+  getNodeSummary(pointer: NodePointer): NodeSummary;
+  getChildPointersFromBestToWorst(pointer: NodePointer): NodePointer[];
+
   getSnapshot(): MctsAnalysisSnapshot;
+
+  getInternalData(): MctsAnalyzerInternalData;
+}
+
+/** This is a "fake" type. */
+export interface NodePointer {
+  readonly nodePointerTag: unique symbol;
 }
 
 export interface NodeSummary {
@@ -194,12 +201,14 @@ export function getMctsAnalyzerFromInternalDataWithoutInitializing(
 
   return {
     performRollout,
-    getRootSummary,
-    getBestAtomic,
-    getSummaryOfChildWithBestAtomic,
-    getInternalData,
-    getAtomicsOnPathToNode,
+
+    getRootPointer,
+    getNodeSummary,
+    getChildPointersFromBestToWorst,
+
     getSnapshot,
+
+    getInternalData,
   };
 
   function performRollout(): void {
@@ -1074,18 +1083,79 @@ export function getMctsAnalyzerFromInternalDataWithoutInitializing(
     return heap[nodeIndex + NodeOffsets.ParentIndex];
   }
 
-  function getRootSummary(): NodeSummary {
+  function getRootPointer(): NodePointer {
+    return indexToPointer(ROOT_NODE_INDEX);
+  }
+
+  function getNodeSummary(pointer: NodePointer): NodeSummary {
+    const nodeIndex = pointerToIndex(pointer);
     return {
-      atomic: option.none(),
-      value: heap[ROOT_NODE_INDEX + NodeOffsets.Value],
-      rollouts: heap[ROOT_NODE_INDEX + NodeOffsets.Rollouts],
+      atomic:
+        heap[nodeIndex + NodeOffsets.ParentIndex] === -1
+          ? option.none()
+          : option.some(decodeAtomic(heap[nodeIndex + NodeOffsets.Atomic])),
+      value: heap[nodeIndex + NodeOffsets.Value],
+      rollouts: heap[nodeIndex + NodeOffsets.Rollouts],
     };
   }
 
-  function getBestAtomic(): Atomic {
-    return getSummaryOfChildWithBestAtomic().atomic.expect(
-      "Impossible: Child node does not have atomic."
-    );
+  function getChildPointersFromBestToWorst(
+    pointer: NodePointer
+  ): NodePointer[] {
+    const nodeIndex = pointerToIndex(pointer);
+
+    const turn =
+      (heap[nodeIndex + NodeOffsets.SnipeSetsTurnNumberAndMovedAnimal] >>> 16) &
+      Filter.LeastTenBits;
+    const optActivePlayer: Player | -1 =
+      turn === ALPHA_WINS || turn === BETA_WINS ? -1 : turn & 0b1;
+
+    const childListStartIndex =
+      heap[nodeIndex + NodeOffsets.ChildListStartIndex];
+    const childListLen = heap[childListStartIndex];
+    const indexesAndScores: { index: number; score: number }[] = [];
+
+    for (let i = 0; i < childListLen; i++) {
+      const childIndex = heap[childListStartIndex + 1 + i];
+
+      const optWinner = getEffectiveWinner(childIndex);
+      let score: number;
+
+      if (optWinner !== -1 && optActivePlayer !== -1) {
+        score = optWinner === optActivePlayer ? Infinity : -Infinity;
+      } else if (optWinner !== -1) {
+        const childTurn =
+          (heap[childIndex + NodeOffsets.SnipeSetsTurnNumberAndMovedAnimal] >>>
+            16) &
+          Filter.LeastTenBits;
+        score = childTurn === turn ? Infinity : -Infinity;
+      } else {
+        const childRollouts = heap[childIndex + NodeOffsets.Rollouts];
+        score = childRollouts;
+      }
+
+      indexesAndScores.push({ index: childIndex, score });
+    }
+
+    return indexesAndScores
+      .sort((a, b) => b.score - a.score)
+      .map((scoreIndex) => indexToPointer(scoreIndex.index));
+  }
+
+  function getSnapshot(): MctsAnalysisSnapshot {
+    const root = getNodeSummary(getRootPointer());
+    const childWithBestAtomic = getSummaryOfChildWithBestAtomic();
+
+    return {
+      currentStateValue: root.value,
+      currentStateRollouts: root.rollouts,
+
+      bestAtomic: childWithBestAtomic.atomic.expect(
+        "Impossible: Child node does not have atomic."
+      ),
+      bestAtomicValue: childWithBestAtomic.value,
+      bestAtomicRollouts: childWithBestAtomic.rollouts,
+    };
   }
 
   function getSummaryOfChildWithBestAtomic(): NodeSummary {
@@ -1149,34 +1219,12 @@ export function getMctsAnalyzerFromInternalDataWithoutInitializing(
   function getInternalData(): MctsAnalyzerInternalData {
     return { heapBuffer: heap.buffer, mallocIndex };
   }
+}
 
-  function getAtomicsOnPathToNode(leafIndex: number): Atomic[] {
-    const atomics: Atomic[] = [];
+function pointerToIndex(pointer: NodePointer): number {
+  return (pointer as unknown) as number;
+}
 
-    let nodeIndex = leafIndex;
-    let parentIndex = getParentIndex(nodeIndex);
-    while (~parentIndex) {
-      atomics.push(decodeAtomic(heap[nodeIndex + NodeOffsets.Atomic]));
-
-      nodeIndex = parentIndex;
-      parentIndex = getParentIndex(nodeIndex);
-    }
-
-    return atomics.reverse();
-  }
-
-  function getSnapshot(): MctsAnalysisSnapshot {
-    const root = getRootSummary();
-    const bestAtomic = getBestAtomic();
-    const childWithBestAtomic = getSummaryOfChildWithBestAtomic();
-
-    return {
-      currentStateValue: root.value,
-      currentStateRollouts: root.rollouts,
-
-      bestAtomic,
-      bestAtomicValue: childWithBestAtomic.value,
-      bestAtomicRollouts: childWithBestAtomic.rollouts,
-    };
-  }
+function indexToPointer(nodeIndex: number): NodePointer {
+  return (nodeIndex as unknown) as NodePointer;
 }

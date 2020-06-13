@@ -87,13 +87,13 @@ function analysisUpdateLoop() {
     none: () => {
       const message: UpdateSnapshotNotification = {
         messageType: MctsWorkerMessageType.UpdateSnapshotNotification,
-        optAnalysis: null,
+        optSnapshot: null,
       };
       self.postMessage(message);
     },
 
     some: (analyzer) => {
-      const root = analyzer.getRootSummary();
+      const root = analyzer.getNodeSummary(analyzer.getRootPointer());
       const meanValue = root.value / root.rollouts;
       const isTerminal =
         root.rollouts >= MIN_ROLLOUTS_NEEDED_TO_DECLARE_STATE_TERMINAL &&
@@ -119,20 +119,9 @@ function analysisUpdateLoop() {
 }
 
 function postAnalysisUpdate(analyzer: MctsAnalyzer): void {
-  const root = analyzer.getRootSummary();
-  const bestAtomic = analyzer.getBestAtomic();
-  const childWithBestAtomic = analyzer.getSummaryOfChildWithBestAtomic();
-
   const message: UpdateSnapshotNotification = {
     messageType: MctsWorkerMessageType.UpdateSnapshotNotification,
-    optAnalysis: {
-      currentStateValue: root.value,
-      currentStateRollouts: root.rollouts,
-
-      bestAtomic,
-      bestAtomicValue: childWithBestAtomic.value,
-      bestAtomicRollouts: childWithBestAtomic.rollouts,
-    },
+    optSnapshot: analyzer.getSnapshot(),
   };
   self.postMessage(message);
 }

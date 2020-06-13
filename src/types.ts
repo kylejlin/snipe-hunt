@@ -442,7 +442,7 @@ export interface LogNotification {
 
 export interface UpdateSnapshotNotification {
   messageType: MctsWorkerMessageType.UpdateSnapshotNotification;
-  optAnalysis: MctsAnalysisSnapshot | null;
+  optSnapshot: MctsAnalysisSnapshot | null;
 }
 
 export interface PauseAnalyzerResponse {

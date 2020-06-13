@@ -89,7 +89,7 @@ function analysisUpdateLoop() {
     none: () => {
       const message: UpdateSnapshotNotification = {
         messageType: MctsWorkerMessageType.UpdateSnapshotNotification,
-        optAnalysis: null,
+        optSnapshot: null,
       };
       self.postMessage(message);
     },
@@ -126,7 +126,7 @@ function postAnalysisUpdate(analyzer: OldMctsAnalyzer): void {
     .expect("Impossible: optMctsAnalyzer is some when game has already eneded");
   const message: UpdateSnapshotNotification = {
     messageType: MctsWorkerMessageType.UpdateSnapshotNotification,
-    optAnalysis: {
+    optSnapshot: {
       currentStateValue: analyzer.getRoot().value,
       currentStateRollouts: analyzer.getRoot().rollouts,
 

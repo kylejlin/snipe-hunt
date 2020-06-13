@@ -634,11 +634,11 @@ export default class App extends React.Component<{}, AppState> {
     plyNumber: number
   ): React.ReactElement {
     const mctsAnalyzer = mctsState.analyzer;
-    const rootSummary = mctsAnalyzer.getRootSummary();
-    const bestSummary = mctsAnalyzer.getSummaryOfChildWithBestAtomic();
-    const bestAtomic = bestSummary.atomic.expect(
-      "Impossible: child node has no atomic."
+    const rootSummary = mctsAnalyzer.getNodeSummary(
+      mctsAnalyzer.getRootPointer()
     );
+    const snapshot = mctsAnalyzer.getSnapshot();
+    const bestAtomic = snapshot.bestAtomic;
 
     const gameAnalyzer = getAnalyzer(this.state.gameState);
     const isTherePendingAnimalStep = gameAnalyzer
@@ -667,8 +667,8 @@ export default class App extends React.Component<{}, AppState> {
                 winner={winner}
               />{" "}
               <NodeStats
-                value={bestSummary.value}
-                rollouts={bestSummary.rollouts}
+                value={snapshot.bestAtomicValue}
+                rollouts={snapshot.bestAtomicRollouts}
               />
             </li>
           </ol>

@@ -72,7 +72,7 @@ export function getMctsService(): MctsService {
   function onUpdateSnapshotNotification(
     message: UpdateSnapshotNotification
   ): void {
-    const optSnapshot = option.fromVoidable(message.optAnalysis);
+    const optSnapshot = option.fromVoidable(message.optSnapshot);
     for (const listener of snapshotListeners) {
       listener(optSnapshot);
     }

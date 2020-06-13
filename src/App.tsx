@@ -7,6 +7,8 @@ import AnimalStepView from "./components/AnimalStepView";
 import CardView from "./components/CardView";
 import ElementMatrix from "./components/ElementMatrix";
 import FutureAnimalStepView from "./components/FutureAnimalStepView";
+import InlineAtomic from "./components/InlineAtomic";
+import NodeStats from "./components/NodeStats";
 import PlyView from "./components/PlyView";
 import * as gameUtil from "./gameUtil";
 import { MctsAnalyzer } from "./mcts";
@@ -25,6 +27,7 @@ import {
   GameState,
   IllegalGameStateUpdate,
   MctsAnalysisSnapshot,
+  MctsPausedState,
   MctsService,
   Player,
   Ply,
@@ -356,51 +359,52 @@ export default class App extends React.Component<{}, AppState> {
               <button onClick={this.onResumeAnalyzerClicked}>Resume</button>
             )}
           </h3>
-          {mctsState.isRunning ? (
-            mctsState.mostRecentSnapshot.match({
-              none: () =>
-                analyzer.isGameOver() ? <p>Game over</p> : <p>Loading...</p>,
-              some: (analysis) => {
-                const { bestAtomic } = analysis;
-                const afterPerformingBest = getAnalyzer(
-                  analyzer.forcePerform(bestAtomic)
-                );
-                const currentStateMeanValue =
-                  analysis.currentStateValue / analysis.currentStateRollouts;
-                const bestAtomicMeanValue =
-                  analysis.bestAtomicValue / analysis.bestAtomicRollouts;
+          {mctsState.isRunning
+            ? mctsState.mostRecentSnapshot.match({
+                none: () =>
+                  analyzer.isGameOver() ? <p>Game over</p> : <p>Loading...</p>,
+                some: (analysis) => {
+                  const { bestAtomic } = analysis;
+                  const afterPerformingBest = getAnalyzer(
+                    analyzer.forcePerform(bestAtomic)
+                  );
+                  const currentStateMeanValue =
+                    analysis.currentStateValue / analysis.currentStateRollouts;
+                  const bestAtomicMeanValue =
+                    analysis.bestAtomicValue / analysis.bestAtomicRollouts;
 
-                return (
-                  <>
-                    <h4>
-                      Best action (before: [v̅ ={" "}
-                      {currentStateMeanValue.toFixed(3)}, n ={" "}
-                      {analysis.currentStateRollouts}
-                      ], after: [v̅ = {bestAtomicMeanValue.toFixed(3)}, n ={" "}
-                      {analysis.bestAtomicRollouts}
-                      ]):
-                    </h4>
-                    {"plyType" in bestAtomic ? (
-                      <PlyView ply={bestAtomic} plyNumber={plies.length + 3} />
-                    ) : analyzer.getPendingAnimalStep().isSome() ? (
-                      <FutureAnimalStepView
-                        step={bestAtomic}
-                        plyNumber={plies.length + 3}
-                      />
-                    ) : (
-                      <AnimalStepView
-                        step={bestAtomic}
-                        plyNumber={plies.length + 3}
-                        winner={afterPerformingBest.getWinner()}
-                      />
-                    )}
-                  </>
-                );
-              },
-            })
-          ) : (
-            <div>TODO handle paused service</div>
-          )}
+                  return (
+                    <>
+                      <h4>
+                        Best action (before: [v̅ ={" "}
+                        {currentStateMeanValue.toFixed(3)}, n ={" "}
+                        {analysis.currentStateRollouts}
+                        ], after: [v̅ = {bestAtomicMeanValue.toFixed(3)}, n ={" "}
+                        {analysis.bestAtomicRollouts}
+                        ]):
+                      </h4>
+                      {"plyType" in bestAtomic ? (
+                        <PlyView
+                          ply={bestAtomic}
+                          plyNumber={plies.length + 3}
+                        />
+                      ) : analyzer.getPendingAnimalStep().isSome() ? (
+                        <FutureAnimalStepView
+                          step={bestAtomic}
+                          plyNumber={plies.length + 3}
+                        />
+                      ) : (
+                        <AnimalStepView
+                          step={bestAtomic}
+                          plyNumber={plies.length + 3}
+                          winner={afterPerformingBest.getWinner()}
+                        />
+                      )}
+                    </>
+                  );
+                },
+              })
+            : this.renderExpandableAnalysis(mctsState, plies.length + 3)}
         </div>
       </div>
     );
@@ -625,6 +629,59 @@ export default class App extends React.Component<{}, AppState> {
     );
   }
 
+  renderExpandableAnalysis(
+    mctsState: MctsPausedState,
+    plyNumber: number
+  ): React.ReactElement {
+    const mctsAnalyzer = mctsState.analyzer;
+    const rootSummary = mctsAnalyzer.getRootSummary();
+    const bestSummary = mctsAnalyzer.getSummaryOfChildWithBestAtomic();
+    const bestAtomic = bestSummary.atomic.expect(
+      "Impossible: child node has no atomic."
+    );
+
+    const gameAnalyzer = getAnalyzer(this.state.gameState);
+    const isTherePendingAnimalStep = gameAnalyzer
+      .getPendingAnimalStep()
+      .isSome();
+    const winner = gameAnalyzer.getWinner();
+
+    return (
+      <div>
+        <h4>
+          Current state:{" "}
+          <NodeStats
+            value={rootSummary.value}
+            rollouts={rootSummary.rollouts}
+          />
+        </h4>
+
+        <div>
+          <h4>Best action:</h4>
+          <ol>
+            <li>
+              <InlineAtomic
+                atomic={bestAtomic}
+                isSecondAnimalStep={isTherePendingAnimalStep}
+                plyNumber={plyNumber}
+                winner={winner}
+              />{" "}
+              <NodeStats
+                value={bestSummary.value}
+                rollouts={bestSummary.rollouts}
+              />
+            </li>
+          </ol>
+
+          <h4>Alternative actions:</h4>
+          <ol start={2}>
+            <li>TODO Alternative actions</li>
+          </ol>
+        </div>
+      </div>
+    );
+  }
+
   onCardClicked(clicked: Card): void {
     const analyzer = getAnalyzer(this.state.gameState);
     if (clicked.allegiance !== analyzer.getTurn()) {
@@ -835,7 +892,9 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   onMctsServicePause(analyzer: MctsAnalyzer): void {
-    this.setState({ mctsState: { isRunning: false, analyzer } });
+    this.setState({
+      mctsState: { isRunning: false, analyzer, expandedNodeIndexes: [] },
+    });
   }
 
   onPauseAnalyzerClicked(): void {

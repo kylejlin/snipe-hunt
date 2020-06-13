@@ -47,6 +47,7 @@ export interface MctsRunningState {
 export interface MctsPausedState {
   isRunning: false;
   analyzer: MctsAnalyzer;
+  expandedNodeIndexes: number[];
 }
 
 export interface MctsAnalysisSnapshot {

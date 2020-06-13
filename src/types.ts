@@ -68,7 +68,7 @@ export interface MctsService {
   onPause(listener: (analyzer: MctsAnalyzer) => void): void;
 }
 
-export interface GameAnalyzer {
+export interface GameStateAnalyzer {
   getInitialState(): GameState;
   getBoard(): Board;
   getPlies(): Ply[];

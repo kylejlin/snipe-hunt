@@ -1,12 +1,12 @@
 import React from "react";
 import { Option } from "rusty-ts";
 import { cardProperties } from "../cardMaps";
-import { Card, CardType, Element, GameAnalyzer } from "../types";
+import { Card, CardType, Element, GameStateAnalyzer } from "../types";
 import CardView from "./CardView";
 import "./styles/ElementMatrix.css";
 
 interface Props {
-  analyzer: GameAnalyzer;
+  analyzer: GameStateAnalyzer;
   cards: Card[];
   selectedCard: Option<CardType>;
   onCardClicked(card: Card): void;

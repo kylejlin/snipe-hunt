@@ -22,7 +22,7 @@ import {
   CardLocation,
   CardType,
   Drop,
-  GameAnalyzer,
+  GameStateAnalyzer,
   GameState,
   IllegalGameStateUpdate,
   legalRetreaterDrops,
@@ -34,7 +34,7 @@ import {
   SnipeType,
 } from "./types";
 
-export function getAnalyzer(initState: GameState): GameAnalyzer {
+export function getStateAnalyzer(initState: GameState): GameStateAnalyzer {
   let state = initState;
 
   return {
@@ -458,7 +458,7 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
     originalMutState: GameState
   ): GameState {
     let mutState = originalMutState;
-    const analyzer = getAnalyzer(mutState);
+    const stateAnalyzer = getStateAnalyzer(mutState);
 
     mutState.currentBoard = new Int32Array(mutState.initialBoard);
 
@@ -471,23 +471,23 @@ export function getAnalyzer(initState: GameState): GameAnalyzer {
 
     plies.forEach((ply) => {
       if (ply.plyType === PlyType.TwoAnimalSteps) {
-        analyzer.setState(mutState);
-        mutState = analyzer.forcePerform(ply.first);
-        analyzer.setState(mutState);
-        mutState = analyzer.forcePerform(ply.second);
+        stateAnalyzer.setState(mutState);
+        mutState = stateAnalyzer.forcePerform(ply.first);
+        stateAnalyzer.setState(mutState);
+        mutState = stateAnalyzer.forcePerform(ply.second);
       } else {
-        analyzer.setState(mutState);
-        mutState = analyzer.forcePerform(ply);
+        stateAnalyzer.setState(mutState);
+        mutState = stateAnalyzer.forcePerform(ply);
       }
     });
 
     if (encodedPendingAnimalStep) {
-      analyzer.setState(mutState);
+      stateAnalyzer.setState(mutState);
       const step: AnimalStep = {
         moved: (encodedPendingAnimalStep >>> 3) & Filter.LeastFiveBits,
         destination: (encodedPendingAnimalStep >>> 8) & Filter.LeastThreeBits,
       };
-      mutState = analyzer.forcePerform(step);
+      mutState = stateAnalyzer.forcePerform(step);
     }
 
     return mutState;

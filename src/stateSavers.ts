@@ -1,5 +1,5 @@
 import { option, Option } from "rusty-ts";
-import { getAnalyzer } from "./analyzer";
+import { getStateAnalyzer } from "./stateAnalyzer";
 import { gameStateFactory } from "./gameStateFactory";
 import {
   FutureSubPlyStack,
@@ -24,7 +24,7 @@ export const gameStateSaver: StateSaver<GameState> = {
   },
 
   setState(state: GameState): void {
-    const stateStr = getAnalyzer(state).serialize();
+    const stateStr = getStateAnalyzer(state).serialize();
     localStorage.setItem(LocalStorageKeys.GameState, stateStr);
   },
 };

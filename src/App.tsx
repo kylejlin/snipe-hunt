@@ -1,6 +1,6 @@
 import React from "react";
 import { option, Option, Result } from "rusty-ts";
-import { getAnalyzer } from "./analyzer";
+import { getStateAnalyzer } from "./stateAnalyzer";
 import "./App.css";
 import { cardEmojis } from "./cardMaps";
 import AnimalStepView from "./components/AnimalStepView";
@@ -85,18 +85,20 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   renderMatrixView(): React.ReactElement {
-    const analyzer = getAnalyzer(this.state.gameState);
-    const initialBoard = getAnalyzer(analyzer.getInitialState()).getBoard();
-    const currentBoard = analyzer.getBoard();
-    const plies = analyzer.getPlies();
+    const stateAnalyzer = getStateAnalyzer(this.state.gameState);
+    const initialBoard = getStateAnalyzer(
+      stateAnalyzer.getInitialState()
+    ).getBoard();
+    const currentBoard = stateAnalyzer.getBoard();
+    const plies = stateAnalyzer.getPlies();
     const { mctsState } = this.state;
 
     const { selectedCardType: selectedCard } = this.state.ux;
 
     return (
       <div className="SnipeHunt">
-        {analyzer.getWinner().match({
-          none: () => <div>Turn: {Player[analyzer.getTurn()]}</div>,
+        {stateAnalyzer.getWinner().match({
+          none: () => <div>Turn: {Player[stateAnalyzer.getTurn()]}</div>,
           some: (winner) => <div>Winner: {Player[winner]}</div>,
         })}
 
@@ -110,7 +112,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
-                    analyzer={analyzer}
+                    analyzer={stateAnalyzer}
                     cards={currentBoard[CardLocation.AlphaReserve]}
                     selectedCard={selectedCard}
                     onCardClicked={this.onCardClicked}
@@ -133,7 +135,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
-                    analyzer={analyzer}
+                    analyzer={stateAnalyzer}
                     cards={currentBoard[CardLocation.Row1]}
                     selectedCard={selectedCard}
                     onCardClicked={this.onCardClicked}
@@ -156,7 +158,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
-                    analyzer={analyzer}
+                    analyzer={stateAnalyzer}
                     cards={currentBoard[CardLocation.Row2]}
                     selectedCard={selectedCard}
                     onCardClicked={this.onCardClicked}
@@ -179,7 +181,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
-                    analyzer={analyzer}
+                    analyzer={stateAnalyzer}
                     cards={currentBoard[CardLocation.Row3]}
                     selectedCard={selectedCard}
                     onCardClicked={this.onCardClicked}
@@ -202,7 +204,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
-                    analyzer={analyzer}
+                    analyzer={stateAnalyzer}
                     cards={currentBoard[CardLocation.Row4]}
                     selectedCard={selectedCard}
                     onCardClicked={this.onCardClicked}
@@ -225,7 +227,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
-                    analyzer={analyzer}
+                    analyzer={stateAnalyzer}
                     cards={currentBoard[CardLocation.Row5]}
                     selectedCard={selectedCard}
                     onCardClicked={this.onCardClicked}
@@ -248,7 +250,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
-                    analyzer={analyzer}
+                    analyzer={stateAnalyzer}
                     cards={currentBoard[CardLocation.Row6]}
                     selectedCard={selectedCard}
                     onCardClicked={this.onCardClicked}
@@ -262,7 +264,7 @@ export default class App extends React.Component<{}, AppState> {
                 </td>
                 <td className="BoardCell">
                   <ElementMatrix
-                    analyzer={analyzer}
+                    analyzer={stateAnalyzer}
                     cards={currentBoard[CardLocation.BetaReserve]}
                     selectedCard={selectedCard}
                     onCardClicked={this.onCardClicked}
@@ -323,18 +325,18 @@ export default class App extends React.Component<{}, AppState> {
               return <PlyView ply={ply} plyNumber={plyNumber} />;
             })}
 
-            {analyzer.getPendingAnimalStep().match({
+            {stateAnalyzer.getPendingAnimalStep().match({
               none: () => null,
               some: (step) => (
                 <AnimalStepView
                   step={step}
                   plyNumber={plies.length + 3}
-                  winner={analyzer.getWinner()}
+                  winner={stateAnalyzer.getWinner()}
                 />
               ),
             })}
 
-            {analyzer.getWinner().match({
+            {stateAnalyzer.getWinner().match({
               none: () => null,
               some: (winner) => {
                 const winnerEmoji = cardEmojis[gameUtil.snipeOf(winner)];
@@ -362,11 +364,15 @@ export default class App extends React.Component<{}, AppState> {
           {mctsState.isRunning
             ? mctsState.mostRecentSnapshot.match({
                 none: () =>
-                  analyzer.isGameOver() ? <p>Game over</p> : <p>Loading...</p>,
+                  stateAnalyzer.isGameOver() ? (
+                    <p>Game over</p>
+                  ) : (
+                    <p>Loading...</p>
+                  ),
                 some: (analysis) => {
                   const { bestAtomic } = analysis;
-                  const afterPerformingBest = getAnalyzer(
-                    analyzer.forcePerform(bestAtomic)
+                  const afterPerformingBest = getStateAnalyzer(
+                    stateAnalyzer.forcePerform(bestAtomic)
                   );
                   const currentStateMeanValue =
                     analysis.currentStateValue / analysis.currentStateRollouts;
@@ -388,7 +394,7 @@ export default class App extends React.Component<{}, AppState> {
                           ply={bestAtomic}
                           plyNumber={plies.length + 3}
                         />
-                      ) : analyzer.getPendingAnimalStep().isSome() ? (
+                      ) : stateAnalyzer.getPendingAnimalStep().isSome() ? (
                         <FutureAnimalStepView
                           step={bestAtomic}
                           plyNumber={plies.length + 3}
@@ -431,8 +437,8 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   renderTraditionalView(): React.ReactElement {
-    const analyzer = getAnalyzer(this.state.gameState);
-    const currentBoard = analyzer.getBoard();
+    const stateAnalyzer = getStateAnalyzer(this.state.gameState);
+    const currentBoard = stateAnalyzer.getBoard();
 
     return (
       <table>
@@ -441,9 +447,9 @@ export default class App extends React.Component<{}, AppState> {
             <td>Reserve</td>
             <td
               className={
-                analyzer.isGameOver()
+                stateAnalyzer.isGameOver()
                   ? ""
-                  : analyzer.getTurn() === Player.Alpha
+                  : stateAnalyzer.getTurn() === Player.Alpha
                   ? "TurnIndicatorLight"
                   : ""
               }
@@ -520,9 +526,9 @@ export default class App extends React.Component<{}, AppState> {
             <td>Reserve</td>
             <td
               className={
-                analyzer.isGameOver()
+                stateAnalyzer.isGameOver()
                   ? ""
-                  : analyzer.getTurn() === Player.Beta
+                  : stateAnalyzer.getTurn() === Player.Beta
                   ? "TurnIndicatorLight"
                   : ""
               }
@@ -587,7 +593,7 @@ export default class App extends React.Component<{}, AppState> {
     }
 
     const { plies } = this.state.gameState;
-    const analyzer = getAnalyzer(this.state.gameState);
+    const stateAnalyzer = getStateAnalyzer(this.state.gameState);
 
     return (
       <>
@@ -621,7 +627,9 @@ export default class App extends React.Component<{}, AppState> {
                 preTurnsAnimalStep.match({ none: () => 0, some: () => 1 }) +
                 turns.length
               }
-              winner={getAnalyzer(analyzer.forcePerform(step)).getWinner()}
+              winner={getStateAnalyzer(
+                stateAnalyzer.forcePerform(step)
+              ).getWinner()}
             />
           ),
         })}
@@ -640,7 +648,7 @@ export default class App extends React.Component<{}, AppState> {
     const snapshot = mctsAnalyzer.getSnapshot();
     const bestAtomic = snapshot.bestAtomic;
 
-    const gameAnalyzer = getAnalyzer(this.state.gameState);
+    const gameAnalyzer = getStateAnalyzer(this.state.gameState);
     const isTherePendingAnimalStep = gameAnalyzer
       .getPendingAnimalStep()
       .isSome();
@@ -702,8 +710,8 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   onCardClicked(clicked: Card): void {
-    const analyzer = getAnalyzer(this.state.gameState);
-    if (clicked.allegiance !== analyzer.getTurn()) {
+    const stateAnalyzer = getStateAnalyzer(this.state.gameState);
+    if (clicked.allegiance !== stateAnalyzer.getTurn()) {
       return;
     }
 
@@ -733,9 +741,9 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   onRowNumberClicked(row: Row): void {
-    const analyzer = getAnalyzer(this.state.gameState);
+    const stateAnalyzer = getStateAnalyzer(this.state.gameState);
 
-    if (analyzer.isGameOver()) {
+    if (stateAnalyzer.isGameOver()) {
       return;
     }
 
@@ -749,7 +757,7 @@ export default class App extends React.Component<{}, AppState> {
         },
       });
 
-      const location = analyzer.getCardLocation(selected);
+      const location = stateAnalyzer.getCardLocation(selected);
       if (gameUtil.isReserve(location)) {
         this.tryDrop(selected as AnimalType, row);
       } else {
@@ -766,14 +774,14 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   tryDrop(selected: AnimalType, destination: Row): void {
-    const analyzer = getAnalyzer(this.state.gameState);
+    const stateAnalyzer = getStateAnalyzer(this.state.gameState);
     const drop: Drop = {
       plyType: PlyType.Drop,
       dropped: selected,
       destination,
     };
 
-    const dropResult = analyzer.tryPerform(drop);
+    const dropResult = stateAnalyzer.tryPerform(drop);
     this.updateGameStateOrAlertError(dropResult);
   }
 
@@ -793,31 +801,31 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   trySnipeStep(destination: Row): void {
-    const analyzer = getAnalyzer(this.state.gameState);
+    const stateAnalyzer = getStateAnalyzer(this.state.gameState);
     const step: SnipeStep = {
       plyType: PlyType.SnipeStep,
       destination,
     };
 
-    const stepResult = analyzer.tryPerform(step);
+    const stepResult = stateAnalyzer.tryPerform(step);
     this.updateGameStateOrAlertError(stepResult);
   }
 
   tryAnimalStep(selected: AnimalType, destination: Row): void {
-    const analyzer = getAnalyzer(this.state.gameState);
+    const stateAnalyzer = getStateAnalyzer(this.state.gameState);
     const step: AnimalStep = {
       moved: selected,
       destination,
     };
 
-    const stepResult = analyzer.tryPerform(step);
+    const stepResult = stateAnalyzer.tryPerform(step);
     this.updateGameStateOrAlertError(stepResult);
   }
 
   onUndoSubPlyClicked(): void {
-    const analyzer = getAnalyzer(this.state.gameState);
+    const stateAnalyzer = getStateAnalyzer(this.state.gameState);
 
-    const undoResult = analyzer.tryUndoSubPly();
+    const undoResult = stateAnalyzer.tryUndoSubPly();
     undoResult.match({
       ok: ({ newState: newGameState, undone }) => {
         this.updateUxState({
@@ -854,8 +862,8 @@ export default class App extends React.Component<{}, AppState> {
     }
 
     const nextAtomic = atomics[atomics.length - 1];
-    const analyzer = getAnalyzer(this.state.gameState);
-    const redoResult = analyzer.tryPerform(nextAtomic);
+    const stateAnalyzer = getStateAnalyzer(this.state.gameState);
+    const redoResult = stateAnalyzer.tryPerform(nextAtomic);
 
     this.updateGameStateOrAlertError(redoResult);
 
@@ -890,7 +898,7 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   isBestAtomicLegal({ bestAtomic }: MctsAnalysisSnapshot): boolean {
-    const legal = getAnalyzer(this.state.gameState)
+    const legal = getStateAnalyzer(this.state.gameState)
       .tryPerform(bestAtomic)
       .isOk();
     if (!legal) {

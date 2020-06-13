@@ -1,5 +1,5 @@
 import { Option, option } from "rusty-ts";
-import { getAnalyzer } from "./analyzer";
+import { getStateAnalyzer } from "./stateAnalyzer";
 import { bitCount, Filter } from "./bitwiseUtils";
 import { cardProperties } from "./cardMaps";
 import { canRetreat, isRow, oneRowBackward, oneRowForward } from "./gameUtil";
@@ -103,8 +103,8 @@ export function getMctsAnalyzerIfStateIsNonTerminal(
   turnNumber: number,
   heapSizeInI32s: number
 ): Option<MctsAnalyzer> {
-  const analyzer = getAnalyzer(rootState);
-  if (analyzer.isGameOver()) {
+  const stateAnalyzer = getStateAnalyzer(rootState);
+  if (stateAnalyzer.isGameOver()) {
     return option.none();
   } else {
     return option.some(

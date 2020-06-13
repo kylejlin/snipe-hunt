@@ -79,11 +79,11 @@ export function getMctsService(): MctsService {
   }
 
   function onTransferAnalyzerResponse(message: PauseAnalyzerResponse): void {
-    const analyzer = getMctsAnalyzerFromInternalDataWithoutInitializing(
+    const mctsAnalyzer = getMctsAnalyzerFromInternalDataWithoutInitializing(
       message.internalData
     );
     for (const listener of pauseListeners) {
-      listener(analyzer);
+      listener(mctsAnalyzer);
     }
   }
 

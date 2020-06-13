@@ -646,6 +646,10 @@ export default class App extends React.Component<{}, AppState> {
       .isSome();
     const winner = gameAnalyzer.getWinner();
 
+    const rootChildSummaries = mctsAnalyzer
+      .getChildPointersFromBestToWorst(mctsAnalyzer.getRootPointer())
+      .map(mctsAnalyzer.getNodeSummary);
+
     return (
       <div>
         <h4>
@@ -675,7 +679,22 @@ export default class App extends React.Component<{}, AppState> {
 
           <h4>Alternative actions:</h4>
           <ol start={2}>
-            <li>TODO Alternative actions</li>
+            {rootChildSummaries.slice(1).map((childSummary) => (
+              <li>
+                <InlineAtomic
+                  atomic={childSummary.atomic.expect(
+                    "Impossible: child node has no atomic."
+                  )}
+                  isSecondAnimalStep={isTherePendingAnimalStep}
+                  plyNumber={plyNumber}
+                  winner={winner}
+                />{" "}
+                <NodeStats
+                  value={childSummary.value}
+                  rollouts={childSummary.rollouts}
+                />
+              </li>
+            ))}
           </ol>
         </div>
       </div>

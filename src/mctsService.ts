@@ -1,15 +1,19 @@
 import { option } from "rusty-ts";
-import { getMctsAnalyzerFromInternalDataWithoutInitializing } from "./mcts";
+import {
+  getMctsAnalyzerFromInternalDataWithoutInitializing,
+  MctsAnalyzer,
+} from "./mcts";
 import {
   GameState,
   LogNotification,
   MctsService,
-  MctsWorkerMessage,
   MctsWorkerMessageType,
-  TransferAnalyzerRequest,
-  TransferAnalyzerResponse,
+  PauseAnalyzerRequest,
+  PauseAnalyzerResponse,
   UpdateGameStateRequest,
   UpdateSnapshotNotification,
+  MctsWorkerNotification,
+  ResumeAnalyzerRequest,
 } from "./types";
 import MctsWorker from "./workers/mcts.importable";
 
@@ -27,6 +31,7 @@ export function getMctsService(): MctsService {
   return {
     updateGameState,
     pause,
+    resume,
 
     onSnapshot,
     onPause,
@@ -39,7 +44,7 @@ export function getMctsService(): MctsService {
   function onWorkerMessage(event: MessageEvent): void {
     const { data } = event;
     if (data !== null && "object" === typeof data) {
-      const message: MctsWorkerMessage = data;
+      const message: MctsWorkerNotification = data;
       switch (message.messageType) {
         case MctsWorkerMessageType.LogNotification:
           onWorkerLogNotification(message);
@@ -47,9 +52,15 @@ export function getMctsService(): MctsService {
         case MctsWorkerMessageType.UpdateSnapshotNotification:
           onUpdateSnapshotNotification(message);
           break;
-        case MctsWorkerMessageType.TransferAnalyzerResponse:
+        case MctsWorkerMessageType.PauseAnalyzerResponse:
           onTransferAnalyzerResponse(message);
           break;
+        default: {
+          // Force exhaustive matching
+
+          // eslint-disable-next-line
+          const unreachable: never = message;
+        }
       }
     }
   }
@@ -67,7 +78,7 @@ export function getMctsService(): MctsService {
     }
   }
 
-  function onTransferAnalyzerResponse(message: TransferAnalyzerResponse): void {
+  function onTransferAnalyzerResponse(message: PauseAnalyzerResponse): void {
     const analyzer = getMctsAnalyzerFromInternalDataWithoutInitializing(
       message.internalData
     );
@@ -85,10 +96,19 @@ export function getMctsService(): MctsService {
   }
 
   function pause(): void {
-    const message: TransferAnalyzerRequest = {
-      messageType: MctsWorkerMessageType.TransferAnalyzerRequest,
+    const message: PauseAnalyzerRequest = {
+      messageType: MctsWorkerMessageType.PauseAnalyzerRequest,
     };
     worker.postMessage(message);
+  }
+
+  function resume(analyzer: MctsAnalyzer): void {
+    const internalData = analyzer.getInternalData();
+    const message: ResumeAnalyzerRequest = {
+      messageType: MctsWorkerMessageType.ResumeAnalyzerRequest,
+      internalData,
+    };
+    worker.postMessage(message, [internalData.heapBuffer]);
   }
 
   function onSnapshot(listener: SnapshotListener): void {

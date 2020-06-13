@@ -3,14 +3,16 @@ import {
   getMctsAnalyzerIfStateIsNonTerminal,
   MctsAnalyzer,
   NODE_SIZE_IN_I32S,
+  getMctsAnalyzerFromInternalDataWithoutInitializing,
 } from "../mcts";
 import {
-  MctsWorkerMessage,
+  MctsWorkerRequest,
   UpdateSnapshotNotification,
   UpdateGameStateRequest,
   MctsWorkerMessageType,
-  TransferAnalyzerRequest,
-  TransferAnalyzerResponse,
+  PauseAnalyzerRequest,
+  PauseAnalyzerResponse,
+  ResumeAnalyzerRequest,
 } from "../types";
 
 export {};
@@ -30,13 +32,23 @@ let lastPosted = 0;
 self.addEventListener("message", (e) => {
   const data = e.data;
   if ("object" === typeof data && data !== null) {
-    const message: MctsWorkerMessage = data;
+    const message: MctsWorkerRequest = data;
     switch (message.messageType) {
       case MctsWorkerMessageType.UpdateGameStateRequest:
         onGameStateUpdateRequest(message);
         break;
-      case MctsWorkerMessageType.TransferAnalyzerRequest:
-        onTransferHeapRequest(message);
+      case MctsWorkerMessageType.PauseAnalyzerRequest:
+        onPauseAnalyzerRequest(message);
+        break;
+      case MctsWorkerMessageType.ResumeAnalyzerRequest:
+        onResumeAnalyzerRequest(message);
+        break;
+      default: {
+        // Force exhaustive matching
+
+        // eslint-disable-next-line
+        const unreachable: never = message;
+      }
     }
   }
 });
@@ -51,17 +63,23 @@ function onGameStateUpdateRequest(message: UpdateGameStateRequest): void {
   );
 }
 
-function onTransferHeapRequest(_message: TransferAnalyzerRequest): void {
+function onPauseAnalyzerRequest(_message: PauseAnalyzerRequest): void {
   optMctsAnalyzer.ifSome((mctsAnalyzer) => {
     const internalData = mctsAnalyzer.getInternalData();
     optMctsAnalyzer = option.none();
 
-    const message: TransferAnalyzerResponse = {
-      messageType: MctsWorkerMessageType.TransferAnalyzerResponse,
+    const message: PauseAnalyzerResponse = {
+      messageType: MctsWorkerMessageType.PauseAnalyzerResponse,
       internalData,
     };
     self.postMessage(message, [internalData.heapBuffer]);
   });
+}
+
+function onResumeAnalyzerRequest(message: ResumeAnalyzerRequest): void {
+  optMctsAnalyzer = option.some(
+    getMctsAnalyzerFromInternalDataWithoutInitializing(message.internalData)
+  );
 }
 
 function analysisUpdateLoop() {

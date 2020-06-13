@@ -14,7 +14,7 @@ export interface AppState {
     selectedCardType: Option<CardType>;
     futureSubPlyStack: FutureSubPlyStack;
   };
-  mctsAnalysis: Option<MctsAnalysis>;
+  mctsState: MctsState;
 }
 
 export interface GameState {
@@ -37,7 +37,19 @@ export interface FutureSubPlyStack {
   atomics: Atomic[];
 }
 
-export interface MctsAnalysis {
+export type MctsState = MctsRunningState | MctsPausedState;
+
+export interface MctsRunningState {
+  isRunning: true;
+  mostRecentSnapshot: Option<MctsAnalysisSnapshot>;
+}
+
+export interface MctsPausedState {
+  isRunning: false;
+  analyzer: MctsAnalyzer;
+}
+
+export interface MctsAnalysisSnapshot {
   currentStateValue: number;
   currentStateRollouts: number;
 
@@ -49,8 +61,9 @@ export interface MctsAnalysis {
 export interface MctsService {
   updateGameState(state: GameState): void;
   pause(): void;
+  resume(analyzer: MctsAnalyzer): void;
 
-  onSnapshot(listener: (analysis: Option<MctsAnalysis>) => void): void;
+  onSnapshot(listener: (analysis: Option<MctsAnalysisSnapshot>) => void): void;
   onPause(listener: (analyzer: MctsAnalyzer) => void): void;
 }
 
@@ -387,19 +400,38 @@ export enum TripletShift {
   None = 12,
 }
 
-export type MctsWorkerMessage =
+export type MctsWorkerRequest =
+  | UpdateGameStateRequest
+  | PauseAnalyzerRequest
+  | ResumeAnalyzerRequest;
+
+export type MctsWorkerNotification =
   | LogNotification
   | UpdateSnapshotNotification
-  | UpdateGameStateRequest
-  | TransferAnalyzerRequest
-  | TransferAnalyzerResponse;
+  | PauseAnalyzerResponse;
 
 export enum MctsWorkerMessageType {
+  UpdateGameStateRequest,
+  PauseAnalyzerRequest,
+  ResumeAnalyzerRequest,
+
   LogNotification,
   UpdateSnapshotNotification,
-  UpdateGameStateRequest,
-  TransferAnalyzerRequest,
-  TransferAnalyzerResponse,
+  PauseAnalyzerResponse,
+}
+
+export interface UpdateGameStateRequest {
+  messageType: MctsWorkerMessageType.UpdateGameStateRequest;
+  gameState: GameState;
+}
+
+export interface PauseAnalyzerRequest {
+  messageType: MctsWorkerMessageType.PauseAnalyzerRequest;
+}
+
+export interface ResumeAnalyzerRequest {
+  messageType: MctsWorkerMessageType.ResumeAnalyzerRequest;
+  internalData: MctsAnalyzerInternalData;
 }
 
 export interface LogNotification {
@@ -409,19 +441,10 @@ export interface LogNotification {
 
 export interface UpdateSnapshotNotification {
   messageType: MctsWorkerMessageType.UpdateSnapshotNotification;
-  optAnalysis: MctsAnalysis | null;
+  optAnalysis: MctsAnalysisSnapshot | null;
 }
 
-export interface UpdateGameStateRequest {
-  messageType: MctsWorkerMessageType.UpdateGameStateRequest;
-  gameState: GameState;
-}
-
-export interface TransferAnalyzerRequest {
-  messageType: MctsWorkerMessageType.TransferAnalyzerRequest;
-}
-
-export interface TransferAnalyzerResponse {
-  messageType: MctsWorkerMessageType.TransferAnalyzerResponse;
+export interface PauseAnalyzerResponse {
+  messageType: MctsWorkerMessageType.PauseAnalyzerResponse;
   internalData: MctsAnalyzerInternalData;
 }

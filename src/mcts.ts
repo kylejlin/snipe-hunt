@@ -17,6 +17,7 @@ import {
   PlyType,
   Row,
   SnipeStep,
+  MctsAnalysisSnapshot,
 } from "./types";
 
 export const NODE_SIZE_IN_I32S = 22;
@@ -37,6 +38,7 @@ export interface MctsAnalyzer {
   getSummaryOfChildWithBestAtomic(): NodeSummary;
   getInternalData(): MctsAnalyzerInternalData;
   getAtomicsOnPathToNode(nodeIndex: number): Atomic[];
+  getSnapshot(): MctsAnalysisSnapshot;
 }
 
 export interface NodeSummary {
@@ -197,6 +199,7 @@ export function getMctsAnalyzerFromInternalDataWithoutInitializing(
     getSummaryOfChildWithBestAtomic,
     getInternalData,
     getAtomicsOnPathToNode,
+    getSnapshot,
   };
 
   function performRollout(): void {
@@ -1160,5 +1163,20 @@ export function getMctsAnalyzerFromInternalDataWithoutInitializing(
     }
 
     return atomics.reverse();
+  }
+
+  function getSnapshot(): MctsAnalysisSnapshot {
+    const root = getRootSummary();
+    const bestAtomic = getBestAtomic();
+    const childWithBestAtomic = getSummaryOfChildWithBestAtomic();
+
+    return {
+      currentStateValue: root.value,
+      currentStateRollouts: root.rollouts,
+
+      bestAtomic,
+      bestAtomicValue: childWithBestAtomic.value,
+      bestAtomicRollouts: childWithBestAtomic.rollouts,
+    };
   }
 }

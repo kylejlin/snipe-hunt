@@ -24,7 +24,7 @@ import {
   FutureSubPlyStack,
   GameState,
   IllegalGameStateUpdate,
-  MctsAnalysis,
+  MctsAnalysisSnapshot,
   MctsService,
   Player,
   Ply,
@@ -64,6 +64,8 @@ export default class App extends React.Component<{}, AppState> {
     this.isBestAtomicLegal = this.isBestAtomicLegal.bind(this);
     this.onMctsServiceSnapshot = this.onMctsServiceSnapshot.bind(this);
     this.onMctsServicePause = this.onMctsServicePause.bind(this);
+    this.onPauseAnalyzerClicked = this.onPauseAnalyzerClicked.bind(this);
+    this.onResumeAnalyzerClicked = this.onResumeAnalyzerClicked.bind(this);
   }
 
   saveAndUpdateGameState(newGameState: GameState) {
@@ -84,6 +86,7 @@ export default class App extends React.Component<{}, AppState> {
     const initialBoard = getAnalyzer(analyzer.getInitialState()).getBoard();
     const currentBoard = analyzer.getBoard();
     const plies = analyzer.getPlies();
+    const { mctsState } = this.state;
 
     const { selectedCardType: selectedCard } = this.state.ux;
 
@@ -345,47 +348,59 @@ export default class App extends React.Component<{}, AppState> {
         </div>
         <button onClick={this.onResetClicked}>Reset</button>
         <div>
-          <h3>Computer agents:</h3>
-          {this.state.mctsAnalysis.match({
-            none: () =>
-              analyzer.isGameOver() ? <p>Game over</p> : <p>Loading...</p>,
-            some: (analysis) => {
-              const { bestAtomic } = analysis;
-              const afterPerformingBest = getAnalyzer(
-                analyzer.forcePerform(bestAtomic)
-              );
-              const currentStateMeanValue =
-                analysis.currentStateValue / analysis.currentStateRollouts;
-              const bestAtomicMeanValue =
-                analysis.bestAtomicValue / analysis.bestAtomicRollouts;
+          <h3>
+            MCTS{" "}
+            {mctsState.isRunning ? (
+              <button onClick={this.onPauseAnalyzerClicked}>Pause</button>
+            ) : (
+              <button onClick={this.onResumeAnalyzerClicked}>Resume</button>
+            )}
+          </h3>
+          {mctsState.isRunning ? (
+            mctsState.mostRecentSnapshot.match({
+              none: () =>
+                analyzer.isGameOver() ? <p>Game over</p> : <p>Loading...</p>,
+              some: (analysis) => {
+                const { bestAtomic } = analysis;
+                const afterPerformingBest = getAnalyzer(
+                  analyzer.forcePerform(bestAtomic)
+                );
+                const currentStateMeanValue =
+                  analysis.currentStateValue / analysis.currentStateRollouts;
+                const bestAtomicMeanValue =
+                  analysis.bestAtomicValue / analysis.bestAtomicRollouts;
 
-              return (
-                <>
-                  <h4>
-                    MCTS (before: [v̅ = {currentStateMeanValue.toFixed(3)}, n ={" "}
-                    {analysis.currentStateRollouts}
-                    ], after: [v̅ = {bestAtomicMeanValue.toFixed(3)}, n ={" "}
-                    {analysis.bestAtomicRollouts}
-                    ]):
-                  </h4>
-                  {"plyType" in bestAtomic ? (
-                    <PlyView ply={bestAtomic} plyNumber={plies.length + 3} />
-                  ) : analyzer.getPendingAnimalStep().isSome() ? (
-                    <FutureAnimalStepView
-                      step={bestAtomic}
-                      plyNumber={plies.length + 3}
-                    />
-                  ) : (
-                    <AnimalStepView
-                      step={bestAtomic}
-                      plyNumber={plies.length + 3}
-                      winner={afterPerformingBest.getWinner()}
-                    />
-                  )}
-                </>
-              );
-            },
-          })}
+                return (
+                  <>
+                    <h4>
+                      Best action (before: [v̅ ={" "}
+                      {currentStateMeanValue.toFixed(3)}, n ={" "}
+                      {analysis.currentStateRollouts}
+                      ], after: [v̅ = {bestAtomicMeanValue.toFixed(3)}, n ={" "}
+                      {analysis.bestAtomicRollouts}
+                      ]):
+                    </h4>
+                    {"plyType" in bestAtomic ? (
+                      <PlyView ply={bestAtomic} plyNumber={plies.length + 3} />
+                    ) : analyzer.getPendingAnimalStep().isSome() ? (
+                      <FutureAnimalStepView
+                        step={bestAtomic}
+                        plyNumber={plies.length + 3}
+                      />
+                    ) : (
+                      <AnimalStepView
+                        step={bestAtomic}
+                        plyNumber={plies.length + 3}
+                        winner={afterPerformingBest.getWinner()}
+                      />
+                    )}
+                  </>
+                );
+              },
+            })
+          ) : (
+            <div>TODO handle paused service</div>
+          )}
         </div>
       </div>
     );
@@ -790,7 +805,7 @@ export default class App extends React.Component<{}, AppState> {
             atomics: [],
           },
         },
-        mctsAnalysis: option.none(),
+        mctsState: { isRunning: true, mostRecentSnapshot: option.none() },
       };
       gameStateSaver.setState(state.gameState);
       futureSubPlyStackSaver.setState(state.ux.futureSubPlyStack);
@@ -798,7 +813,7 @@ export default class App extends React.Component<{}, AppState> {
     }
   }
 
-  isBestAtomicLegal({ bestAtomic }: MctsAnalysis): boolean {
+  isBestAtomicLegal({ bestAtomic }: MctsAnalysisSnapshot): boolean {
     const legal = getAnalyzer(this.state.gameState)
       .tryPerform(bestAtomic)
       .isOk();
@@ -808,14 +823,37 @@ export default class App extends React.Component<{}, AppState> {
     return legal;
   }
 
-  onMctsServiceSnapshot(analysis: Option<MctsAnalysis>): void {
-    this.setState({
-      mctsAnalysis: analysis.filter(this.isBestAtomicLegal),
-    });
+  onMctsServiceSnapshot(analysis: Option<MctsAnalysisSnapshot>): void {
+    if (this.state.mctsState.isRunning) {
+      this.setState({
+        mctsState: {
+          isRunning: true,
+          mostRecentSnapshot: analysis.filter(this.isBestAtomicLegal),
+        },
+      });
+    }
   }
 
   onMctsServicePause(analyzer: MctsAnalyzer): void {
-    // TODO
+    this.setState({ mctsState: { isRunning: false, analyzer } });
+  }
+
+  onPauseAnalyzerClicked(): void {
+    this.mctsService.pause();
+  }
+
+  onResumeAnalyzerClicked(): void {
+    const { mctsState } = this.state;
+    if (!mctsState.isRunning) {
+      this.setState({
+        mctsState: {
+          isRunning: true,
+          mostRecentSnapshot: option.some(mctsState.analyzer.getSnapshot()),
+        },
+      });
+
+      this.mctsService.resume(mctsState.analyzer);
+    }
   }
 }
 
@@ -842,7 +880,7 @@ function loadState(): AppState {
       selectedCardType: option.none(),
       futureSubPlyStack,
     },
-    mctsAnalysis: option.none(),
+    mctsState: { isRunning: true, mostRecentSnapshot: option.none() },
   };
 }
 

@@ -1,16 +1,16 @@
 import { option, Option } from "rusty-ts";
+import { getMinimalGameStateAnalyzer } from "../minimalAnalyzer";
 import {
+  getMctsAnalyzerForNonTerminalStateFromRoot,
   getMctsAnalyzerIfStateIsNonTerminal,
   OldMctsAnalyzer,
-  getMctsAnalyzerForNonTerminalStateFromRoot,
 } from "../oldMcts";
 import {
-  MctsWorkerMessage,
-  UpdateSnapshotNotification,
-  UpdateGameStateRequest,
   MctsWorkerMessageType,
+  MctsWorkerRequest,
+  UpdateGameStateRequest,
+  UpdateSnapshotNotification,
 } from "../types";
-import { getMinimalGameStateAnalyzer } from "../minimalAnalyzer";
 
 export {};
 
@@ -37,7 +37,7 @@ self.addEventListener("message", (e) => {
         });
       }
     }
-    const message: MctsWorkerMessage = data;
+    const message: MctsWorkerRequest = data;
     switch (message.messageType) {
       case MctsWorkerMessageType.UpdateGameStateRequest:
         onGameStateUpdateRequest(message);

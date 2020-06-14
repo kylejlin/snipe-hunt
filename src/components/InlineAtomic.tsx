@@ -1,29 +1,61 @@
 import React from "react";
-import { Option } from "rusty-ts";
 import { cardEmojis } from "../cardMaps";
-import { opponentOf, snipeOf } from "../gameUtil";
-import { Atomic, CardType, Player, PlyType } from "../types";
+import { isAnimalStep } from "../gameUtil";
+import { Atomic, CardType, PlyType } from "../types";
 import "./styles/InlineAtomic.css";
 
 interface Props {
   atomic: Atomic;
-  isSecondAnimalStep: boolean;
   plyNumber: number;
-  winner: Option<Player>;
+  ellipsis: Ellipsis;
+}
+
+export enum Ellipsis {
+  Before,
+  After,
+  None,
 }
 
 export default function InlineAtomic({
   atomic,
-  isSecondAnimalStep,
   plyNumber,
-  winner: optWinner,
+  ellipsis,
 }: Props): React.ReactElement {
   const plyMakerEmoji =
     plyNumber % 2 === 0
       ? getEmoji(CardType.AlphaSnipe)
       : getEmoji(CardType.BetaSnipe);
 
-  if ("plyType" in atomic) {
+  if (isAnimalStep(atomic)) {
+    switch (ellipsis) {
+      case Ellipsis.Before:
+        return (
+          <>
+            <div className="InlinePlyNumber">{plyMakerEmoji + plyNumber}.</div>
+            {" ..."}
+            {getEmoji(atomic.moved)}
+            {atomic.destination}
+          </>
+        );
+      case Ellipsis.After:
+        return (
+          <>
+            <div className="InlinePlyNumber">{plyMakerEmoji + plyNumber}.</div>{" "}
+            {getEmoji(atomic.moved)}
+            {atomic.destination}
+            {", ..."}
+          </>
+        );
+      case Ellipsis.None:
+        return (
+          <>
+            <div className="InlinePlyNumber">{plyMakerEmoji + plyNumber}.</div>{" "}
+            {getEmoji(atomic.moved)}
+            {atomic.destination}
+          </>
+        );
+    }
+  } else {
     switch (atomic.plyType) {
       case PlyType.SnipeStep:
         return (
@@ -45,34 +77,6 @@ export default function InlineAtomic({
             {atomic.destination}
           </>
         );
-    }
-  } else {
-    if (isSecondAnimalStep) {
-      return (
-        <>
-          <div className="InlinePlyNumber">{plyMakerEmoji + plyNumber}.</div>
-          {" ..."}
-          {getEmoji(atomic.moved)}
-          {atomic.destination}
-        </>
-      );
-    } else {
-      return (
-        <>
-          <div className="InlinePlyNumber">{plyMakerEmoji + plyNumber}.</div>{" "}
-          {getEmoji(atomic.moved)}
-          {atomic.destination}{" "}
-          {optWinner.match({
-            some: (winner) => {
-              const winnerEmoji = cardEmojis[snipeOf(winner)];
-              const loserEmoji = cardEmojis[snipeOf(opponentOf(winner))];
-              return "; " + winnerEmoji + ">" + loserEmoji;
-            },
-
-            none: () => "; ...",
-          })}
-        </>
-      );
     }
   }
 }

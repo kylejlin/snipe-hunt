@@ -7,7 +7,7 @@ import AnimalStepView from "./components/AnimalStepView";
 import CardView from "./components/CardView";
 import ElementMatrix from "./components/ElementMatrix";
 import FutureAnimalStepView from "./components/FutureAnimalStepView";
-import InlineAtomic from "./components/InlineAtomic";
+import InlineAtomic, { Ellipsis } from "./components/InlineAtomic";
 import NodeStats from "./components/NodeStats";
 import PlyView from "./components/PlyView";
 import * as gameUtil from "./gameUtil";
@@ -652,7 +652,6 @@ export default class App extends React.Component<{}, AppState> {
     const isTherePendingAnimalStep = gameAnalyzer
       .getPendingAnimalStep()
       .isSome();
-    const winner = gameAnalyzer.getWinner();
 
     const rootChildSummaries = mctsAnalyzer
       .getChildPointersFromBestToWorst(mctsAnalyzer.getRootPointer())
@@ -674,9 +673,10 @@ export default class App extends React.Component<{}, AppState> {
             <li>
               <InlineAtomic
                 atomic={bestAtomic}
-                isSecondAnimalStep={isTherePendingAnimalStep}
                 plyNumber={plyNumber}
-                winner={winner}
+                ellipsis={
+                  isTherePendingAnimalStep ? Ellipsis.Before : Ellipsis.After
+                }
               />{" "}
               <NodeStats
                 value={snapshot.bestAtomicValue}
@@ -693,9 +693,10 @@ export default class App extends React.Component<{}, AppState> {
                   atomic={childSummary.atomic.expect(
                     "Impossible: child node has no atomic."
                   )}
-                  isSecondAnimalStep={isTherePendingAnimalStep}
                   plyNumber={plyNumber}
-                  winner={winner}
+                  ellipsis={
+                    isTherePendingAnimalStep ? Ellipsis.Before : Ellipsis.After
+                  }
                 />{" "}
                 <NodeStats
                   value={childSummary.value}

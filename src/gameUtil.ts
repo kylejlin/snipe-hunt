@@ -3,7 +3,9 @@ import { cardProperties } from "./cardMaps";
 import { gameStateFactory } from "./gameStateFactory";
 import randInt from "./randInt";
 import {
+  AnimalStep,
   AnimalType,
+  Atomic,
   Card,
   CardLocation,
   CardType,
@@ -217,4 +219,8 @@ export function decodePly(ply: number): Ply {
       };
     }
   }
+}
+
+export function isAnimalStep(atomic: Atomic): atomic is AnimalStep {
+  return !("plyType" in atomic);
 }

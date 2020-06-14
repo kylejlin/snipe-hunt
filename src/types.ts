@@ -26,12 +26,6 @@ export interface GameState {
   pendingAnimalStep: number;
 }
 
-export interface MinimalGameState {
-  currentBoard: Int32Array;
-  turn: Player;
-  pendingAnimalStep: number;
-}
-
 export interface FutureSubPlyStack {
   stateVersion: typeof STATE_VERSION;
   atomics: Atomic[];
@@ -87,21 +81,6 @@ export interface GameStateAnalyzer {
   setState(state: GameState): void;
   getLegalAtomics(): Atomic[];
   forcePerform(atomic: Atomic): GameState;
-}
-
-export interface MinimalGameAnalyzer {
-  getBoard(): Board;
-  getPendingAnimalStep(): Option<AnimalStep>;
-  isGameOver(): boolean;
-  getWinner(): Option<Player>;
-  getTurn(): Player;
-  getCardLocation(cardType: CardType): CardLocation;
-  tryPerform(atomic: Atomic): Result<MinimalGameState, IllegalGameStateUpdate>;
-  serialize(): string;
-  toNodeKey(): string;
-  setState(state: MinimalGameState): void;
-  getLegalAtomics(): Atomic[];
-  forcePerform(atomic: Atomic): MinimalGameState;
 }
 
 export enum CardLocation {

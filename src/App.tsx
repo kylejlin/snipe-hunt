@@ -877,6 +877,36 @@ export default class App extends React.Component<{}, AppState> {
     this.setState({
       mctsState: { isRunning: false, analyzer, expandedNodeIndexes: [] },
     });
+
+    this.resetAnalysisSuggestionDetailLevels(analyzer);
+  }
+
+  resetAnalysisSuggestionDetailLevels(analyzer: MctsAnalyzer) {
+    const rootPointer = analyzer.getRootPointer();
+    const bestChildPointer = analyzer.getChildPointersFromBestToWorst(
+      rootPointer
+    )[0];
+    const bestChildAtomic = analyzer
+      .getNodeSummary(bestChildPointer)
+      .atomic.expect("Impossible: Child node has no atomic.");
+
+    if (
+      gameUtil.isAnimalStep(bestChildAtomic) &&
+      !this.state.gameState.pendingAnimalStep
+    ) {
+      this.updateUxState({
+        analysisSuggestionDetailLevels: {
+          [pointerToIndex(rootPointer)]: SuggestionDetailLevel.BestAction,
+          [pointerToIndex(bestChildPointer)]: SuggestionDetailLevel.BestAction,
+        },
+      });
+    } else {
+      this.updateUxState({
+        analysisSuggestionDetailLevels: {
+          [pointerToIndex(rootPointer)]: SuggestionDetailLevel.BestAction,
+        },
+      });
+    }
   }
 
   onPauseAnalyzerClicked(): void {

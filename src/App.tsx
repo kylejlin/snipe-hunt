@@ -411,7 +411,7 @@ export default class App extends React.Component<{}, AppState> {
                   );
                 },
               })
-            : this.renderExpandableAnalysis(mctsState, plies.length + 3)}
+            : this.renderExpandableAnalysis(mctsState, plies.length + 2)}
         </div>
       </div>
     );

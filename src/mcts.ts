@@ -1224,10 +1224,10 @@ export function getMctsAnalyzerFromInternalDataWithoutInitializing(
   }
 }
 
-function pointerToIndex(pointer: NodePointer): number {
+export function pointerToIndex(pointer: NodePointer): number {
   return (pointer as unknown) as number;
 }
 
-function indexToPointer(nodeIndex: number): NodePointer {
+export function indexToPointer(nodeIndex: number): NodePointer {
   return (nodeIndex as unknown) as NodePointer;
 }

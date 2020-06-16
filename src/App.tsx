@@ -1,18 +1,17 @@
 import React from "react";
 import { option, Option, Result } from "rusty-ts";
-import { getStateAnalyzer } from "./stateAnalyzer";
 import "./App.css";
 import { cardEmojis } from "./cardMaps";
+import AnalysisNode from "./components/AnalysisNode";
 import AnimalStepView from "./components/AnimalStepView";
 import CardView from "./components/CardView";
 import ElementMatrix from "./components/ElementMatrix";
 import FutureAnimalStepView from "./components/FutureAnimalStepView";
-import InlineAtomic, { Ellipsis } from "./components/InlineAtomic";
-import NodeStats from "./components/NodeStats";
 import PlyView from "./components/PlyView";
 import * as gameUtil from "./gameUtil";
-import { MctsAnalyzer } from "./mcts";
+import { MctsAnalyzer, NodePointer, pointerToIndex } from "./mcts";
 import { getMctsService } from "./mctsService";
+import { getStateAnalyzer } from "./stateAnalyzer";
 import { futureSubPlyStackSaver, gameStateSaver } from "./stateSavers";
 import {
   AnimalStep,
@@ -35,6 +34,7 @@ import {
   Row,
   SnipeStep,
   STATE_VERSION,
+  SuggestionDetailLevel,
 } from "./types";
 
 export default class App extends React.Component<{}, AppState> {
@@ -69,6 +69,7 @@ export default class App extends React.Component<{}, AppState> {
     this.onMctsServicePause = this.onMctsServicePause.bind(this);
     this.onPauseAnalyzerClicked = this.onPauseAnalyzerClicked.bind(this);
     this.onResumeAnalyzerClicked = this.onResumeAnalyzerClicked.bind(this);
+    this.onDetailLevelChange = this.onDetailLevelChange.bind(this);
   }
 
   saveAndUpdateGameState(newGameState: GameState) {
@@ -641,72 +642,24 @@ export default class App extends React.Component<{}, AppState> {
     mctsState: MctsPausedState,
     plyNumber: number
   ): React.ReactElement {
+    const isTherePendingAnimalStep = getStateAnalyzer(this.state.gameState)
+      .getPendingAnimalStep()
+      .isSome();
+
     const mctsAnalyzer = mctsState.analyzer;
     const rootSummary = mctsAnalyzer.getNodeSummary(
       mctsAnalyzer.getRootPointer()
     );
-    const snapshot = mctsAnalyzer.getSnapshot();
-    const bestAtomic = snapshot.bestAtomic;
-
-    const gameAnalyzer = getStateAnalyzer(this.state.gameState);
-    const isTherePendingAnimalStep = gameAnalyzer
-      .getPendingAnimalStep()
-      .isSome();
-
-    const rootChildSummaries = mctsAnalyzer
-      .getChildPointersFromBestToWorst(mctsAnalyzer.getRootPointer())
-      .map(mctsAnalyzer.getNodeSummary);
 
     return (
-      <div>
-        <h4>
-          Current state:{" "}
-          <NodeStats
-            value={rootSummary.value}
-            rollouts={rootSummary.rollouts}
-          />
-        </h4>
-
-        <div>
-          <h4>Best action:</h4>
-          <ol>
-            <li>
-              <InlineAtomic
-                atomic={bestAtomic}
-                plyNumber={plyNumber}
-                ellipsis={
-                  isTherePendingAnimalStep ? Ellipsis.Before : Ellipsis.After
-                }
-              />{" "}
-              <NodeStats
-                value={snapshot.bestAtomicValue}
-                rollouts={snapshot.bestAtomicRollouts}
-              />
-            </li>
-          </ol>
-
-          <h4>Alternative actions:</h4>
-          <ol start={2}>
-            {rootChildSummaries.slice(1).map((childSummary) => (
-              <li>
-                <InlineAtomic
-                  atomic={childSummary.atomic.expect(
-                    "Impossible: child node has no atomic."
-                  )}
-                  plyNumber={plyNumber}
-                  ellipsis={
-                    isTherePendingAnimalStep ? Ellipsis.Before : Ellipsis.After
-                  }
-                />{" "}
-                <NodeStats
-                  value={childSummary.value}
-                  rollouts={childSummary.rollouts}
-                />
-              </li>
-            ))}
-          </ol>
-        </div>
-      </div>
+      <AnalysisNode
+        analyzer={mctsAnalyzer}
+        suggestionDetailLevels={this.state.ux.analysisSuggestionDetailLevels}
+        plyNumber={plyNumber}
+        isTherePendingAnimalStep={isTherePendingAnimalStep}
+        viewedNode={rootSummary}
+        onDetailLevelChange={this.onDetailLevelChange}
+      />
     );
   }
 
@@ -889,6 +842,7 @@ export default class App extends React.Component<{}, AppState> {
             stateVersion: STATE_VERSION,
             atomics: [],
           },
+          analysisSuggestionDetailLevels: {},
         },
         mctsState: { isRunning: true, mostRecentSnapshot: option.none() },
       };
@@ -942,6 +896,18 @@ export default class App extends React.Component<{}, AppState> {
       this.mctsService.resume(mctsState.analyzer);
     }
   }
+
+  onDetailLevelChange(
+    pointer: NodePointer,
+    detailLevel: SuggestionDetailLevel
+  ): void {
+    this.updateUxState({
+      analysisSuggestionDetailLevels: {
+        ...this.state.ux.analysisSuggestionDetailLevels,
+        [pointerToIndex(pointer)]: detailLevel,
+      },
+    });
+  }
 }
 
 function loadState(): AppState {
@@ -966,6 +932,7 @@ function loadState(): AppState {
     ux: {
       selectedCardType: option.none(),
       futureSubPlyStack,
+      analysisSuggestionDetailLevels: {},
     },
     mctsState: { isRunning: true, mostRecentSnapshot: option.none() },
   };

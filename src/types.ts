@@ -13,6 +13,9 @@ export interface AppState {
   ux: {
     selectedCardType: Option<CardType>;
     futureSubPlyStack: FutureSubPlyStack;
+    analysisSuggestionDetailLevels: {
+      [pointer: number]: SuggestionDetailLevel;
+    };
   };
   mctsState: MctsState;
 }
@@ -51,6 +54,12 @@ export interface MctsAnalysisSnapshot {
   bestAtomic: Atomic;
   bestAtomicValue: number;
   bestAtomicRollouts: number;
+}
+
+export enum SuggestionDetailLevel {
+  None = "None",
+  BestAction = "BestAction",
+  AllActions = "AllActions",
 }
 
 export interface MctsService {

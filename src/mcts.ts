@@ -49,6 +49,7 @@ export interface NodePointer {
 }
 
 export interface NodeSummary {
+  pointer: NodePointer;
   atomic: Option<Atomic>;
   value: number;
   rollouts: number;
@@ -1090,6 +1091,7 @@ export function getMctsAnalyzerFromInternalDataWithoutInitializing(
   function getNodeSummary(pointer: NodePointer): NodeSummary {
     const nodeIndex = pointerToIndex(pointer);
     return {
+      pointer,
       atomic:
         heap[nodeIndex + NodeOffsets.ParentIndex] === -1
           ? option.none()
@@ -1162,6 +1164,7 @@ export function getMctsAnalyzerFromInternalDataWithoutInitializing(
     const bestChildIndex = getIndexOfChildWithBestAtomic();
 
     return {
+      pointer: indexToPointer(bestChildIndex),
       atomic: option.some(
         decodeAtomic(heap[bestChildIndex + NodeOffsets.Atomic])
       ),

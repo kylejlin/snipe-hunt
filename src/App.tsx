@@ -61,7 +61,7 @@ export default class App extends React.Component<{}, AppState> {
 
   bindMethods(): void {
     this.onCardClicked = this.onCardClicked.bind(this);
-    this.onResetClicked = this.onResetClicked.bind(this);
+    this.onResetGameClicked = this.onResetGameClicked.bind(this);
     this.onUndoSubPlyClicked = this.onUndoSubPlyClicked.bind(this);
     this.onRedoSubPlyClicked = this.onRedoSubPlyClicked.bind(this);
     this.isBestAtomicLegal = this.isBestAtomicLegal.bind(this);
@@ -352,7 +352,7 @@ export default class App extends React.Component<{}, AppState> {
           <button onClick={this.onUndoSubPlyClicked}>Back</button>
           <button onClick={this.onRedoSubPlyClicked}>Forward</button>
         </div>
-        <button onClick={this.onResetClicked}>Reset</button>
+        <button onClick={this.onResetGameClicked}>Reset</button>
         <div>
           <h3>
             MCTS{" "}
@@ -831,7 +831,7 @@ export default class App extends React.Component<{}, AppState> {
     });
   }
 
-  onResetClicked(): void {
+  onResetGameClicked(): void {
     if (window.confirm("Are you sure you want to reset?")) {
       const gameState = gameUtil.getRandomGameState();
       const state: AppState = {
@@ -846,9 +846,10 @@ export default class App extends React.Component<{}, AppState> {
         },
         mctsState: { isRunning: true, mostRecentSnapshot: option.none() },
       };
-      gameStateSaver.setState(state.gameState);
+      gameStateSaver.setState(gameState);
       futureSubPlyStackSaver.setState(state.ux.futureSubPlyStack);
       this.setState(state);
+      this.mctsService.updateGameState(gameState);
     }
   }
 

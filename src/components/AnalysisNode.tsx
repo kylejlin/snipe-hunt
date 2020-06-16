@@ -87,11 +87,7 @@ export default function AnalysisNode({
             plyNumberAfterPerformingChildAtomic: number;
             isTherePendingAnimalStepAfterPerformingChildAtomic: boolean;
           } => {
-            const childAtomic = childSummary.atomic.expect(
-              "Impossible: Child node has no atomic."
-            );
-
-            if (isAnimalStep(childAtomic)) {
+            if (viewedNode.atomic.someSatisfies(isAnimalStep)) {
               if (isTherePendingAnimalStep) {
                 return {
                   plyNumberAfterPerformingChildAtomic: plyNumber + 1,

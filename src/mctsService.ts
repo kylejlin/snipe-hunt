@@ -1,4 +1,4 @@
-import { option } from "rusty-ts";
+import { option, Option } from "rusty-ts";
 import {
   getMctsAnalyzerFromInternalDataWithoutInitializing,
   MctsAnalyzer,
@@ -8,12 +8,12 @@ import {
   LogNotification,
   MctsService,
   MctsWorkerMessageType,
+  MctsWorkerNotification,
   PauseAnalyzerRequest,
   PauseAnalyzerResponse,
+  ResumeAnalyzerRequest,
   UpdateGameStateRequest,
   UpdateSnapshotNotification,
-  MctsWorkerNotification,
-  ResumeAnalyzerRequest,
 } from "./types";
 import MctsWorker from "./workers/mcts.importable";
 
@@ -87,10 +87,15 @@ export function getMctsService(): MctsService {
     }
   }
 
-  function updateGameState(state: GameState): void {
+  function updateGameState(
+    state: GameState,
+    optThinkingTime: Option<number>
+  ): void {
+    const thinkingTime = optThinkingTime.unwrapOr(Infinity);
     const message: UpdateGameStateRequest = {
       messageType: MctsWorkerMessageType.UpdateGameStateRequest,
       gameState: state,
+      thinkingTimeInMS: thinkingTime,
     };
     worker.postMessage(message);
   }

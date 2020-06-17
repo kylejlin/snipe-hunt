@@ -10,3 +10,7 @@
 .Plies {
   list-style-type: none;
 }
+
+.Inline {
+  display: inline;
+}

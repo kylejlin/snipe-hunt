@@ -11,6 +11,7 @@ import {
 enum LocalStorageKeys {
   GameState = "GameState",
   FutureSubPlyStack = "FutureSubPlyStack",
+  ThinkingTimeInMilliseconds = "ThinkingTimeInMilliseconds",
 }
 
 export const gameStateSaver: StateSaver<GameState> = {
@@ -46,12 +47,35 @@ export const futureSubPlyStackSaver: StateSaver<FutureSubPlyStack> = {
     }
   },
 
-  setState(state: FutureSubPlyStack) {
+  setState(state: FutureSubPlyStack): void {
     const jsonified = {
       stateVersion: state.stateVersion,
       atomics: state.atomics,
     };
     const stateStr = JSON.stringify(jsonified);
     localStorage.setItem(LocalStorageKeys.FutureSubPlyStack, stateStr);
+  },
+};
+
+export const thinkingTimeSaver: StateSaver<Option<number>> = {
+  getState(): Option<Option<number>> {
+    const stateStr = localStorage.getItem(
+      LocalStorageKeys.ThinkingTimeInMilliseconds
+    );
+    if (stateStr === null) {
+      return option.none();
+    } else {
+      const parsed: number | null = JSON.parse(stateStr);
+      const optThinkingTimeInMS = option.fromVoidable(parsed);
+      return option.some(optThinkingTimeInMS);
+    }
+  },
+
+  setState(state: Option<number>): void {
+    const jsonified = JSON.stringify(state.unwrapOr(null));
+    localStorage.setItem(
+      LocalStorageKeys.ThinkingTimeInMilliseconds,
+      jsonified
+    );
   },
 };

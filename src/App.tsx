@@ -12,7 +12,11 @@ import * as gameUtil from "./gameUtil";
 import { MctsAnalyzer, NodePointer, pointerToIndex } from "./mcts";
 import { getMctsService } from "./mctsService";
 import { getStateAnalyzer } from "./stateAnalyzer";
-import { futureSubPlyStackSaver, gameStateSaver } from "./stateSavers";
+import {
+  futureSubPlyStackSaver,
+  gameStateSaver,
+  thinkingTimeSaver,
+} from "./stateSavers";
 import {
   AnimalStep,
   AnimalType,
@@ -37,6 +41,8 @@ import {
   SuggestionDetailLevel,
 } from "./types";
 
+const DEFAULT_THINKING_TIME_IN_MS = 90 * 1e3;
+
 export default class App extends React.Component<{}, AppState> {
   private mctsService: MctsService;
 
@@ -53,7 +59,10 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   componentDidMount(): void {
-    this.mctsService.updateGameState(this.state.gameState);
+    this.mctsService.updateGameState(
+      this.state.gameState,
+      this.state.thinkingTimeInMS
+    );
 
     this.mctsService.onSnapshot(this.onMctsServiceSnapshot);
     this.mctsService.onPause(this.onMctsServicePause);
@@ -70,6 +79,8 @@ export default class App extends React.Component<{}, AppState> {
     this.onPauseAnalyzerClicked = this.onPauseAnalyzerClicked.bind(this);
     this.onResumeAnalyzerClicked = this.onResumeAnalyzerClicked.bind(this);
     this.onDetailLevelChange = this.onDetailLevelChange.bind(this);
+    this.onTimeLimitEnabledChange = this.onTimeLimitEnabledChange.bind(this);
+    this.onThinkingTimeInputChange = this.onThinkingTimeInputChange.bind(this);
   }
 
   saveAndUpdateGameState(newGameState: GameState) {
@@ -78,7 +89,7 @@ export default class App extends React.Component<{}, AppState> {
       gameState: newGameState,
     });
 
-    this.mctsService.updateGameState(newGameState);
+    this.mctsService.updateGameState(newGameState, this.state.thinkingTimeInMS);
   }
 
   render(): React.ReactElement {
@@ -362,6 +373,49 @@ export default class App extends React.Component<{}, AppState> {
               <button onClick={this.onResumeAnalyzerClicked}>Resume</button>
             )}
           </h3>
+
+          <div>
+            {this.state.thinkingTimeInMS.match({
+              none: () => (
+                <div>
+                  <h4 className="Inline">Time limit</h4>{" "}
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    onChange={this.onTimeLimitEnabledChange}
+                  />
+                </div>
+              ),
+
+              some: (thinkingTimeInMS) => (
+                <>
+                  <div>
+                    <label>
+                      <h4 className="Inline">Time limit</h4>{" "}
+                      <input
+                        type="checkbox"
+                        checked={true}
+                        onChange={this.onTimeLimitEnabledChange}
+                      />
+                    </label>
+                  </div>
+
+                  <label>
+                    Seconds per turn:{" "}
+                    <input
+                      type="text"
+                      value={this.state.thinkingTimeInputValue}
+                      onChange={this.onThinkingTimeInputChange}
+                    />
+                  </label>
+                  <label>
+                    Seconds remaining for this turn: <input value={0} />
+                  </label>
+                </>
+              ),
+            })}
+          </div>
+
           {mctsState.isRunning
             ? mctsState.mostRecentSnapshot.match({
                 none: () =>
@@ -845,11 +899,16 @@ export default class App extends React.Component<{}, AppState> {
           analysisSuggestionDetailLevels: {},
         },
         mctsState: { isRunning: true, mostRecentSnapshot: option.none() },
+        thinkingTimeInMS: option.none(),
+        thinkingTimeInputValue: "",
       };
+
       gameStateSaver.setState(gameState);
       futureSubPlyStackSaver.setState(state.ux.futureSubPlyStack);
+      thinkingTimeSaver.setState(state.thinkingTimeInMS);
+
       this.setState(state);
-      this.mctsService.updateGameState(gameState);
+      this.mctsService.updateGameState(gameState, state.thinkingTimeInMS);
     }
   }
 
@@ -939,6 +998,37 @@ export default class App extends React.Component<{}, AppState> {
       },
     });
   }
+
+  onTimeLimitEnabledChange(event: React.ChangeEvent<HTMLInputElement>): void {
+    if (event.target.checked && this.state.thinkingTimeInMS.isNone()) {
+      this.saveAndUpdateThinkingTime(option.some(DEFAULT_THINKING_TIME_IN_MS));
+    }
+
+    if (!event.target.checked && this.state.thinkingTimeInMS.isSome()) {
+      this.saveAndUpdateThinkingTime(option.none());
+    }
+  }
+
+  saveAndUpdateThinkingTime(thinkingTimeInMS: Option<number>): void {
+    this.setState({
+      thinkingTimeInMS,
+      thinkingTimeInputValue: thinkingTimeInMS.match({
+        none: () => "",
+        some: (timeInMS) => "" + timeInMS * 1e-3,
+      }),
+    });
+    thinkingTimeSaver.setState(thinkingTimeInMS);
+  }
+
+  onThinkingTimeInputChange(event: React.ChangeEvent<HTMLInputElement>): void {
+    const parsed = parseInt(event.target.value, 10);
+    const parsedInMilliseconds = parsed * 1e3;
+    if (parsedInMilliseconds > 0) {
+      this.saveAndUpdateThinkingTime(option.some(parsedInMilliseconds));
+    } else {
+      this.setState({ thinkingTimeInputValue: event.target.value });
+    }
+  }
 }
 
 function loadState(): AppState {
@@ -957,6 +1047,9 @@ function loadState(): AppState {
       futureSubPlyStackSaver.setState(newStack);
       return newStack;
     });
+  const thinkingTimeInMS: Option<number> = thinkingTimeSaver
+    .getState()
+    .unwrapOrElse(() => option.none());
 
   return {
     gameState,
@@ -966,6 +1059,11 @@ function loadState(): AppState {
       analysisSuggestionDetailLevels: {},
     },
     mctsState: { isRunning: true, mostRecentSnapshot: option.none() },
+    thinkingTimeInMS,
+    thinkingTimeInputValue: thinkingTimeInMS.match({
+      none: () => "",
+      some: (timeInMS) => "" + timeInMS * 1e-3,
+    }),
   };
 }
 

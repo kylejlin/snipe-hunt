@@ -18,6 +18,8 @@ export interface AppState {
     };
   };
   mctsState: MctsState;
+  thinkingTimeInMS: Option<number>;
+  thinkingTimeInputValue: string;
 }
 
 export interface GameState {
@@ -63,7 +65,7 @@ export enum SuggestionDetailLevel {
 }
 
 export interface MctsService {
-  updateGameState(state: GameState): void;
+  updateGameState(state: GameState, optThinkingTimeInMS: Option<number>): void;
   pause(): void;
   resume(analyzer: MctsAnalyzer): void;
 
@@ -412,6 +414,7 @@ export enum MctsWorkerMessageType {
 export interface UpdateGameStateRequest {
   messageType: MctsWorkerMessageType.UpdateGameStateRequest;
   gameState: GameState;
+  thinkingTimeInMS: number;
 }
 
 export interface PauseAnalyzerRequest {

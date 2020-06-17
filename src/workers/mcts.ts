@@ -28,6 +28,7 @@ declare const self: Worker;
 
 let optMctsAnalyzer: Option<MctsAnalyzer> = option.none();
 let lastPosted = 0;
+let optStopTime: Option<number> = option.none();
 
 self.addEventListener("message", (e) => {
   const data = e.data;
@@ -61,6 +62,12 @@ function onGameStateUpdateRequest(message: UpdateGameStateRequest): void {
     newGameState.plies.length + 3,
     NODE_SIZE_IN_I32S * 2e7
   );
+
+  if (Number.isFinite(message.thinkingTimeInMS)) {
+    optStopTime = option.some(Date.now() + message.thinkingTimeInMS);
+  } else {
+    optStopTime = option.none();
+  }
 }
 
 function onPauseAnalyzerRequest(_message: PauseAnalyzerRequest): void {
@@ -99,8 +106,11 @@ function analysisUpdateLoop() {
         root.rollouts >= MIN_ROLLOUTS_NEEDED_TO_DECLARE_STATE_TERMINAL &&
         (meanValue > MAX_MEAN_VALUE_BEFORE_DECLARING_VICTORY ||
           meanValue < MIN_MEAN_VALUE_BEFORE_DECLARING_DEFEAT);
+      const isOutOfThinkingTime = optStopTime.someSatisfies(
+        (stopTime) => Date.now() > stopTime
+      );
 
-      if (!isTerminal) {
+      if (!isTerminal && !isOutOfThinkingTime) {
         for (let i = 0; i < ROLLOUT_BATCH_SIZE; i++) {
           analyzer.performRollout();
         }

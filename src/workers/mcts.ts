@@ -13,6 +13,7 @@ import {
   PauseAnalyzerRequest,
   PauseAnalyzerResponse,
   ResumeAnalyzerRequest,
+  StopTimeChangeNotification,
 } from "../types";
 
 export {};
@@ -63,11 +64,21 @@ function onGameStateUpdateRequest(message: UpdateGameStateRequest): void {
     NODE_SIZE_IN_I32S * 2e7
   );
 
-  if (Number.isFinite(message.thinkingTimeInMS)) {
-    optStopTime = option.some(Date.now() + message.thinkingTimeInMS);
+  updateOptStopTime(message.thinkingTimeInMS);
+}
+
+function updateOptStopTime(thinkingTimeInMS: number): void {
+  if (Number.isFinite(thinkingTimeInMS)) {
+    optStopTime = option.some(Date.now() + thinkingTimeInMS);
   } else {
     optStopTime = option.none();
   }
+
+  const stopTimeNotification: StopTimeChangeNotification = {
+    messageType: MctsWorkerMessageType.StopTimeChangeNotification,
+    optStopTime: optStopTime.unwrapOr(null),
+  };
+  self.postMessage(stopTimeNotification);
 }
 
 function onPauseAnalyzerRequest(_message: PauseAnalyzerRequest): void {

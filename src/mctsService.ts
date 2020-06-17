@@ -14,17 +14,20 @@ import {
   ResumeAnalyzerRequest,
   UpdateGameStateRequest,
   UpdateSnapshotNotification,
+  StopTimeChangeNotification,
 } from "./types";
 import MctsWorker from "./workers/mcts.importable";
 
 type SnapshotListener = Parameters<MctsService["onSnapshot"]>[0];
 type PauseListener = Parameters<MctsService["onPause"]>[0];
+type StopTimeChangeListener = Parameters<MctsService["onStopTimeChange"]>[0];
 
 export function getMctsService(): MctsService {
   const worker = new MctsWorker();
 
   const snapshotListeners: SnapshotListener[] = [];
   const pauseListeners: PauseListener[] = [];
+  const stopTimeChangeListeners: StopTimeChangeListener[] = [];
 
   addWorkerListener();
 
@@ -35,6 +38,7 @@ export function getMctsService(): MctsService {
 
     onSnapshot,
     onPause,
+    onStopTimeChange,
   };
 
   function addWorkerListener(): void {
@@ -54,6 +58,9 @@ export function getMctsService(): MctsService {
           break;
         case MctsWorkerMessageType.PauseAnalyzerResponse:
           onTransferAnalyzerResponse(message);
+          break;
+        case MctsWorkerMessageType.StopTimeChangeNotification:
+          onStopTimeChangeNotification(message);
           break;
         default: {
           // Force exhaustive matching
@@ -84,6 +91,15 @@ export function getMctsService(): MctsService {
     );
     for (const listener of pauseListeners) {
       listener(mctsAnalyzer);
+    }
+  }
+
+  function onStopTimeChangeNotification(
+    message: StopTimeChangeNotification
+  ): void {
+    const optStopTime = option.fromVoidable(message.optStopTime);
+    for (const listener of stopTimeChangeListeners) {
+      listener(optStopTime);
     }
   }
 
@@ -122,5 +138,9 @@ export function getMctsService(): MctsService {
 
   function onPause(listener: PauseListener): void {
     pauseListeners.push(listener);
+  }
+
+  function onStopTimeChange(listener: StopTimeChangeListener): void {
+    stopTimeChangeListeners.push(listener);
   }
 }

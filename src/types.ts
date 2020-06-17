@@ -20,6 +20,7 @@ export interface AppState {
   mctsState: MctsState;
   thinkingTimeInMS: Option<number>;
   thinkingTimeInputValue: string;
+  stopTime: Option<number>;
 }
 
 export interface GameState {
@@ -71,6 +72,7 @@ export interface MctsService {
 
   onSnapshot(listener: (analysis: Option<MctsAnalysisSnapshot>) => void): void;
   onPause(listener: (analyzer: MctsAnalyzer) => void): void;
+  onStopTimeChange(listener: (stopTime: Option<number>) => void): void;
 }
 
 export interface GameStateAnalyzer {
@@ -399,7 +401,8 @@ export type MctsWorkerRequest =
 export type MctsWorkerNotification =
   | LogNotification
   | UpdateSnapshotNotification
-  | PauseAnalyzerResponse;
+  | PauseAnalyzerResponse
+  | StopTimeChangeNotification;
 
 export enum MctsWorkerMessageType {
   UpdateGameStateRequest,
@@ -409,6 +412,7 @@ export enum MctsWorkerMessageType {
   LogNotification,
   UpdateSnapshotNotification,
   PauseAnalyzerResponse,
+  StopTimeChangeNotification,
 }
 
 export interface UpdateGameStateRequest {
@@ -439,4 +443,9 @@ export interface UpdateSnapshotNotification {
 export interface PauseAnalyzerResponse {
   messageType: MctsWorkerMessageType.PauseAnalyzerResponse;
   internalData: MctsAnalyzerInternalData;
+}
+
+export interface StopTimeChangeNotification {
+  messageType: MctsWorkerMessageType.StopTimeChangeNotification;
+  optStopTime: number | null;
 }

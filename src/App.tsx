@@ -66,6 +66,7 @@ export default class App extends React.Component<{}, AppState> {
 
     this.mctsService.onSnapshot(this.onMctsServiceSnapshot);
     this.mctsService.onPause(this.onMctsServicePause);
+    this.mctsService.onStopTimeChange(this.onMctsServiceOnStopTimeChange);
   }
 
   bindMethods(): void {
@@ -81,6 +82,9 @@ export default class App extends React.Component<{}, AppState> {
     this.onDetailLevelChange = this.onDetailLevelChange.bind(this);
     this.onTimeLimitEnabledChange = this.onTimeLimitEnabledChange.bind(this);
     this.onThinkingTimeInputChange = this.onThinkingTimeInputChange.bind(this);
+    this.onMctsServiceOnStopTimeChange = this.onMctsServiceOnStopTimeChange.bind(
+      this
+    );
   }
 
   saveAndUpdateGameState(newGameState: GameState) {
@@ -409,7 +413,18 @@ export default class App extends React.Component<{}, AppState> {
                     />
                   </label>
                   <label>
-                    Seconds remaining for this turn: <input value={0} />
+                    Seconds remaining for this turn:{" "}
+                    <span>
+                      {this.state.stopTime.match({
+                        none: () => "Loading",
+                        some: (stopTime) => {
+                          const diff = stopTime - Date.now();
+                          const diffInSeconds = Math.ceil(diff * 1e-3);
+                          const clamped = Math.max(0, diffInSeconds);
+                          return "" + clamped;
+                        },
+                      })}
+                    </span>
                   </label>
                 </>
               ),
@@ -901,6 +916,7 @@ export default class App extends React.Component<{}, AppState> {
         mctsState: { isRunning: true, mostRecentSnapshot: option.none() },
         thinkingTimeInMS: option.none(),
         thinkingTimeInputValue: "",
+        stopTime: option.none(),
       };
 
       gameStateSaver.setState(gameState);
@@ -1029,6 +1045,10 @@ export default class App extends React.Component<{}, AppState> {
       this.setState({ thinkingTimeInputValue: event.target.value });
     }
   }
+
+  onMctsServiceOnStopTimeChange(stopTime: Option<number>) {
+    this.setState({ stopTime });
+  }
 }
 
 function loadState(): AppState {
@@ -1064,6 +1084,7 @@ function loadState(): AppState {
       none: () => "",
       some: (timeInMS) => "" + timeInMS * 1e-3,
     }),
+    stopTime: option.none(),
   };
 }
 

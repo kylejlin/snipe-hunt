@@ -409,6 +409,13 @@ export default class App extends React.Component<{}, AppState> {
                       Seconds per turn:{" "}
                       <input
                         type="text"
+                        className={
+                          isWellFormedDecimalInteger(
+                            this.state.thinkingTimeInputValue
+                          )
+                            ? ""
+                            : "InvalidNumber"
+                        }
                         value={this.state.thinkingTimeInputValue}
                         onChange={this.onThinkingTimeInputChange}
                       />
@@ -1042,9 +1049,10 @@ export default class App extends React.Component<{}, AppState> {
   }
 
   onThinkingTimeInputChange(event: React.ChangeEvent<HTMLInputElement>): void {
-    const parsed = parseInt(event.target.value, 10);
+    const { value } = event.target;
+    const parsed = parseInt(value, 10);
     const parsedInMilliseconds = parsed * 1e3;
-    if (parsedInMilliseconds > 0 && parsed === ~~event.target.value) {
+    if (parsedInMilliseconds > 0 && isWellFormedDecimalInteger(value)) {
       this.saveAndUpdateThinkingTime(option.some(parsedInMilliseconds));
     } else {
       this.setState({ thinkingTimeInputValue: event.target.value });
@@ -1099,4 +1107,9 @@ function isAlpha(card: Card): boolean {
 
 function isBeta(card: Card): boolean {
   return card.allegiance === Player.Beta;
+}
+
+/** Leading zeros are not allowed. */
+function isWellFormedDecimalInteger(s: string): boolean {
+  return /^\d+$/.test(s) && !/^0\d/.test(s);
 }

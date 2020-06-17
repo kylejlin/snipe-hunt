@@ -14,3 +14,7 @@
 .Inline {
   display: inline;
 }
+
+.InvalidNumber {
+  color: red;
+}

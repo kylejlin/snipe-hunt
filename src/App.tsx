@@ -404,28 +404,33 @@ export default class App extends React.Component<{}, AppState> {
                     </label>
                   </div>
 
-                  <label>
-                    Seconds per turn:{" "}
-                    <input
-                      type="text"
-                      value={this.state.thinkingTimeInputValue}
-                      onChange={this.onThinkingTimeInputChange}
-                    />
-                  </label>
-                  <label>
-                    Seconds remaining for this turn:{" "}
-                    <span>
-                      {this.state.stopTime.match({
-                        none: () => "Loading",
-                        some: (stopTime) => {
-                          const diff = stopTime - Date.now();
-                          const diffInSeconds = Math.ceil(diff * 1e-3);
-                          const clamped = Math.max(0, diffInSeconds);
-                          return "" + clamped;
-                        },
-                      })}
-                    </span>
-                  </label>
+                  <div>
+                    <label>
+                      Seconds per turn:{" "}
+                      <input
+                        type="text"
+                        value={this.state.thinkingTimeInputValue}
+                        onChange={this.onThinkingTimeInputChange}
+                      />
+                    </label>
+                  </div>
+
+                  <div>
+                    <label>
+                      Seconds remaining for this turn:{" "}
+                      <span>
+                        {this.state.stopTime.match({
+                          none: () => "Loading...",
+                          some: (stopTime) => {
+                            const diff = stopTime - Date.now();
+                            const diffInSeconds = Math.ceil(diff * 1e-3);
+                            const clamped = Math.max(0, diffInSeconds);
+                            return "" + clamped;
+                          },
+                        })}
+                      </span>
+                    </label>
+                  </div>
                 </>
               ),
             })}

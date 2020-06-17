@@ -37,7 +37,7 @@ export default function PlyView({ ply, plyNumber }: Props): React.ReactElement {
           <div className="PlyNumber">{plyMakerEmoji + plyNumber}.</div>{" "}
           {getEmoji(ply.first.moved)}
           {ply.first.destination}
-          {"; "}
+          {", "}
           {getEmoji(ply.second.moved)}
           {ply.second.destination}
         </li>

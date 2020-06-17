@@ -30,10 +30,10 @@ export default function AnimalStepView({
           const winnerEmoji = cardEmojis[gameUtil.snipeOf(winner)];
           const loserEmoji =
             cardEmojis[gameUtil.snipeOf(gameUtil.opponentOf(winner))];
-          return "; " + winnerEmoji + ">" + loserEmoji;
+          return ", " + winnerEmoji + ">" + loserEmoji;
         },
 
-        none: () => "; ...",
+        none: () => ", ...",
       })}
     </li>
   );

@@ -1044,7 +1044,7 @@ export default class App extends React.Component<{}, AppState> {
   onThinkingTimeInputChange(event: React.ChangeEvent<HTMLInputElement>): void {
     const parsed = parseInt(event.target.value, 10);
     const parsedInMilliseconds = parsed * 1e3;
-    if (parsedInMilliseconds > 0) {
+    if (parsedInMilliseconds > 0 && parsed === ~~event.target.value) {
       this.saveAndUpdateThinkingTime(option.some(parsedInMilliseconds));
     } else {
       this.setState({ thinkingTimeInputValue: event.target.value });

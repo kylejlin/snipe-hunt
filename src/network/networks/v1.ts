@@ -4,8 +4,8 @@ import {
   StochasticGradientDescentHyperParameters,
   WeightedSumsAndActivations,
   WeightInitializationMethod,
+  GamePosition,
 } from "..";
-import { AccuracyRate, LabeledImage, VectorLabeledImage } from "../../data";
 import { DeepReadonly } from "../../deepReadonly";
 import { Matrix } from "../../matrix";
 import {
@@ -28,7 +28,6 @@ export class NetworkV1 implements Network {
   private biases: MatrixMap;
   private weightVelocities: MatrixMap;
   private biasVelocities: MatrixMap;
-  private log: (accuracyRate: AccuracyRate, epoch: number) => void;
 
   private temp_totalWeightGradients: MatrixMap;
   private temp_totalBiasGradients: MatrixMap;
@@ -52,8 +51,7 @@ export class NetworkV1 implements Network {
 
   static fromLayerSizes(
     layerSizes: number[],
-    initializationMethod: WeightInitializationMethod,
-    log?: (accuracyRate: AccuracyRate, epoch: number) => void
+    initializationMethod: WeightInitializationMethod
   ): Network {
     const numberOfLayers = layerSizes.length;
 
@@ -69,14 +67,10 @@ export class NetworkV1 implements Network {
 
     initializeWeights(initializationMethod, weights);
 
-    return new NetworkV1(weights, biases, log);
+    return new NetworkV1(weights, biases);
   }
 
-  private constructor(
-    weights: MatrixMap,
-    biases: MatrixMap,
-    log?: (accuracyRate: AccuracyRate, epoch: number) => void
-  ) {
+  private constructor(weights: MatrixMap, biases: MatrixMap) {
     const layerSizes = [weights[1].columns];
     for (let i = 1; i < weights.length; i++) {
       layerSizes.push(weights[i].rows);
@@ -88,7 +82,6 @@ export class NetworkV1 implements Network {
     this.biases = biases;
     this.weightVelocities = getZeroMatrixMap(weights);
     this.biasVelocities = getZeroMatrixMap(biases);
-    this.log = log || (() => {});
 
     this.temp_totalWeightGradients = getZeroMatrixMap(weights);
     this.temp_totalBiasGradients = getZeroMatrixMap(biases);
@@ -152,9 +145,8 @@ export class NetworkV1 implements Network {
   }
 
   stochasticGradientDescent(
-    trainingData: VectorLabeledImage[],
-    hyperParams: StochasticGradientDescentHyperParameters,
-    testData?: LabeledImage[]
+    trainingData: GamePosition[],
+    hyperParams: StochasticGradientDescentHyperParameters
   ): void {
     const {
       batchSize,
@@ -186,21 +178,13 @@ export class NetworkV1 implements Network {
 
           this.weights[i].mutAdd(this.weightVelocities[i]);
           this.biases[i].mutAdd(this.biasVelocities[i]);
-
-          //   this.weights[i].mutSubtract(weightGradients[i]);
-          //   this.biases[i].mutSubtract(biasGradients[i]);
         }
-      }
-
-      if (testData !== undefined) {
-        const accuracyRate = this.test(testData);
-        this.log(accuracyRate, epoch);
       }
     }
   }
 
   private getTotalGradients(
-    miniBatch: VectorLabeledImage[],
+    miniBatch: GamePosition[],
     regularizationRate: number,
     trainingDataSize: number
   ): Gradients {
@@ -239,19 +223,20 @@ export class NetworkV1 implements Network {
   }
 
   private getGradients(
-    image: VectorLabeledImage,
+    position: GamePosition,
     regularizationRate: number,
     trainingDataSize: number
   ): Gradients {
     const { numberOfLayers } = this;
 
-    const { weightedSums, activations } = this.performForwardPass(image.inputs);
+    const { weightedSums, activations } = this.performForwardPass(position);
+
     const errors = this.temp_errors;
     const weightGradients = this.temp_weightGradients;
     const biasGradients = this.temp_biasGradients;
 
     const lastLayerError = activations[this.numberOfLayers - 1].subtractInto(
-      image.outputs,
+      position.actionProbabilitiesAndValue,
       errors[numberOfLayers - 1]
     );
 
@@ -302,13 +287,13 @@ export class NetworkV1 implements Network {
     return { weightGradients, biasGradients };
   }
 
-  performForwardPass(inputs: Matrix): WeightedSumsAndActivations {
+  performForwardPass(position: GamePosition): WeightedSumsAndActivations {
     const lastLayer = this.numberOfLayers - 1;
 
     const weightedSums = this.temp_weightedSums;
     const activations = this.temp_activations;
 
-    activations[0] = inputs;
+    activations[0] = position.gameState;
 
     for (let outputLayer = 1; outputLayer < lastLayer; outputLayer++) {
       const inputLayer = outputLayer - 1;
@@ -324,26 +309,20 @@ export class NetworkV1 implements Network {
         .multiplyInto(activations[inputLayer], weightedSums[lastLayer])
         .mutAdd(this.biases[lastLayer]);
       const lastActivation = weightedSum
-        .subtractScalarInto(weightedSum.maxEntry(), activations[lastLayer])
+        .subtractScalarInto(
+          weightedSum.maxEntryExcludingLast(),
+          activations[lastLayer]
+        )
         .applyElementwiseInto(Math.exp, activations[lastLayer]);
-      lastActivation.mutMultiplyScalar(1 / lastActivation.sumOfEntries());
+      lastActivation.mutMultiplyScalar(
+        1 / lastActivation.sumOfAllEntriesButLast()
+      );
+
+      lastActivation.mutFilterAllButLast(position.legalActions);
+      lastActivation.setLastEntry(sigma(weightedSum.lastEntry()));
     }
 
     return { weightedSums, activations };
-  }
-
-  test(testData: LabeledImage[]): AccuracyRate {
-    let correctClassifications = 0;
-    for (const image of testData) {
-      const { activations } = this.performForwardPass(image.inputs);
-      const prediction = argmax(
-        activations[this.numberOfLayers - 1].rowMajorOrderEntries()
-      );
-      if (prediction === image.label) {
-        correctClassifications++;
-      }
-    }
-    return { correct: correctClassifications, total: testData.length };
   }
 
   getWeights(): DeepReadonly<MatrixMap> {

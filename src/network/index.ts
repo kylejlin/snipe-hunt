@@ -1,23 +1,26 @@
-import { LabeledImage, VectorLabeledImage, AccuracyRate } from "../data";
 import { Matrix } from "../matrix";
 import { DeepReadonly } from "../deepReadonly";
+import { Player } from "../types";
 
 export interface Network {
   readonly layerSizes: number[];
 
   stochasticGradientDescent(
-    trainingData: VectorLabeledImage[],
-    hyperparams: StochasticGradientDescentHyperParameters,
-    evaluationData?: LabeledImage[]
+    trainingData: GamePosition[],
+    hyperparams: StochasticGradientDescentHyperParameters
   ): void;
 
-  performForwardPass(inputColumnVector: Matrix): WeightedSumsAndActivations;
-
-  test(testData: LabeledImage[]): AccuracyRate;
+  performForwardPass(position: GamePosition): WeightedSumsAndActivations;
 
   getWeights(): DeepReadonly<MatrixMap>;
 
   getBiases(): DeepReadonly<MatrixMap>;
+}
+
+export interface GamePosition {
+  gameState: Matrix;
+  legalActions: ArrayLike<number | boolean>;
+  actionProbabilitiesAndValue: Matrix;
 }
 
 export interface WeightedSumsAndActivations {

@@ -403,11 +403,11 @@ export class Matrix {
     }
   }
 
-  maxEntry(): number {
+  maxEntryExcludingLast(): number {
     let max = -Infinity;
     const thisData = this.data;
-    const thisSize = thisData.length;
-    for (let i = 0; i < thisSize; i++) {
+    const thisSizeMinus1 = thisData.length - 1;
+    for (let i = 0; i < thisSizeMinus1; i++) {
       const v = thisData[i];
       if (v > max) {
         max = v;
@@ -416,14 +416,35 @@ export class Matrix {
     return max;
   }
 
-  sumOfEntries(): number {
+  sumOfAllEntriesButLast(): number {
     let sum = 0;
     const thisData = this.data;
-    const thisSize = thisData.length;
-    for (let i = 0; i < thisSize; i++) {
+    const thisSizeMinus1 = thisData.length - 1;
+    for (let i = 0; i < thisSizeMinus1; i++) {
       sum += thisData[i];
     }
     return sum;
+  }
+
+  mutFilterAllButLast(filter: ArrayLike<number | boolean>): this {
+    const thisData = this.data;
+    const thisSizeMinus1 = thisData.length - 1;
+    for (let i = 0; i < thisSizeMinus1; i++) {
+      if (!filter[i]) {
+        thisData[i] = 0;
+      }
+    }
+    return this;
+  }
+
+  setLastEntry(entry: number): void {
+    const thisData = this.data;
+    thisData[thisData.length - 1] = entry;
+  }
+
+  lastEntry(): number {
+    const thisData = this.data;
+    return thisData[thisData.length - 1];
   }
 
   print(decimals: number): string {

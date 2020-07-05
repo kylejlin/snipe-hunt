@@ -742,7 +742,7 @@ test("Matrix.prototype.setToZero", () => {
   expectEquals(a, Matrix.zeros(3, 2));
 });
 
-test("Matrix.prototype.maxEntry()", () => {
+test("Matrix.prototype.maxEntryExcludingLast()", () => {
   const a = Matrix.fromRows([
     [1, -2],
     [-3.5, 4.2],
@@ -754,11 +754,11 @@ test("Matrix.prototype.maxEntry()", () => {
     [8, 7.1],
   ]);
 
-  expect(a.maxEntry()).toBe(6.1);
-  expect(b.maxEntry()).toBe(12.6);
+  expect(a.maxEntryExcludingLast()).toBe(5);
+  expect(b.maxEntryExcludingLast()).toBe(12.6);
 });
 
-test("Matrix.prototype.sumOfEntries()", () => {
+test("Matrix.prototype.sumOfAllEntriesButLast()", () => {
   const a = Matrix.fromRows([
     [1, -2],
     [-3.5, 4.2],
@@ -770,8 +770,50 @@ test("Matrix.prototype.sumOfEntries()", () => {
     [8, 7.1],
   ]);
 
-  expect(a.sumOfEntries()).toBe(1 + -2 + -3.5 + 4.2 + 5 + 6.1);
-  expect(b.sumOfEntries()).toBe(-11 + 12.6 + -10.5 + 9.2 + 8 + 7.1);
+  expect(a.sumOfAllEntriesButLast()).toBe(1 + -2 + -3.5 + 4.2 + 5);
+  expect(b.sumOfAllEntriesButLast()).toBe(-11 + 12.6 + -10.5 + 9.2 + 8);
+});
+
+test("Matrix.prototype.mutFilterAllButLast", () => {
+  const a = Matrix.fromRows([
+    [1, -2],
+    [-3.5, 4.2],
+    [5, 6.1],
+  ]).mutFilterAllButLast([0, 1, 1, 0, 0]);
+  expectEquals(
+    a,
+    Matrix.fromRows([
+      [0, -2],
+      [-3.5, 0],
+      [0, 6.1],
+    ])
+  );
+});
+
+test("Matrix.prototype.setLastEntry", () => {
+  const a = Matrix.fromRows([
+    [1, -2],
+    [-3.5, 4.2],
+    [5, 6.1],
+  ]);
+  a.setLastEntry(-7.3);
+  expectEquals(
+    a,
+    Matrix.fromRows([
+      [1, -2],
+      [-3.5, 4.2],
+      [5, -7.3],
+    ])
+  );
+});
+
+test("Matrix.prototype.lastEntry", () => {
+  const a = Matrix.fromRows([
+    [1, -2],
+    [-3.5, 4.2],
+    [5, 6.1],
+  ]);
+  expect(a.lastEntry()).toBe(6.1);
 });
 
 function expectEquals(a: Matrix, b: Matrix): void {

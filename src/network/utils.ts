@@ -1,5 +1,4 @@
 import { MatrixMap, WeightInitializationMethod } from ".";
-import { VectorLabeledImage } from "../data";
 import { uniformRandom, normalRandom } from "../random";
 
 export interface Gradients {
@@ -7,12 +6,12 @@ export interface Gradients {
   biasGradients: MatrixMap;
 }
 
-export function divideIntoMiniBatches(
-  trainingData: VectorLabeledImage[],
+export function divideIntoMiniBatches<T>(
+  trainingData: T[],
   miniBatchSize: number
-): VectorLabeledImage[][] {
+): T[][] {
   shuffle(trainingData);
-  const miniBatches: VectorLabeledImage[][] = [];
+  const miniBatches: T[][] = [];
   for (let i = 0; i < trainingData.length; i += miniBatchSize) {
     miniBatches.push(trainingData.slice(i, i + miniBatchSize));
   }

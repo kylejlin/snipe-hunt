@@ -1,4 +1,10 @@
 .SnipeHunt {
+  --top-timer-height: 0;
+  --top-timer-border-thickness: 0;
+  --main-padding-top: 0;
+}
+
+.SnipeHunt.SnipeHunt--timed {
   --top-timer-height: 2em;
   --top-timer-border-thickness: 1px;
   --main-padding-top: 1em;

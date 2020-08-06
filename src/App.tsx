@@ -112,7 +112,15 @@ export default class App extends React.Component<{}, AppState> {
     const { selectedCardType: selectedCard } = this.state.ux;
 
     return (
-      <div className="SnipeHunt">
+      <div
+        className={
+          "SnipeHunt" +
+          this.state.thinkingTimeInMS.match({
+            none: () => "",
+            some: () => " SnipeHunt--timed",
+          })
+        }
+      >
         {this.state.thinkingTimeInMS.match({
           none: () => null,
 

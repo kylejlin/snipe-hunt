@@ -1,3 +1,24 @@
+.SnipeHunt {
+  --top-timer-height: 2em;
+  --top-timer-border-thickness: 1px;
+  --main-padding-top: 1em;
+}
+
+.SnipeHunt__TopTimer {
+  height: var(--top-timer-height);
+  background-color: #eee;
+  border: var(--top-timer-border-thickness) solid grey;
+}
+
+.SnipeHunt__Main {
+  height: calc(
+    100vh - var(--top-timer-height) - var(--main-padding-top) - 2 *
+      var(--top-timer-border-thickness)
+  );
+  padding-top: var(--main-padding-top);
+  overflow: auto;
+}
+
 .Board {
   border: 1px solid black;
   border-collapse: collapse;

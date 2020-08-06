@@ -117,7 +117,7 @@ export default class App extends React.Component<{}, AppState> {
           none: () => null,
 
           some: () => (
-            <div className="SnipeHunt__Timer">
+            <div className="SnipeHunt__TopTimer">
               <label>
                 Seconds remaining for this turn:{" "}
                 <span>

@@ -229,7 +229,10 @@ export class NetworkV1 implements Network {
   ): Gradients {
     const { numberOfLayers } = this;
 
-    const { weightedSums, activations } = this.performForwardPass(position);
+    const { weightedSums, activations } = this.performForwardPass(
+      position.gameState,
+      position.legalActions
+    );
 
     const errors = this.temp_errors;
     const weightGradients = this.temp_weightGradients;
@@ -287,13 +290,16 @@ export class NetworkV1 implements Network {
     return { weightGradients, biasGradients };
   }
 
-  performForwardPass(position: GamePosition): WeightedSumsAndActivations {
+  performForwardPass(
+    gameState: Matrix,
+    legalActions: ArrayLike<number | boolean>
+  ): WeightedSumsAndActivations {
     const lastLayer = this.numberOfLayers - 1;
 
     const weightedSums = this.temp_weightedSums;
     const activations = this.temp_activations;
 
-    activations[0] = position.gameState;
+    activations[0] = gameState;
 
     for (let outputLayer = 1; outputLayer < lastLayer; outputLayer++) {
       const inputLayer = outputLayer - 1;
@@ -318,7 +324,7 @@ export class NetworkV1 implements Network {
         1 / lastActivation.sumOfAllEntriesButLast()
       );
 
-      lastActivation.mutFilterAllButLast(position.legalActions);
+      lastActivation.mutFilterAllButLast(legalActions);
       lastActivation.setLastEntry(sigma(weightedSum.lastEntry()));
     }
 

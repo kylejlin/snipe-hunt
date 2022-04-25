@@ -437,9 +437,10 @@ export class Matrix {
     return this;
   }
 
-  setLastEntry(entry: number): void {
+  setLastEntry(entry: number | boolean): void {
     const thisData = this.data;
-    thisData[thisData.length - 1] = entry;
+    // Booleans will get automatically coerced to numbers
+    thisData[thisData.length - 1] = entry as number;
   }
 
   lastEntry(): number {

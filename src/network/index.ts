@@ -10,7 +10,10 @@ export interface Network {
     hyperparams: StochasticGradientDescentHyperParameters
   ): void;
 
-  performForwardPass(position: GamePosition): WeightedSumsAndActivations;
+  performForwardPass(
+    gameState: Matrix,
+    legalActions: ArrayLike<number | boolean>
+  ): WeightedSumsAndActivations;
 
   getWeights(): DeepReadonly<MatrixMap>;
 

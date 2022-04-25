@@ -45,3 +45,23 @@ pub struct Rank {
     beta_animals: SpeciesMultiset,
 }
 
+impl Index<Species> for SpeciesMultiset {
+    type Output = u8;
+    fn index(&self, i: Species) -> &Self::Output {
+        &self.0[usize::from(i as u8)]
+    }
+}
+
+impl IndexMut<Species> for SpeciesMultiset {
+    fn index_mut(&mut self, i: Species) -> &mut Self::Output {
+        &mut self.0[usize::from(i as u8)]
+    }
+}
+
+impl AddAssign<&SpeciesMultiset> for SpeciesMultiset {
+    fn add_assign(&mut self, rhs: &SpeciesMultiset) {
+        for (l, r) in self.0.iter_mut().zip(rhs.0.iter()) {
+            *l += r;
+        }
+    }
+}

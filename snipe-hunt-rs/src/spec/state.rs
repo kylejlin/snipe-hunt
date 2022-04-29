@@ -2,11 +2,14 @@ use crate::prelude::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct State {
-    turn: Player,
+    finished_plies: u16,
+    active_player: Player,
     alpha_reserve: SpeciesMultiset,
     beta_reserve: SpeciesMultiset,
     ranks: [Rank; 6],
 }
+
+pub const PLY_LIMIT: u16 = 400;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Player {

@@ -121,6 +121,9 @@ pub struct SearchPolicy {
     pub protect_deep_tt_entries: bool,
     /// Include newly-created direct snipe threats in quiescence.
     pub qsearch_direct_snipe_threats: bool,
+    /// Include quiet moves in quiescence when their child closes a repetition
+    /// against the current search path or supplied game history.
+    pub qsearch_repetition_closures: bool,
     /// Reserve beam slots for the mover's (at most two) snipe-step escapes
     /// without disturbing the ordinary PVS ordering.
     pub preserve_critical_snipe_defenses: bool,
@@ -139,6 +142,7 @@ impl SearchPolicy {
         Self {
             protect_deep_tt_entries: false,
             qsearch_direct_snipe_threats: true,
+            qsearch_repetition_closures: true,
             preserve_critical_snipe_defenses: true,
             canonical_repetition: true,
             convergence_history_penalty: 300,
@@ -634,6 +638,8 @@ impl<P: GamePosition> SearchEngine<P> {
             if position.is_tactical(mv, &child)
                 || (self.policy.qsearch_direct_snipe_threats
                     && position.creates_direct_snipe_threat(mv, &child))
+                || (self.policy.qsearch_repetition_closures
+                    && self.is_repetition(self.repetition_key(&child)))
             {
                 tactical.push((mv, child));
             }
@@ -1065,6 +1071,67 @@ mod tests {
         let mut with_convergence = SearchEngine::new_with_policy(config, convergence_policy);
         let result = with_convergence.search_with_context(&HistoryChoice(0), &[], &[42, 42, 99]);
         assert_eq!(result.best_move, Some(1));
+    }
+
+    #[derive(Clone)]
+    struct QuietClosure(u8);
+
+    impl GamePosition for QuietClosure {
+        type Move = u8;
+
+        fn legal_moves(&self, moves: &mut Vec<Self::Move>) {
+            if self.0 < 2 {
+                moves.push(0);
+            }
+        }
+
+        fn apply_move(&self, _: Self::Move) -> Self {
+            Self(self.0 + 1)
+        }
+
+        fn position_hash(&self) -> u64 {
+            if self.0 == 2 {
+                99
+            } else {
+                u64::from(self.0)
+            }
+        }
+
+        fn terminal_score(&self) -> Option<i32> {
+            None
+        }
+
+        fn evaluate(&self) -> i32 {
+            0
+        }
+    }
+
+    #[test]
+    fn quiescence_can_include_quiet_repetition_closures() {
+        let config = SearchConfig {
+            time_limit: Duration::from_secs(1),
+            max_depth: 1,
+            quiescence_depth: 1,
+            deadline_check_interval: 1,
+            ..SearchConfig::default()
+        };
+        let history = [99];
+        let baseline_policy = SearchPolicy {
+            qsearch_repetition_closures: false,
+            ..SearchPolicy::production()
+        };
+        let mut baseline = SearchEngine::new_with_policy(config.clone(), baseline_policy);
+        let baseline_result = baseline.search_with_context(&QuietClosure(0), &history, &[]);
+        assert_eq!(baseline_result.score, 0);
+
+        let policy = SearchPolicy {
+            qsearch_repetition_closures: true,
+            ..SearchPolicy::production()
+        };
+        let mut candidate = SearchEngine::new_with_policy(config, policy);
+        let candidate_result = candidate.search_with_context(&QuietClosure(0), &history, &[]);
+        assert_eq!(candidate_result.score, -REPETITION_CONTEMPT);
+        assert!(candidate_result.stats.qnodes > baseline_result.stats.qnodes);
     }
 
     #[test]

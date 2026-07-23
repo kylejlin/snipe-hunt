@@ -7,6 +7,8 @@ use snipe_core::{Player, State};
 struct Summary {
     baseline_wins: u64,
     candidate_wins: u64,
+    baseline_wins_as_first: u64,
+    candidate_wins_as_first: u64,
     draws: u64,
     turns: u64,
     baseline_moves: u64,
@@ -23,11 +25,18 @@ fn main() {
     let node_limit = argument(2, 20_000_u64);
     let candidate_name = std::env::args().nth(3).unwrap_or_else(|| "tt".to_owned());
     let max_turns = argument(4, 120_usize);
+    let first_seed = argument(5, 0_u64);
 
     let macro_penalty = candidate_name
         .strip_prefix("macro")
         .and_then(|value| value.parse::<i32>().ok());
-    let baseline_policy = if candidate_name == "canonical" {
+    let baseline_policy = if candidate_name == "repetition-qsearch" {
+        SearchPolicy {
+            qsearch_repetition_closures: false,
+            node_limit: Some(node_limit),
+            ..SearchPolicy::production()
+        }
+    } else if candidate_name == "canonical" {
         SearchPolicy {
             canonical_repetition: false,
             node_limit: Some(node_limit),
@@ -45,7 +54,13 @@ fn main() {
             ..SearchPolicy::default()
         }
     };
-    let candidate_policy = if candidate_name == "canonical" {
+    let candidate_policy = if candidate_name == "repetition-qsearch" {
+        SearchPolicy {
+            qsearch_repetition_closures: true,
+            node_limit: Some(node_limit),
+            ..SearchPolicy::production()
+        }
+    } else if candidate_name == "canonical" {
         SearchPolicy {
             node_limit: Some(node_limit),
             ..SearchPolicy::production()
@@ -63,6 +78,7 @@ fn main() {
                 candidate_name.as_str(),
                 "threat" | "both" | "threat-defense"
             ),
+            qsearch_repetition_closures: false,
             preserve_critical_snipe_defenses: matches!(
                 candidate_name.as_str(),
                 "defense" | "threat-defense"
@@ -80,6 +96,7 @@ fn main() {
                 | "defense"
                 | "threat-defense"
                 | "canonical"
+                | "repetition-qsearch"
                 | "macro100"
                 | "macro300"
                 | "macro1000"
@@ -101,7 +118,7 @@ fn main() {
     let mut candidate = SearchEngine::<State>::new_with_policy(config, candidate_policy);
     let mut summary = Summary::default();
 
-    for seed in 0..pairs {
+    for seed in first_seed..first_seed.saturating_add(pairs) {
         for mirror in 0..2 {
             play_one(
                 State::initial(seed),
@@ -121,9 +138,10 @@ fn main() {
     let candidate_depth = ratio(summary.candidate_depth, summary.candidate_moves);
     let games = summary.baseline_wins + summary.candidate_wins + summary.draws;
     println!(
-        "RESULT candidate={candidate_name} pairs={pairs} node_limit={node_limit} \
+        "RESULT candidate={candidate_name} pairs={pairs} first_seed={first_seed} node_limit={node_limit} \
 baseline_wins={} candidate_wins={} draws={} avg_turns={:.1} \
 capped_games={} \
+baseline_wins_as_first={} candidate_wins_as_first={} \
 baseline_nodes_per_turn={baseline_nodes_per_turn:.1} \
 candidate_nodes_per_turn={candidate_nodes_per_turn:.1} \
 baseline_depth={baseline_depth:.2} candidate_depth={candidate_depth:.2}",
@@ -132,6 +150,8 @@ baseline_depth={baseline_depth:.2} candidate_depth={candidate_depth:.2}",
         summary.draws,
         summary.turns as f64 / games as f64,
         summary.capped_games,
+        summary.baseline_wins_as_first,
+        summary.candidate_wins_as_first,
     );
 }
 
@@ -201,8 +221,10 @@ fn play_one(
     let winner_moved_first = winner == Player::Beta;
     if winner_moved_first == baseline_moves_first {
         summary.baseline_wins += 1;
+        summary.baseline_wins_as_first += u64::from(baseline_moves_first);
     } else {
         summary.candidate_wins += 1;
+        summary.candidate_wins_as_first += u64::from(!baseline_moves_first);
     }
 }
 

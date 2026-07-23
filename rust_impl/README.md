@@ -111,6 +111,15 @@ production self-play loop and verifies that history-aware search avoids the
 closing setup. The exact threat gate uses an early-exit atomic search verified
 against exhaustive full-turn generation on thousands of reachable positions.
 
+Quiescence also follows an otherwise quiet move when it closes an exact
+repetition against the active path or supplied game history. This prevents the
+closing move from disappearing just beyond an ordinary tactical frontier. The
+focused regression changes the synthetic closing line from a neutral
+stand-pat score to root-adverse repetition contempt. At a deterministic
+20,000-node budget, the policy scored 21–19 against otherwise identical
+production search across 20 mirrored pairs, so it was promoted without a
+measurable strength regression.
+
 Repetition identity canonicalizes the two strategically identical copies of
 each animal type. A softer macro-history penalty also recognizes recurring
 ownership and row-population structures without treating them as rule-level
@@ -119,6 +128,16 @@ Alpha win on turn 98. In a separate 20-pair deterministic tournament, the
 macro-history policy scored 21–19 against the otherwise identical production
 policy with equal search work per turn, showing no material strength
 regression.
+
+Capture-ordering and endgame-width experiments are intentionally not enabled.
+Long-game audits showed that many apparent triplet captures merely recycled
+the mover's own cards, but the full ownership-aware policy scored only 19–21
+at 20,000 nodes and introduced a rational defensive repetition in one audited
+seed. A 12-move dominant-material beam fixed that loop but lost 7–13 at the
+same budget. Raising macro-history contempt fixed the audit set yet then lost
+7–13 on the untouched holdout. Production therefore keeps the 48-move beam
+and macro penalty 300 rather than promoting convergence gains that failed the
+stronger playing-strength gate.
 
 ## Browser behavior
 

@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use snipe_ai::{SearchConfig, SearchEngine};
+use snipe_ai::{SearchConfig, SearchEngine, SearchPolicy};
 use snipe_core::{Move, State};
 
 fn main() {
@@ -16,6 +16,7 @@ fn main() {
     let max_turns = argument(3, 200_usize);
     let first_seed = argument(4, 0_u64);
     let history_aware = argument(5, 0_u8) != 0;
+    let convergence_penalty = argument(6, 300_i32);
     let mut repeats = 0_u64;
     let mut terminals = 0_u64;
     let mut capped = 0_u64;
@@ -26,6 +27,7 @@ fn main() {
         let mut seen = HashMap::new();
         let mut moves_played = Vec::<Move>::new();
         let mut prior_hashes = Vec::<u64>::new();
+        let mut prior_convergence = Vec::<u64>::new();
         seen.insert(state.position_hash(), 0_usize);
 
         for turn in 0..max_turns {
@@ -34,13 +36,19 @@ fn main() {
                 total_turns += turn as u64;
                 break;
             }
-            let mut engine = SearchEngine::new(SearchConfig {
-                time_limit: Duration::from_millis(milliseconds),
-                max_depth: 3,
-                ..SearchConfig::default()
-            });
+            let mut engine = SearchEngine::new_with_policy(
+                SearchConfig {
+                    time_limit: Duration::from_millis(milliseconds),
+                    max_depth: 3,
+                    ..SearchConfig::default()
+                },
+                SearchPolicy {
+                    convergence_history_penalty: convergence_penalty,
+                    ..SearchPolicy::production()
+                },
+            );
             let result = if history_aware {
-                engine.search_with_history(&state, &prior_hashes)
+                engine.search_with_context(&state, &prior_hashes, &prior_convergence)
             } else {
                 engine.search(&state)
             };
@@ -55,6 +63,9 @@ fn main() {
             } else {
                 state.position_hash()
             });
+            if history_aware {
+                prior_convergence.push(state.convergence_hash());
+            }
             state = state.apply_move(mv).unwrap();
 
             if let Some(&first_turn) = seen.get(&state.position_hash()) {
@@ -76,6 +87,7 @@ cycle_len={} hash={:016x} state={:?} cycle={:?}",
             if turn + 1 == max_turns {
                 capped += 1;
                 total_turns += max_turns as u64;
+                println!("CAPPED seed={seed} turns={max_turns}");
             }
         }
     }
@@ -83,6 +95,7 @@ cycle_len={} hash={:016x} state={:?} cycle={:?}",
     println!(
         "RESULT seeds={seeds} first_seed={first_seed} time_ms={milliseconds} max_turns={max_turns} \
 history_aware={history_aware} \
+convergence_penalty={convergence_penalty} \
 terminals={terminals} repeats={repeats} capped={capped} avg_turns={:.1}",
         total_turns as f64 / seeds.max(1) as f64
     );

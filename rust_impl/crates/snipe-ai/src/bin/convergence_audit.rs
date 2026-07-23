@@ -12,7 +12,11 @@ fn main() {
     let milliseconds = argument(2, 5_000_u64);
     let max_turns = argument(3, 400_usize);
     let convergence_history_penalty = argument(4, 0_i32);
+    let detailed = argument(5, 0_u8) != 0;
+    let qsearch_repetition_closures = argument(6, 1_u8) != 0;
     let mut state = State::initial(seed);
+    let mut states = vec![state];
+    let mut moves_played = Vec::new();
     let mut prior_hashes = Vec::new();
     let mut prior_convergence_hashes = Vec::new();
     let mut exact = HashMap::new();
@@ -27,6 +31,8 @@ fn main() {
     let mut alpha_eval_min = i32::MAX;
     let mut alpha_eval_max = i32::MIN;
     let mut turns_played = 0_usize;
+    let mut total_nodes = 0_u64;
+    let mut total_depth = 0_u64;
 
     for turn in 0..max_turns {
         if let Some(winner) = state.winner() {
@@ -35,7 +41,23 @@ fn main() {
         }
         let hash = state.position_hash();
         if let Some(first) = exact.insert(hash, turn) {
-            println!("EXACT_REPEAT first={first} turn={turn} hash={hash:016x}");
+            let preclosing = states[turn - 1];
+            let closing_move = moves_played[turn - 1];
+            println!(
+                "EXACT_REPEAT first={first} turn={turn} cycle_len={} hash={hash:016x} \
+repetition_hash={:016x} convergence_hash={:016x}",
+                turn - first,
+                state.repetition_hash(),
+                state.convergence_hash(),
+            );
+            if detailed {
+                println!(
+                    "REPEAT_DETAIL preclosing={:?} closing_move={closing_move:?} cycle={:?}",
+                    preclosing.to_data(),
+                    &moves_played[first..turn],
+                );
+                probe_closing(preclosing, closing_move, &states[..turn - 1]);
+            }
             break;
         }
         let canonical_key = state.repetition_hash();
@@ -71,7 +93,6 @@ first_state={:?} repeated_state={:?}",
             row_number(state.snipe_location(Player::Alpha)),
             row_number(state.snipe_location(Player::Beta)),
         ));
-
         let config = SearchConfig {
             time_limit: Duration::from_millis(milliseconds),
             max_depth: 3,
@@ -79,11 +100,15 @@ first_state={:?} repeated_state={:?}",
         };
         let policy = SearchPolicy {
             convergence_history_penalty,
+            qsearch_repetition_closures,
             ..SearchPolicy::production()
         };
         let mut engine = SearchEngine::new_with_policy(config, policy);
         let result = engine.search_with_context(&state, &prior_hashes, &prior_convergence_hashes);
+        total_nodes += result.stats.nodes + result.stats.qnodes;
+        total_depth += u64::from(result.depth);
         let mv = result.best_move.expect("nonterminal state has a move");
+        moves_played.push(mv);
         move_counts[move_kind(mv)] += 1;
         let outcome = state.apply_move_with_outcome(mv).unwrap();
         let captures = outcome.captured_animals.count_ones() + outcome.captured_snipes.count_ones();
@@ -97,6 +122,7 @@ first_state={:?} repeated_state={:?}",
         prior_hashes.push(state.repetition_hash());
         prior_convergence_hashes.push(state.convergence_hash());
         state = outcome.state;
+        states.push(state);
         turns_played = turn + 1;
 
         if (turn + 1) % 50 == 0 {
@@ -111,6 +137,7 @@ first_state={:?} repeated_state={:?}",
     println!(
         "SUMMARY seed={seed} time_ms={milliseconds} turns={turns_played} max_turns={max_turns} \
 convergence_penalty={convergence_history_penalty} \
+qsearch_repetition={qsearch_repetition_closures} \
 moves_animals={} moves_drop={} moves_snipe={} captures={} max_capture_gap={} \
 canonical_repeated={} canonical_max_visits={} canonical_max_span={} \
 coarse_repeated={} coarse_max_visits={} coarse_max_span={} \
@@ -132,6 +159,11 @@ alpha_eval_min={alpha_eval_min} alpha_eval_max={alpha_eval_max}",
         repeated_features.max_span,
     );
     println!(
+        "SEARCH avg_nodes={:.1} avg_depth={:.2}",
+        total_nodes as f64 / turns_played.max(1) as f64,
+        total_depth as f64 / turns_played.max(1) as f64,
+    );
+    println!(
         "FINAL hash={:016x} legal={} current_can_capture={} state={:?} features={:?}",
         state.position_hash(),
         state.legal_moves().len(),
@@ -139,13 +171,51 @@ alpha_eval_min={alpha_eval_min} alpha_eval_max={alpha_eval_max}",
         state.to_data(),
         extract_features(state)
     );
-    println!("CAPTURE_TURNS {capture_turns:?}");
-    println!("RECENT {recent:?}");
+    if detailed {
+        println!("CAPTURE_TURNS {capture_turns:?}");
+        println!("RECENT {recent:?}");
+    }
     println!(
         "SNIPE_SHUTTLES alpha={} beta={}",
         direction_reversals(snipe_rows.iter().map(|rows| rows.0)),
         direction_reversals(snipe_rows.iter().map(|rows| rows.1))
     );
+}
+
+fn probe_closing(preclosing: State, closing_move: Move, prior_states: &[State]) {
+    let repetition_history = prior_states
+        .iter()
+        .copied()
+        .map(State::repetition_hash)
+        .collect::<Vec<_>>();
+    let convergence_history = prior_states
+        .iter()
+        .copied()
+        .map(State::convergence_hash)
+        .collect::<Vec<_>>();
+    for qsearch_repetition_closures in [false, true] {
+        let policy = SearchPolicy {
+            convergence_history_penalty: 300,
+            qsearch_repetition_closures,
+            ..SearchPolicy::production()
+        };
+        let config = SearchConfig {
+            time_limit: Duration::from_secs(5),
+            max_depth: 3,
+            ..SearchConfig::default()
+        };
+        let mut engine = SearchEngine::new_with_policy(config, policy);
+        let result =
+            engine.search_with_context(&preclosing, &repetition_history, &convergence_history);
+        println!(
+            "CLOSING_PROBE qsearch_repetition={qsearch_repetition_closures} original={closing_move:?} \
+best={:?} score={} depth={} nodes={}",
+            result.best_move,
+            result.score,
+            result.depth,
+            result.stats.nodes + result.stats.qnodes,
+        );
+    }
 }
 
 fn print_checkpoint(turn: usize, state: State, last_capture: Option<usize>) {

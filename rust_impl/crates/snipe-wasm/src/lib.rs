@@ -11,6 +11,10 @@ use std::time::Duration;
 use wasm_bindgen::prelude::*;
 
 const ENGINE_NAME: &str = "Snipe Hunt Rust alpha-beta";
+const MIN_ANALYSIS_TIME_MS: u64 = 1;
+const MAX_ANALYSIS_TIME_MS: u64 = 60_000;
+const BROWSER_MAX_DEPTH: u8 = 64;
+const BROWSER_DEADLINE_CHECK_INTERVAL: u64 = 256;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -181,15 +185,7 @@ pub fn apply_move(position_json: &str, move_json: &str) -> Result<String, JsValu
 pub fn analyze(request_json: &str) -> Result<String, JsValue> {
     let request: AnalysisRequestDto = decode(request_json)?;
     let state = dto_to_state(&request.position)?;
-    // Depth three is the empirically strongest production horizon for the
-    // current evaluator. In paired-deal matches it scored 16-3-1 against the
-    // tactical greedy baseline; searching deeper exposed an evaluation
-    // horizon and reduced playing strength.
-    let config = SearchConfig {
-        time_limit: Duration::from_millis(request.time_limit_ms.clamp(1, 60_000)),
-        max_depth: 3,
-        ..SearchConfig::default()
-    };
+    let config = browser_search_config(request.time_limit_ms);
     let mut engine = SearchEngine::<State>::new(config);
     let result = engine.search(&state);
     let best = result
@@ -252,6 +248,21 @@ pub fn analyze(request_json: &str) -> Result<String, JsValue> {
         engine_name: ENGINE_NAME,
     };
     encode(&response)
+}
+
+fn browser_search_config(requested_time_ms: u64) -> SearchConfig {
+    SearchConfig {
+        time_limit: Duration::from_millis(
+            requested_time_ms.clamp(MIN_ANALYSIS_TIME_MS, MAX_ANALYSIS_TIME_MS),
+        ),
+        // Iterative deepening, rather than an artificial shallow ceiling,
+        // decides how far the engine gets inside the user's selected budget.
+        max_depth: BROWSER_MAX_DEPTH,
+        // Check more frequently in WASM so a completed iteration cannot run
+        // materially beyond the UI's deadline.
+        deadline_check_interval: BROWSER_DEADLINE_CHECK_INTERVAL,
+        ..SearchConfig::default()
+    }
 }
 
 fn decode<T: for<'de> Deserialize<'de>>(json: &str) -> Result<T, JsValue> {
@@ -572,5 +583,29 @@ mod tests {
         assert!(cards
             .iter()
             .all(|card| card.is_snipe || card.id.starts_with("animal-")));
+    }
+
+    #[test]
+    fn browser_search_uses_the_requested_budget_without_a_shallow_depth_cap() {
+        let config = browser_search_config(5_000);
+        assert_eq!(config.time_limit, Duration::from_secs(5));
+        assert_eq!(config.max_depth, BROWSER_MAX_DEPTH);
+        assert!(config.max_depth > 8);
+        assert_eq!(
+            config.deadline_check_interval,
+            BROWSER_DEADLINE_CHECK_INTERVAL
+        );
+    }
+
+    #[test]
+    fn browser_search_clamps_only_extreme_time_budgets() {
+        assert_eq!(
+            browser_search_config(0).time_limit,
+            Duration::from_millis(MIN_ANALYSIS_TIME_MS)
+        );
+        assert_eq!(
+            browser_search_config(u64::MAX).time_limit,
+            Duration::from_millis(MAX_ANALYSIS_TIME_MS)
+        );
     }
 }

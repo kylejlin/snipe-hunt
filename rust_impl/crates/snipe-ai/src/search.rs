@@ -41,6 +41,30 @@ pub trait GamePosition: Clone {
     fn is_tactical(&self, _mv: Self::Move, _child: &Self) -> bool {
         false
     }
+
+    /// Whether this move creates a new direct attack on the opposing snipe.
+    /// Kept separate from `is_tactical` so experiments can extend only the
+    /// quiescence frontier without changing production move ordering or LMR.
+    fn creates_direct_snipe_threat(&self, _mv: Self::Move, _child: &Self) -> bool {
+        false
+    }
+
+    /// Whether this is one of the mover's (at most two) snipe-step escapes.
+    fn is_snipe_step(&self, _mv: Self::Move) -> bool {
+        false
+    }
+
+    /// Whether the opponent could capture the mover's snipe in one complete
+    /// turn if given the move in the current position.
+    fn has_immediate_snipe_capture_threat(&self) -> bool {
+        false
+    }
+
+    /// Whether the actual side to move can capture the opposing snipe in one
+    /// complete turn.
+    fn side_to_move_has_snipe_capture(&self) -> bool {
+        false
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -70,6 +94,35 @@ impl Default for SearchConfig {
             deadline_check_interval: 1_024,
             lmr_after_move: 5,
             selective_move_limit: 48,
+        }
+    }
+}
+
+/// Search behavior switches used both by production and deterministic A/B
+/// arenas. `Default` is the frozen pre-policy baseline; `production()` enables
+/// only candidates that passed paired-deal and adversarial validation.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct SearchPolicy {
+    /// Preserve a deeper same-key TT entry when a reduced search later reaches
+    /// the position at a shallower depth.
+    pub protect_deep_tt_entries: bool,
+    /// Include newly-created direct snipe threats in quiescence.
+    pub qsearch_direct_snipe_threats: bool,
+    /// Reserve beam slots for the mover's (at most two) snipe-step escapes
+    /// without disturbing the ordinary PVS ordering.
+    pub preserve_critical_snipe_defenses: bool,
+    /// Deterministic per-search work budget used by native policy arenas.
+    /// `None` leaves production's deadline-only behavior unchanged.
+    pub node_limit: Option<u64>,
+}
+
+impl SearchPolicy {
+    pub const fn production() -> Self {
+        Self {
+            protect_deep_tt_entries: false,
+            qsearch_direct_snipe_threats: true,
+            preserve_critical_snipe_defenses: true,
+            node_limit: None,
         }
     }
 }
@@ -161,6 +214,7 @@ struct Timeout;
 
 pub struct SearchEngine<P: GamePosition> {
     config: SearchConfig,
+    policy: SearchPolicy,
     tt: TranspositionTable<P::Move>,
     history: HashMap<P::Move, i32>,
     killers: Vec<[Option<P::Move>; 2]>,
@@ -171,9 +225,14 @@ pub struct SearchEngine<P: GamePosition> {
 
 impl<P: GamePosition> SearchEngine<P> {
     pub fn new(config: SearchConfig) -> Self {
+        Self::new_with_policy(config, SearchPolicy::production())
+    }
+
+    pub fn new_with_policy(config: SearchConfig, policy: SearchPolicy) -> Self {
         let tt = TranspositionTable::new(config.transposition_table_mb);
         Self {
             config,
+            policy,
             tt,
             history: HashMap::new(),
             killers: vec![[None, None]; MAX_PLY],
@@ -309,7 +368,7 @@ impl<P: GamePosition> SearchEngine<P> {
         let mut moves = Vec::new();
         root.legal_moves(&mut moves);
         self.order_moves(root, &mut moves, tt_move, 0);
-        self.limit_moves(&mut moves);
+        self.limit_moves(root, &mut moves);
         let first = moves[0];
         let original_alpha = alpha;
         let mut best_move = first;
@@ -344,7 +403,7 @@ impl<P: GamePosition> SearchEngine<P> {
         } else {
             Bound::Exact
         };
-        self.tt.store(Entry {
+        self.store_tt(Entry {
             key,
             depth,
             score: score_to_tt(best_score, 0),
@@ -403,7 +462,7 @@ impl<P: GamePosition> SearchEngine<P> {
             return Ok(-MATE_SCORE + ply as i32);
         }
         self.order_moves(position, &mut moves, entry.and_then(|e| e.best_move), ply);
-        self.limit_moves(&mut moves);
+        self.limit_moves(position, &mut moves);
         let mut best = -INF;
         let mut best_move = moves[0];
         self.path.push(key);
@@ -450,7 +509,7 @@ impl<P: GamePosition> SearchEngine<P> {
         } else {
             Bound::Exact
         };
-        self.tt.store(Entry {
+        self.store_tt(Entry {
             key,
             depth,
             score: score_to_tt(best, ply),
@@ -493,7 +552,10 @@ impl<P: GamePosition> SearchEngine<P> {
         position.legal_moves(&mut legal);
         for mv in legal {
             let child = position.apply_move(mv);
-            if position.is_tactical(mv, &child) {
+            if position.is_tactical(mv, &child)
+                || (self.policy.qsearch_direct_snipe_threats
+                    && position.creates_direct_snipe_threat(mv, &child))
+            {
                 tactical.push((mv, child));
             }
         }
@@ -565,9 +627,30 @@ impl<P: GamePosition> SearchEngine<P> {
         }
     }
 
-    fn limit_moves(&self, moves: &mut Vec<P::Move>) {
-        if self.config.selective_move_limit != 0 && moves.len() > self.config.selective_move_limit {
-            moves.truncate(self.config.selective_move_limit);
+    fn limit_moves(&self, position: &P, moves: &mut Vec<P::Move>) {
+        let limit = self.config.selective_move_limit;
+        if limit == 0 || moves.len() <= limit {
+            return;
+        }
+        if !self.policy.preserve_critical_snipe_defenses
+            || !position.has_immediate_snipe_capture_threat()
+        {
+            moves.truncate(limit);
+            return;
+        }
+
+        let escapes = moves[limit..]
+            .iter()
+            .copied()
+            .filter(|&mv| {
+                position.is_snipe_step(mv)
+                    && !position.apply_move(mv).side_to_move_has_snipe_capture()
+            })
+            .collect::<Vec<_>>();
+        moves.truncate(limit);
+        let replace = escapes.len().min(limit);
+        for (slot, escape) in moves[limit - replace..].iter_mut().zip(escapes) {
+            *slot = escape;
         }
     }
 
@@ -576,6 +659,28 @@ impl<P: GamePosition> SearchEngine<P> {
             *score /= 2;
             *score != 0
         });
+    }
+
+    #[inline]
+    fn store_tt(&mut self, entry: Entry<P::Move>) {
+        if !self.policy.protect_deep_tt_entries {
+            self.tt.store(entry);
+            return;
+        }
+
+        let index = entry.key as usize & (self.tt.entries.len() - 1);
+        let replace = match self.tt.entries[index] {
+            None => true,
+            Some(old) if old.key == entry.key => {
+                entry.depth > old.depth
+                    || (entry.depth == old.depth
+                        && (entry.bound == Bound::Exact || old.bound != Bound::Exact))
+            }
+            Some(old) => old.generation != self.tt.generation || entry.depth >= old.depth,
+        };
+        if replace {
+            self.tt.entries[index] = Some(entry);
+        }
     }
 
     fn extract_pv(&self, root: &P, depth: u8) -> Vec<P::Move> {
@@ -610,6 +715,13 @@ impl<P: GamePosition> SearchEngine<P> {
 
     #[inline]
     fn check_deadline_periodic(&self) -> Result<(), Timeout> {
+        if self
+            .policy
+            .node_limit
+            .is_some_and(|limit| self.stats.nodes + self.stats.qnodes >= limit)
+        {
+            return Err(Timeout);
+        }
         let interval = self.config.deadline_check_interval.max(1);
         if (self.stats.nodes + self.stats.qnodes)
             .checked_rem(interval)

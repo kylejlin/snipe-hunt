@@ -51,6 +51,39 @@ impl GamePosition for State {
         let after = child.animal_bits(reserve, player);
         after & !before != 0
     }
+
+    fn creates_direct_snipe_threat(&self, _mv: Self::Move, child: &Self) -> bool {
+        let player = self.side_to_move();
+        snipe_threats(*child, player) > snipe_threats(*self, player)
+    }
+
+    fn is_snipe_step(&self, mv: Self::Move) -> bool {
+        matches!(mv, Move::Snipe { .. })
+    }
+
+    fn has_immediate_snipe_capture_threat(&self) -> bool {
+        let defender = self.side_to_move();
+        let attacker = defender.opponent();
+        let mut data = self.to_data();
+        data.side_to_move = attacker as u8;
+        data.pending_animal = u8::MAX;
+        let attacker_to_move =
+            State::from_data(data).expect("changing only side-to-move preserves state validity");
+        side_to_move_can_capture_snipe(attacker_to_move)
+    }
+
+    fn side_to_move_has_snipe_capture(&self) -> bool {
+        side_to_move_can_capture_snipe(*self)
+    }
+}
+
+fn side_to_move_can_capture_snipe(state: State) -> bool {
+    let attacker = state.side_to_move();
+    state.legal_moves().into_iter().any(|mv| {
+        state
+            .apply_move(mv)
+            .is_ok_and(|child| child.captured_snipe_winner() == Some(attacker))
+    })
 }
 
 pub fn evaluate_state(state: State) -> i32 {

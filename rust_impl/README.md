@@ -60,12 +60,15 @@ cargo run --release -p snipe-ai --bin arena -- 20 1000 160 random 3
 The arguments are game count, milliseconds per search move, maximum game
 length, opponent, and maximum search depth.
 
-The production depth-three configuration scored:
+The original frozen depth-three baseline scored:
 
 - 16 wins, 3 losses, and 1 draw against the tactical greedy baseline
 - 20 wins and 0 losses against the seeded random baseline
 
 These are deterministic regression matches across ten paired initial deals.
+Production now lets iterative deepening use the full selected time budget
+instead of stopping artificially at depth three. Against the frozen cap, the
+uncapped engine scored 13–7 at 500 ms per move and 9–1 at one second per move.
 
 Additional benchmark tools are available for adversarial validation:
 
@@ -80,11 +83,25 @@ cargo run --release -p snipe-ai --bin mcts_arena -- 5 50 220
 cargo run --release -p snipe-ai --bin tune_weights -- 10 2 220 19
 ```
 
-In the current regression set, depth three beat depth four 12–8 at 100 ms per
-move. The MCTS challenger beat greedy 8–2 but lost 0–10 to depth-three
-alpha-beta at 50 ms per move. A weight candidate that looked stronger at depth
-one regressed to 5–11–4 on the independent depth-two holdout, so production
-keeps the original evaluation weights.
+At very short 100 ms searches, frozen depth three beat depth four 12–8, which
+is why time-budget comparisons are kept separate from fixed-depth experiments.
+The MCTS challenger beat greedy 8–2 but lost 0–10 to the frozen depth-three
+alpha-beta baseline at 50 ms per move. Evaluation-weight candidates failed
+independent holdout, so production keeps the original weights.
+
+The production search policy was selected with deterministic 5,000-node
+matches across 30 mirrored pairs:
+
+- direct-snipe-threat quiescence scored 48–12 against the frozen policy;
+- exact-gated preservation of critical snipe escapes scored 35–25;
+- the combined policy scored 49–11.
+
+At a larger 20,000-node budget, close to the optimized WASM engine's
+one-second workload, the combined policy also beat the frozen policy 13–7.
+
+The defensive policy also fixes a reachable 129-move position where ordinary
+48-move beam truncation discarded every move preventing immediate snipe
+capture. See `tests/defensive_beam.rs` for the deterministic regression.
 
 ## Browser behavior
 

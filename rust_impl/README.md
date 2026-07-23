@@ -67,6 +67,25 @@ The production depth-three configuration scored:
 
 These are deterministic regression matches across ten paired initial deals.
 
+Additional benchmark tools are available for adversarial validation:
+
+```sh
+# Compare two alpha-beta depth limits on mirrored deals.
+cargo run --release -p snipe-ai --bin engine_arena -- 10 100 3 4 120
+
+# Challenge alpha-beta with the independent deterministic MCTS player.
+cargo run --release -p snipe-ai --bin mcts_arena -- 5 50 220
+
+# Run training/holdout comparisons for evaluation-weight candidates.
+cargo run --release -p snipe-ai --bin tune_weights -- 10 2 220 19
+```
+
+In the current regression set, depth three beat depth four 12–8 at 100 ms per
+move. The MCTS challenger beat greedy 8–2 but lost 0–10 to depth-three
+alpha-beta at 50 ms per move. A weight candidate that looked stronger at depth
+one regressed to 5–11–4 on the independent depth-two holdout, so production
+keeps the original evaluation weights.
+
 ## Browser behavior
 
 - The Rust/WASM engine is authoritative for dealing, legality, state

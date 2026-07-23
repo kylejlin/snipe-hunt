@@ -7,9 +7,11 @@
 mod arena;
 mod core_adapter;
 mod evaluation;
+mod mcts;
 mod search;
 
 pub use arena::{play_match, ArenaResult, MatchSummary};
 pub use core_adapter::{evaluate_state, extract_features, tactical_move_score};
 pub use evaluation::{SnipeFeatures, SnipeWeights};
+pub use mcts::{MctsConfig, MctsEngine, MctsResult, MctsStats};
 pub use search::{GamePosition, SearchConfig, SearchEngine, SearchResult, SearchStats, MATE_SCORE};

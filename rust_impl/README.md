@@ -35,6 +35,16 @@ cd web
 npm run build
 ```
 
+To build and publish the web app to GitHub Pages:
+
+```sh
+cd web
+npm run deploy
+```
+
+The deployment script builds with the `/snipe-hunt/` base path and publishes
+the generated app to the repository's `gh-pages` branch.
+
 ## Verify
 
 ```sh

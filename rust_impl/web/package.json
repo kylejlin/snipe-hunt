@@ -6,7 +6,9 @@
   "scripts": {
     "build:wasm": "wasm-pack build ../crates/snipe-wasm --target web --out-dir ../../web/src/wasm/pkg --release",
     "dev": "npm run build:wasm && vite",
-    "build": "npm run build:wasm && tsc -b && vite build && node scripts/prepare-sites.mjs",
+    "build": "npm run build:wasm && tsc -b && vite build",
+    "build:github-pages": "npm run build:wasm && tsc -b && vite build --base=/snipe-hunt/",
+    "deploy": "node scripts/deploy-github-pages.mjs",
     "test": "vitest run",
     "preview": "vite preview"
   },

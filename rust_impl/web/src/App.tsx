@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { version } from "../package.json";
 import { createEngineAdapter } from "./engine/fallback-adapter";
 import {
   type AnalysisResult,
@@ -81,11 +82,11 @@ function analysisIsOn(mode: AnalysisMode, manual: boolean, turn: Player): boolea
 }
 
 function cardImage(card: Card): string {
-  return `/cards/${card.isSnipe ? `${card.owner}Snipe` : card.animal}.png`;
+  return `${import.meta.env.BASE_URL}cards/${card.isSnipe ? `${card.owner}Snipe` : card.animal}.png`;
 }
 
 function cardBackground(card: Card): string {
-  return `/cards/${card.owner}${card.canRetreat && !card.isSnipe ? "Retreater" : ""}Background.png`;
+  return `${import.meta.env.BASE_URL}cards/${card.owner}${card.canRetreat && !card.isSnipe ? "Retreater" : ""}Background.png`;
 }
 
 function cardName(position: Position, cardId: string): string {
@@ -719,7 +720,7 @@ export default function App() {
 
       <footer>
         <span>Field position autosaved on this device</span>
-        <span>Rust/WASM search engine · timed analysis</span>
+        <span>Version {version} · Rust/WASM search engine · timed analysis</span>
       </footer>
     </div>
   );

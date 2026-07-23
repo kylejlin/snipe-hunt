@@ -25,4 +25,5 @@ Some requirements:
 Some suggestions (these are not required, though):
 
 - Either use clientside WASM (preferable) for the AI, or do it natively on the serverside (not ideal, but still acceptable). TypeScript is too slow.
+- Make the app clientside-only (no server)
 - Make the UI look more modern, stylistically

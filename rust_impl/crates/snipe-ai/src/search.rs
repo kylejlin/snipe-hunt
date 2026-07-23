@@ -124,6 +124,9 @@ pub struct SearchPolicy {
     /// Include quiet moves in quiescence when their child closes a repetition
     /// against the current search path or supplied game history.
     pub qsearch_repetition_closures: bool,
+    /// Keep a fully completed aspiration-window move when only its full-window
+    /// verification search runs out of budget.
+    pub retain_completed_aspiration_on_timeout: bool,
     /// Reserve beam slots for the mover's (at most two) snipe-step escapes
     /// without disturbing the ordinary PVS ordering.
     pub preserve_critical_snipe_defenses: bool,
@@ -143,6 +146,7 @@ impl SearchPolicy {
             protect_deep_tt_entries: false,
             qsearch_direct_snipe_threats: true,
             qsearch_repetition_closures: true,
+            retain_completed_aspiration_on_timeout: true,
             preserve_critical_snipe_defenses: true,
             canonical_repetition: true,
             convergence_history_penalty: 300,
@@ -385,12 +389,18 @@ impl<P: GamePosition> SearchEngine<P> {
             };
 
             let mut iteration = self.search_root(root, depth, alpha, beta);
-            if let Ok((score, _)) = iteration {
+            let mut accepted_aspiration_bound = false;
+            if let Ok((score, mv)) = iteration {
                 if score <= alpha || score >= beta {
                     self.stats.researches += 1;
+                    let completed_bound = (score, mv);
                     alpha = -INF;
                     beta = INF;
                     iteration = self.search_root(root, depth, alpha, beta);
+                    if iteration.is_err() && self.policy.retain_completed_aspiration_on_timeout {
+                        iteration = Ok(completed_bound);
+                        accepted_aspiration_bound = true;
+                    }
                 }
             }
 
@@ -404,6 +414,9 @@ impl<P: GamePosition> SearchEngine<P> {
                     if score.abs() >= MATE_THRESHOLD {
                         break;
                     }
+                    if accepted_aspiration_bound {
+                        break;
+                    }
                 }
                 Err(Timeout) => break,
             }
@@ -411,7 +424,7 @@ impl<P: GamePosition> SearchEngine<P> {
 
         self.stats.elapsed = started.elapsed();
         let pv = if completed {
-            self.extract_pv(root, self.stats.completed_depth)
+            self.extract_pv(root, self.stats.completed_depth, best_move)
         } else {
             best_move.into_iter().collect()
         };
@@ -818,20 +831,22 @@ impl<P: GamePosition> SearchEngine<P> {
         }
     }
 
-    fn extract_pv(&self, root: &P, depth: u8) -> Vec<P::Move> {
+    fn extract_pv(&self, root: &P, depth: u8, accepted_root_move: Option<P::Move>) -> Vec<P::Move> {
         let mut position = root.clone();
         let mut pv = Vec::with_capacity(depth as usize);
         let mut seen = Vec::with_capacity(depth as usize);
-        for _ in 0..depth {
+        for ply in 0..depth {
             let key = position.position_hash();
             if seen.contains(&key) {
                 break;
             }
             seen.push(key);
-            let Some(entry) = self.tt.get(key) else {
-                break;
+            let mv = if ply == 0 {
+                accepted_root_move
+            } else {
+                self.tt.get(key).and_then(|entry| entry.best_move)
             };
-            let Some(mv) = entry.best_move else {
+            let Some(mv) = mv else {
                 break;
             };
             let mut legal = Vec::new();

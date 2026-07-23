@@ -79,6 +79,12 @@ cargo run --release -p snipe-ai --bin engine_arena -- 10 100 3 4 120
 # Challenge alpha-beta with the independent deterministic MCTS player.
 cargo run --release -p snipe-ai --bin mcts_arena -- 5 50 220
 
+# Compare the bounded engine with a much deeper mirrored oracle.
+cargo run --release -p snipe-ai --bin oracle_arena -- 2 20000 200000 80 0
+
+# Mine replayable fast-versus-teacher decision labels.
+cargo run --release -p snipe-ai --bin teacher_labels -- 6 1 12 4 20000 200000
+
 # Run training/holdout comparisons for evaluation-weight candidates.
 cargo run --release -p snipe-ai --bin tune_weights -- 10 2 220 19
 ```
@@ -119,6 +125,20 @@ stand-pat score to root-adverse repetition contempt. At a deterministic
 20,000-node budget, the policy scored 21–19 against otherwise identical
 production search across 20 mirrored pairs, so it was promoted without a
 measurable strength regression.
+
+Iterative deepening retains a fully completed aspiration-window result when
+only its full-window verification search exhausts the move budget. Previously,
+that deeper move was discarded and the engine fell back an entire completed
+depth. The policy scored 23–17 at 5,000 nodes and 21–19 across two disjoint
+20,000-node blocks, increasing average completed depth without increasing
+search work. On a replayable teacher position, it reduced equal-depth oracle
+regret from 1,131 to 689 evaluation points. Principal-variation extraction is
+also anchored to the accepted root move, so a timed-out later search cannot
+make browser analysis describe a different move.
+
+In the optimized WebAssembly smoke test, this raises the reported completed
+depth from 2 to 3 at one second and from 3 to 4 at five seconds, at essentially
+the same 23,000-node and 95,000-node workloads.
 
 Repetition identity canonicalizes the two strategically identical copies of
 each animal type. A softer macro-history penalty also recognizes recurring

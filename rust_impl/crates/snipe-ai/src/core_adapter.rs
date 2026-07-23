@@ -288,6 +288,8 @@ fn snipe_threats(state: State, attacker: Player) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{SearchConfig, SearchEngine, SearchPolicy};
+    use std::time::Duration;
 
     #[test]
     fn reflected_position_has_equal_evaluation_for_reflected_side_to_move() {
@@ -307,5 +309,59 @@ mod tests {
                 let _ = extract_features(child);
             }
         }
+    }
+
+    #[test]
+    fn completed_aspiration_move_survives_a_timed_out_research() {
+        let config = SearchConfig {
+            time_limit: Duration::from_secs(60),
+            max_depth: 64,
+            deadline_check_interval: 1,
+            ..SearchConfig::default()
+        };
+        let mut baseline = SearchEngine::new_with_policy(
+            config.clone(),
+            SearchPolicy {
+                retain_completed_aspiration_on_timeout: false,
+                node_limit: Some(20_000),
+                ..SearchPolicy::production()
+            },
+        );
+        let state = State::initial(1);
+        let result = baseline.search(&state);
+        assert_eq!(
+            result.principal_variation.first(),
+            result.best_move.as_ref()
+        );
+
+        let mut candidate = SearchEngine::new_with_policy(
+            config,
+            SearchPolicy {
+                retain_completed_aspiration_on_timeout: true,
+                node_limit: Some(20_000),
+                ..SearchPolicy::production()
+            },
+        );
+        let candidate_result = candidate.search(&state);
+        let aspiration_child = state
+            .apply_move(Move::Animals {
+                first: snipe_core::AnimalStep {
+                    moved: Animal::Dragon1,
+                    destination: Row::Four,
+                },
+                second: Some(snipe_core::AnimalStep {
+                    moved: Animal::Horse1,
+                    destination: Row::Four,
+                }),
+            })
+            .unwrap();
+        let candidate_child = state
+            .apply_move(candidate_result.best_move.unwrap())
+            .unwrap();
+        assert_eq!(
+            candidate_child, aspiration_child,
+            "baseline={result:?} candidate={candidate_result:?}"
+        );
+        assert!(candidate_result.depth > result.depth);
     }
 }

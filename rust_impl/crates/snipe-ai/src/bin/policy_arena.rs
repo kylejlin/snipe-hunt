@@ -30,7 +30,13 @@ fn main() {
     let macro_penalty = candidate_name
         .strip_prefix("macro")
         .and_then(|value| value.parse::<i32>().ok());
-    let baseline_policy = if candidate_name == "repetition-qsearch" {
+    let baseline_policy = if candidate_name == "aspiration-timeout" {
+        SearchPolicy {
+            retain_completed_aspiration_on_timeout: false,
+            node_limit: Some(node_limit),
+            ..SearchPolicy::production()
+        }
+    } else if candidate_name == "repetition-qsearch" {
         SearchPolicy {
             qsearch_repetition_closures: false,
             node_limit: Some(node_limit),
@@ -54,7 +60,13 @@ fn main() {
             ..SearchPolicy::default()
         }
     };
-    let candidate_policy = if candidate_name == "repetition-qsearch" {
+    let candidate_policy = if candidate_name == "aspiration-timeout" {
+        SearchPolicy {
+            retain_completed_aspiration_on_timeout: true,
+            node_limit: Some(node_limit),
+            ..SearchPolicy::production()
+        }
+    } else if candidate_name == "repetition-qsearch" {
         SearchPolicy {
             qsearch_repetition_closures: true,
             node_limit: Some(node_limit),
@@ -79,6 +91,7 @@ fn main() {
                 "threat" | "both" | "threat-defense"
             ),
             qsearch_repetition_closures: false,
+            retain_completed_aspiration_on_timeout: false,
             preserve_critical_snipe_defenses: matches!(
                 candidate_name.as_str(),
                 "defense" | "threat-defense"
@@ -96,6 +109,7 @@ fn main() {
                 | "defense"
                 | "threat-defense"
                 | "canonical"
+                | "aspiration-timeout"
                 | "repetition-qsearch"
                 | "macro100"
                 | "macro300"

@@ -53,6 +53,17 @@ button {
   color: inherit;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .app-shell {
   width: min(1600px, 100%);
   margin: 0 auto;
@@ -559,6 +570,17 @@ input[type="number"] {
   min-height: 180px;
 }
 
+.history-actions {
+  display: flex;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.history-error {
+  margin-bottom: 10px;
+  font-size: 0.68rem;
+}
+
 .move-list {
   display: grid;
   gap: 3px;
@@ -572,7 +594,7 @@ input[type="number"] {
 .move-list button {
   width: 100%;
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-columns: 38px minmax(0, 1fr);
   gap: 8px;
   align-items: start;
   padding: 7px;
@@ -593,7 +615,7 @@ input[type="number"] {
 .move-number {
   display: grid;
   place-items: center;
-  width: 24px;
+  width: 34px;
   height: 24px;
   border-radius: 5px;
   color: var(--muted);
@@ -617,6 +639,14 @@ input[type="number"] {
   font-size: 0.61rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.move-list__layout small {
+  display: block;
+  overflow: visible;
+  line-height: 1.4;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .move-list__empty {

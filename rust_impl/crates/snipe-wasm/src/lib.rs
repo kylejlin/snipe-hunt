@@ -364,6 +364,7 @@ fn cards_at(state: State, location: CoreLocation) -> Vec<CardDto> {
 
 fn move_to_dto(state: State, mv: Move) -> Result<TurnMoveDto, JsValue> {
     let player = state.side_to_move();
+    let is_drop = matches!(mv, Move::Drop { .. });
     let mut steps = Vec::new();
     match mv {
         Move::Snipe { destination } => {
@@ -424,16 +425,9 @@ fn move_to_dto(state: State, mv: Move) -> Result<TurnMoveDto, JsValue> {
     }
     let label = steps
         .iter()
-        .map(|step| {
-            format!(
-                "{} {} → {}",
-                card_label(&step.card_id),
-                location_label(&step.from),
-                location_label(&step.to)
-            )
-        })
+        .map(|step| compact_step_label(step, player, is_drop))
         .collect::<Vec<_>>()
-        .join("; ");
+        .join(", ");
     Ok(TurnMoveDto {
         id: move_id(mv),
         player: player.into(),
@@ -529,14 +523,40 @@ fn animal_name(animal: Animal) -> &'static str {
 
 fn card_label(id: &str) -> String {
     if id == "alpha-snipe" {
-        "Alpha Snipe".to_owned()
+        "Alpha".to_owned()
     } else if id == "beta-snipe" {
-        "Beta Snipe".to_owned()
+        "Beta".to_owned()
     } else {
         animal_from_id(id)
             .map(|animal| animal_name(animal).to_owned())
             .unwrap_or_else(|_| id.to_owned())
     }
+}
+
+fn compact_step_label(step: &MoveStepDto, player: Player, is_drop: bool) -> String {
+    let destination = step.to.trim_start_matches("row-");
+    let suffix = if is_drop {
+        "!"
+    } else {
+        let source = step
+            .from
+            .trim_start_matches("row-")
+            .parse::<u8>()
+            .expect("non-drop move source is a row");
+        let destination_number = destination
+            .parse::<u8>()
+            .expect("move destination is a row");
+        let advances = match player {
+            Player::Alpha => destination_number > source,
+            Player::Beta => destination_number < source,
+        };
+        if advances {
+            ""
+        } else {
+            "R"
+        }
+    };
+    format!("{} {destination}{suffix}", card_label(&step.card_id))
 }
 
 fn player_slug(player: Player) -> &'static str {
@@ -556,14 +576,6 @@ fn location_id(location: CoreLocation) -> &'static str {
         CoreLocation::Row5 => "row-5",
         CoreLocation::Row6 => "row-6",
         CoreLocation::BetaReserve => "beta-reserve",
-    }
-}
-
-fn location_label(location: &str) -> String {
-    match location {
-        "alpha-reserve" => "Alpha reserve".to_owned(),
-        "beta-reserve" => "Beta reserve".to_owned(),
-        row => format!("Rank {}", row.trim_start_matches("row-")),
     }
 }
 
@@ -599,6 +611,57 @@ mod tests {
         assert!(cards
             .iter()
             .all(|card| card.is_snipe || card.id.starts_with("animal-")));
+    }
+
+    #[test]
+    fn move_labels_use_compact_ascii_notation() {
+        let alpha_advance = MoveStepDto {
+            card_id: "animal-0".to_owned(),
+            from: "row-2".to_owned(),
+            to: "row-3".to_owned(),
+        };
+        let beta_retreat = MoveStepDto {
+            card_id: "animal-3".to_owned(),
+            from: "row-5".to_owned(),
+            to: "row-6".to_owned(),
+        };
+        let beta_snipe = MoveStepDto {
+            card_id: "beta-snipe".to_owned(),
+            from: "row-6".to_owned(),
+            to: "row-5".to_owned(),
+        };
+        assert_eq!(
+            compact_step_label(&alpha_advance, Player::Alpha, false),
+            "Rat 3"
+        );
+        assert_eq!(
+            compact_step_label(&beta_retreat, Player::Beta, false),
+            "Rabbit 6R"
+        );
+        assert_eq!(
+            compact_step_label(&beta_retreat, Player::Beta, true),
+            "Rabbit 6!"
+        );
+        assert_eq!(
+            compact_step_label(&beta_snipe, Player::Beta, false),
+            "Beta 5"
+        );
+
+        let state = State::initial(7_071);
+        let two_step = state
+            .legal_moves()
+            .into_iter()
+            .find(|mv| {
+                matches!(
+                    mv,
+                    Move::Animals {
+                        second: Some(_),
+                        ..
+                    }
+                )
+            })
+            .expect("initial position has a two-animal move");
+        assert!(move_to_dto(state, two_step).unwrap().label.contains(", "));
     }
 
     #[test]

@@ -5,7 +5,6 @@ import {
   type Player,
   type Position,
   type TurnMove,
-  locationLabel,
   otherPlayer,
   rowLocation,
 } from "./types";
@@ -115,10 +114,18 @@ function rankOf(location: Location): number | null {
 }
 
 function moveFor(card: Card, from: Location, to: Location): TurnMove {
+  const destinationRank = rankOf(to);
+  const sourceRank = rankOf(from);
+  const isDrop = sourceRank === null;
+  const isAdvance =
+    sourceRank !== null &&
+    destinationRank !== null &&
+    (card.owner === "Alpha" ? destinationRank > sourceRank : destinationRank < sourceRank);
+  const suffix = isDrop ? "!" : isAdvance ? "" : "R";
   return {
     id: `${card.id}:${from}:${to}`,
     player: card.owner,
-    label: `${card.isSnipe ? `${card.owner} Snipe` : card.animal} — ${locationLabel(from)} to ${locationLabel(to)}`,
+    label: `${card.isSnipe ? card.owner : card.animal} ${destinationRank}${suffix}`,
     steps: [{ cardId: card.id, from, to }],
     captures: [],
   };

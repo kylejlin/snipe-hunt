@@ -10,13 +10,16 @@ import {
   type TurnMove,
   locationLabel,
 } from "./engine/types";
+import {
+  formatInitialLines,
+  formatMove,
+  formatPlyPrefix,
+  parseHistory,
+  serializeHistory,
+  type TimelineEntry,
+} from "./history-format";
 
 type AnalysisMode = "alpha" | "beta" | "manual";
-
-interface TimelineEntry {
-  position: Position;
-  move: TurnMove | null;
-}
 
 interface StoredGame {
   schemaVersion: 1;
@@ -188,7 +191,9 @@ export default function App() {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const requestSequence = useRef(0);
+  const importInput = useRef<HTMLInputElement>(null);
 
   const entry = game.timeline[game.cursor];
   const position = entry.position;
@@ -347,11 +352,62 @@ export default function App() {
     localStorage.removeItem(STORAGE_KEY);
     setAnalysis(null);
     setThinking(false);
+    setHistoryError(null);
     setGame((current) => ({
       ...current,
       timeline: [{ position: next, move: null }],
       cursor: 0,
     }));
+  };
+
+  const exportHistory = () => {
+    setHistoryError(null);
+    try {
+      const contents = serializeHistory(game.timeline);
+      const blob = new Blob([contents], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const timestamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
+      link.href = url;
+      link.download = `snipe-hunt-${timestamp}.shgh`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (reason) {
+      setHistoryError(reason instanceof Error ? reason.message : "History could not be exported.");
+    }
+  };
+
+  const importHistory = async (file: File) => {
+    setHistoryError(null);
+    if (!file.name.toLowerCase().endsWith(".shgh")) {
+      setHistoryError("Choose a .shgh history file.");
+      return;
+    }
+    try {
+      const timeline = parseHistory(await file.text(), engine);
+      if (
+        game.timeline.length > 1 &&
+        !window.confirm("Import this history? The current game will be replaced.")
+      ) {
+        return;
+      }
+      requestSequence.current += 1;
+      setAnalysis(null);
+      setThinking(false);
+      setSelectedCardId(null);
+      setMovePrefix([]);
+      setGame((current) => ({
+        ...current,
+        timeline,
+        cursor: timeline.length - 1,
+        mode: "manual",
+        manualAnalysis: false,
+      }));
+    } catch (reason) {
+      setHistoryError(reason instanceof Error ? reason.message : "History could not be imported.");
+    }
   };
 
   const status = position.winner
@@ -586,29 +642,76 @@ export default function App() {
               </div>
               <span className="move-count">{game.timeline.length - 1} plies</span>
             </div>
+            <div className="history-actions">
+              <button className="button button--quiet" type="button" onClick={exportHistory}>
+                Export History
+              </button>
+              <button
+                className="button button--quiet"
+                type="button"
+                onClick={() => importInput.current?.click()}
+              >
+                Import History
+              </button>
+              <input
+                ref={importInput}
+                className="visually-hidden"
+                type="file"
+                accept=".shgh"
+                aria-label="Choose a Snipe Hunt history file"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (file) void importHistory(file);
+                }}
+              />
+            </div>
+            {historyError && (
+              <p className="error-message history-error" role="alert">
+                {historyError}
+              </p>
+            )}
             <ol className="move-list">
-              {game.timeline.length === 1 ? (
-                <li className="move-list__empty">The hunt has not begun.</li>
-              ) : (
-                game.timeline.slice(1).map((timelineEntry, index) => {
-                  const timelineIndex = index + 1;
+              {game.timeline.map((timelineEntry, timelineIndex) => {
+                if (timelineIndex === 0) {
+                  const initialLines = formatInitialLines(timelineEntry.position);
                   return (
-                    <li key={`${timelineEntry.move?.id}-${timelineIndex}`}>
+                    <li key="initial-layout" className="move-list__layout">
                       <button
                         type="button"
-                        className={game.cursor === timelineIndex ? "move-list__active" : ""}
-                        onClick={() => moveCursor(timelineIndex)}
+                        className={game.cursor === 0 ? "move-list__active" : ""}
+                        onClick={() => moveCursor(0)}
                       >
-                        <span className="move-number">{timelineIndex}</span>
+                        <span className="move-number">0</span>
                         <span>
-                          <strong>{timelineEntry.move?.player}</strong>
-                          <small>{timelineEntry.move?.label}</small>
+                          <strong>Initial layout</strong>
+                          <small>{initialLines[0]}</small>
+                          <small>{initialLines[1]}</small>
                         </span>
                       </button>
                     </li>
                   );
-                })
-              )}
+                }
+                const move = timelineEntry.move;
+                if (!move) return null;
+                return (
+                  <li key={`${move.id}-${timelineIndex}`}>
+                    <button
+                      type="button"
+                      className={game.cursor === timelineIndex ? "move-list__active" : ""}
+                      onClick={() => moveCursor(timelineIndex)}
+                    >
+                      <span className="move-number">
+                        {formatPlyPrefix(timelineIndex, move.player)}
+                      </span>
+                      <span>
+                        <strong>{move.player}</strong>
+                        <small>{formatMove(game.timeline[timelineIndex - 1].position, move)}</small>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
             </ol>
           </section>
         </aside>

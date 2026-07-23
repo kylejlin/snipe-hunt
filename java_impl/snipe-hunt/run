@@ -1,0 +1,11 @@
+ #!/bin/bash
+
+ echo -e "Building project...\n\n" &&
+ 
+ /Library/Java/JavaVirtualMachines/jdk1.8.0_241.jdk/Contents/Home/bin/javac -cp "/Library/Java/JavaVirtualMachines/jdk1.8.0_241.jdk/Contents/Home/jre/lib/ext/jfxrt.jar:src" src/SnipeHunt.java -d "/Users/KyleSchool/apcs/snipe-hunt/bin" &&
+ 
+ echo -e "Project built successfully.\nRunning project...\n\n" &&
+
+ /Library/Java/JavaVirtualMachines/jdk1.8.0_241.jdk/Contents/Home/bin/java -Dfile.encoding=UTF-8 -cp /Users/KyleSchool/apcs/snipe-hunt/bin SnipeHunt &&
+
+ echo -e "Project has stopped running.\n\n"

@@ -103,10 +103,28 @@ The defensive policy also fixes a reachable 129-move position where ordinary
 48-move beam truncation discarded every move preventing immediate snipe
 capture. See `tests/defensive_beam.rs` for the deterministic regression.
 
+Analysis requests also include the active game timeline. Search treats a
+branch that re-enters a prior position as strongly unfavorable to the computer,
+so it assumes a human opponent will exploit repetition while refusing to
+settle for a cycle itself. `tests/repetition_cycle.rs` captures a real
+production self-play loop and verifies that history-aware search avoids the
+closing setup. The exact threat gate uses an early-exit atomic search verified
+against exhaustive full-turn generation on thousands of reachable positions.
+
+Repetition identity canonicalizes the two strategically identical copies of
+each animal type. A softer macro-history penalty also recognizes recurring
+ownership and row-population structures without treating them as rule-level
+draws. This converted a supported-snipe fortress from a 400-turn cap into an
+Alpha win on turn 98. In a separate 20-pair deterministic tournament, the
+macro-history policy scored 21–19 against the otherwise identical production
+policy with equal search work per turn, showing no material strength
+regression.
+
 ## Browser behavior
 
 - The Rust/WASM engine is authoritative for dealing, legality, state
   transitions, and analysis.
+- The timeline is supplied to analysis so repeated-position cycles are avoided.
 - Search runs synchronously inside a dedicated worker. Cancelling analysis
   terminates and replaces the worker, keeping the UI responsive.
 - The complete game timeline and analysis settings are versioned and stored in

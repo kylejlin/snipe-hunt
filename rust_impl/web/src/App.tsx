@@ -267,6 +267,9 @@ export default function App() {
       .analyze(
         {
           position,
+          history: game.timeline
+            .slice(0, game.cursor)
+            .map((timelineEntry) => timelineEntry.position),
           timeLimitMs: Math.round(game.timeLimitSeconds * 1_000),
           requestId,
         },

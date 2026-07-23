@@ -767,6 +767,75 @@ impl State {
         hash
     }
 
+    /// A full-turn repetition key that treats the two physical copies of each
+    /// animal type as interchangeable. Their `(owner, location)` tuples are
+    /// sorted before hashing, while snipes and side-to-move remain exact.
+    ///
+    /// Pending animal turns mark which sorted descriptor moved first, so a
+    /// consistent copy-label swap remains canonical without losing the
+    /// "cannot move the same animal twice" distinction.
+    pub fn repetition_hash(self) -> u64 {
+        let data = self.to_data();
+        let mut hash = 0xcbf29ce484222325_u64;
+        let mut add = |byte: u8| {
+            hash ^= byte as u64;
+            hash = hash.wrapping_mul(0x100000001b3);
+        };
+        for type_index in 0..16_u8 {
+            let first = Animal::from_index(type_index).expect("animal type index is valid");
+            let second = Animal::from_index(type_index + 16).expect("animal copy index is valid");
+            let encode = |animal| {
+                let owner = self
+                    .owner_of_animal(animal)
+                    .expect("valid state contains every animal");
+                let location = self
+                    .location_of_animal(animal)
+                    .expect("valid state contains every animal");
+                let pending = u8::from(data.pending_animal == animal as u8);
+                location as u8 | ((owner as u8) << 3) | (pending << 4)
+            };
+            let mut pair = [encode(first), encode(second)];
+            pair.sort_unstable();
+            add(pair[0]);
+            add(pair[1]);
+        }
+        for snipes in data.snipes {
+            add(snipes);
+        }
+        add(data.side_to_move);
+        add(data.pending_destination);
+        hash
+    }
+
+    /// Coarse strategic identity used only by optional convergence policies.
+    /// It ignores individual animal types while retaining allegiance totals,
+    /// reserves, snipe locations, row populations, and side-to-move.
+    pub fn convergence_hash(self) -> u64 {
+        let mut hash = 0xcbf29ce484222325_u64;
+        let mut add = |byte: u8| {
+            hash ^= byte as u64;
+            hash = hash.wrapping_mul(0x100000001b3);
+        };
+        for player in [Player::Alpha, Player::Beta] {
+            let owned = Location::ALL
+                .into_iter()
+                .map(|location| self.animal_count(location, player))
+                .sum::<u32>();
+            add(owned as u8);
+            add(self.reserve_count(player) as u8);
+            add(self
+                .snipe_location(player)
+                .map_or(u8::MAX, |location| location as u8));
+        }
+        for row in Row::ALL {
+            for player in [Player::Alpha, Player::Beta] {
+                add(self.animal_count(row.location(), player) as u8);
+            }
+        }
+        add(self.side_to_move as u8);
+        hash
+    }
+
     pub fn captured_snipe_winner(self) -> Option<Player> {
         if self.cell(Location::BetaReserve).has_snipe(Player::Alpha) {
             Some(Player::Beta)
@@ -821,6 +890,37 @@ impl State {
             }
         }
         false
+    }
+
+    /// Returns whether the side to move can capture the opposing snipe during
+    /// its current complete turn.
+    ///
+    /// This is equivalent to generating every [`Move`], applying each one,
+    /// and checking `captured_snipe_winner`, but it stops at the first win and
+    /// never materializes the potentially large cross-product of paired animal
+    /// steps.
+    pub fn has_winning_snipe_capture(self) -> bool {
+        if self.captured_snipe_winner().is_some() {
+            return false;
+        }
+
+        let attacker = self.side_to_move;
+        self.any_legal_animal_step(|first| {
+            let after_first = self.force_atomic(AtomicMove::Animal(first));
+            if after_first.captured_snipe_winner() == Some(attacker) {
+                return true;
+            }
+            if self.pending.is_some() {
+                return false;
+            }
+
+            after_first.any_legal_animal_step(|second| {
+                after_first
+                    .force_atomic(AtomicMove::Animal(second))
+                    .captured_snipe_winner()
+                    == Some(attacker)
+            })
+        })
     }
 
     #[inline]
@@ -1039,6 +1139,13 @@ impl State {
     }
 
     fn generate_animal_steps(self, moves: &mut Vec<AtomicMove>) {
+        self.any_legal_animal_step(|step| {
+            moves.push(AtomicMove::Animal(step));
+            false
+        });
+    }
+
+    fn any_legal_animal_step(self, mut predicate: impl FnMut(AnimalStep) -> bool) -> bool {
         for row in Row::ALL {
             let location = row.location();
             let cell = self.cell(location);
@@ -1057,8 +1164,8 @@ impl State {
                         moved: animal,
                         destination,
                     };
-                    if self.validate_animal_step(step).is_ok() {
-                        moves.push(AtomicMove::Animal(step));
+                    if self.validate_animal_step(step).is_ok() && predicate(step) {
+                        return true;
                     }
                 }
                 if animal.can_retreat() {
@@ -1067,13 +1174,14 @@ impl State {
                             moved: animal,
                             destination,
                         };
-                        if self.validate_animal_step(step).is_ok() {
-                            moves.push(AtomicMove::Animal(step));
+                        if self.validate_animal_step(step).is_ok() && predicate(step) {
+                            return true;
                         }
                     }
                 }
             }
         }
+        false
     }
 
     fn validate_atomic(self, atomic: AtomicMove) -> Result<(), IllegalMove> {
@@ -1332,6 +1440,67 @@ mod tests {
     }
 
     #[test]
+    fn repetition_hash_ignores_same_type_copy_identity() {
+        let state = State::initial(7);
+        let mut data = state.to_data();
+        let first = Animal::Mouse1.bit();
+        let second = Animal::Mouse2.bit();
+        for cells in [&mut data.alpha_animals, &mut data.beta_animals] {
+            for bits in cells {
+                let has_first = *bits & first != 0;
+                let has_second = *bits & second != 0;
+                *bits &= !(first | second);
+                if has_first {
+                    *bits |= second;
+                }
+                if has_second {
+                    *bits |= first;
+                }
+            }
+        }
+        let swapped = State::from_data(data).unwrap();
+        assert_ne!(state.position_hash(), swapped.position_hash());
+        assert_eq!(state.repetition_hash(), swapped.repetition_hash());
+
+        let AtomicMove::Animal(step) = state
+            .legal_atomics()
+            .into_iter()
+            .find(|mv| matches!(mv, AtomicMove::Animal(_)))
+            .expect("initial state has an animal step")
+        else {
+            unreachable!()
+        };
+        let pending = state.apply_atomic(AtomicMove::Animal(step)).unwrap();
+        let mut pending_data = pending.to_data();
+        let base = (step.moved as u8) & 15;
+        let low = 1_u32 << base;
+        let high = 1_u32 << (base + 16);
+        for cells in [
+            &mut pending_data.alpha_animals,
+            &mut pending_data.beta_animals,
+        ] {
+            for bits in cells {
+                let has_low = *bits & low != 0;
+                let has_high = *bits & high != 0;
+                *bits &= !(low | high);
+                if has_low {
+                    *bits |= high;
+                }
+                if has_high {
+                    *bits |= low;
+                }
+            }
+        }
+        pending_data.pending_animal = if pending_data.pending_animal == base {
+            base + 16
+        } else {
+            base
+        };
+        let pending_swapped = State::from_data(pending_data).unwrap();
+        assert_eq!(pending.repetition_hash(), pending_swapped.repetition_hash());
+    }
+
+    #[test]
     fn state_data_and_legacy_board_round_trip() {
         for seed in 0..16 {
             let state = State::initial(seed);
@@ -1580,6 +1749,35 @@ mod tests {
             state.apply_move(incomplete),
             Err(IllegalMove::IncompleteAnimalTurn)
         );
+    }
+
+    #[test]
+    fn early_snipe_capture_query_matches_exhaustive_full_turn_generation() {
+        for seed in 0..16 {
+            let mut state = State::initial(seed);
+            let mut rng = SplitMix64::new(seed ^ 0xa076_1d64_78bd_642f);
+            for ply in 0..40 {
+                let attacker = state.side_to_move();
+                let legal = state.legal_moves();
+                let exhaustive = legal.iter().copied().any(|mv| {
+                    state
+                        .apply_move(mv)
+                        .is_ok_and(|child| child.captured_snipe_winner() == Some(attacker))
+                });
+                assert_eq!(
+                    state.has_winning_snipe_capture(),
+                    exhaustive,
+                    "seed={seed} ply={ply} hash={:016x}",
+                    state.position_hash()
+                );
+                if state.winner().is_some() {
+                    break;
+                }
+                state = state
+                    .apply_move(legal[rng.next() as usize % legal.len()])
+                    .expect("generated move must apply");
+            }
+        }
     }
 
     #[test]

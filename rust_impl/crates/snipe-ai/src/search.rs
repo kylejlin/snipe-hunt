@@ -11,6 +11,7 @@ use web_time::Instant;
 
 pub const MATE_SCORE: i32 = 1_000_000;
 const MATE_THRESHOLD: i32 = MATE_SCORE - 10_000;
+const REPETITION_CONTEMPT: i32 = 100_000;
 const INF: i32 = MATE_SCORE + 1;
 const MAX_PLY: usize = 128;
 
@@ -25,6 +26,18 @@ pub trait GamePosition: Clone {
     fn legal_moves(&self, moves: &mut Vec<Self::Move>);
     fn apply_move(&self, mv: Self::Move) -> Self;
     fn position_hash(&self) -> u64;
+
+    /// Position identity used only for repetition detection. Implementations
+    /// may canonicalize truly interchangeable piece identities while keeping
+    /// `position_hash` exact for the transposition table.
+    fn repetition_hash(&self) -> u64 {
+        self.position_hash()
+    }
+
+    /// Coarse strategic identity for optional soft convergence penalties.
+    fn convergence_hash(&self) -> u64 {
+        self.repetition_hash()
+    }
 
     /// Return `Some(0)` for a draw, positive for a win, negative for a loss.
     /// Prefer `±MATE_SCORE`; the search normalizes it to prefer faster mates.
@@ -111,6 +124,11 @@ pub struct SearchPolicy {
     /// Reserve beam slots for the mover's (at most two) snipe-step escapes
     /// without disturbing the ordinary PVS ordering.
     pub preserve_critical_snipe_defenses: bool,
+    /// Use `GamePosition::repetition_hash` for game-history and path cycles.
+    pub canonical_repetition: bool,
+    /// Root-relative evaluation penalty per previous visit to a coarse
+    /// convergence key. Zero disables this experimental policy.
+    pub convergence_history_penalty: i32,
     /// Deterministic per-search work budget used by native policy arenas.
     /// `None` leaves production's deadline-only behavior unchanged.
     pub node_limit: Option<u64>,
@@ -122,6 +140,8 @@ impl SearchPolicy {
             protect_deep_tt_entries: false,
             qsearch_direct_snipe_threats: true,
             preserve_critical_snipe_defenses: true,
+            canonical_repetition: true,
+            convergence_history_penalty: 300,
             node_limit: None,
         }
     }
@@ -207,6 +227,10 @@ impl<M: Copy> TranspositionTable<M> {
     fn next_generation(&mut self) {
         self.generation = self.generation.wrapping_add(1);
     }
+
+    fn clear(&mut self) {
+        self.entries.fill(None);
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -221,6 +245,9 @@ pub struct SearchEngine<P: GamePosition> {
     stats: SearchStats,
     deadline: Instant,
     path: Vec<u64>,
+    convergence_path: Vec<u64>,
+    prior_hashes: Vec<u64>,
+    prior_convergence: HashMap<u64, u16>,
 }
 
 impl<P: GamePosition> SearchEngine<P> {
@@ -239,6 +266,9 @@ impl<P: GamePosition> SearchEngine<P> {
             stats: SearchStats::default(),
             deadline: Instant::now(),
             path: Vec::with_capacity(MAX_PLY),
+            convergence_path: Vec::with_capacity(MAX_PLY),
+            prior_hashes: Vec::new(),
+            prior_convergence: HashMap::new(),
         }
     }
 
@@ -253,10 +283,44 @@ impl<P: GamePosition> SearchEngine<P> {
     /// Iterative-deepening search. A legal deterministic move is returned even
     /// for a zero-duration budget.
     pub fn search(&mut self, root: &P) -> SearchResult<P::Move> {
+        self.search_with_history(root, &[])
+    }
+
+    /// Search with position hashes from the game timeline strictly before
+    /// `root`. Re-entering either a historical position or the current search
+    /// path is treated as strongly unfavorable to the root player.
+    pub fn search_with_history(&mut self, root: &P, prior_hashes: &[u64]) -> SearchResult<P::Move> {
+        self.search_with_context(root, prior_hashes, &[])
+    }
+
+    /// Search with both hard repetition keys and coarse strategic history
+    /// keys. Coarse keys affect evaluation only when the configured soft
+    /// convergence penalty is nonzero.
+    pub fn search_with_context(
+        &mut self,
+        root: &P,
+        prior_hashes: &[u64],
+        prior_convergence: &[u64],
+    ) -> SearchResult<P::Move> {
         let started = Instant::now();
         self.deadline = started + self.config.time_limit;
         self.stats = SearchStats::default();
         self.path.clear();
+        self.convergence_path.clear();
+        self.prior_hashes.clear();
+        self.prior_hashes.extend_from_slice(prior_hashes);
+        self.prior_hashes.sort_unstable();
+        self.prior_hashes.dedup();
+        self.prior_convergence.clear();
+        for &key in prior_convergence {
+            let visits = self.prior_convergence.entry(key).or_default();
+            *visits = visits.saturating_add(1);
+        }
+        if !prior_hashes.is_empty() || !prior_convergence.is_empty() {
+            // Scores below depend on the supplied game history, so entries
+            // retained from a previous root are not valid for this search.
+            self.tt.clear();
+        }
         self.tt.next_generation();
         self.decay_history();
 
@@ -302,7 +366,9 @@ impl<P: GamePosition> SearchEngine<P> {
                 break;
             }
             self.path.clear();
-            self.path.push(root.position_hash());
+            self.path.push(self.repetition_key(root));
+            self.convergence_path.clear();
+            self.convergence_path.push(root.convergence_hash());
 
             let window = self.config.aspiration_window.max(1);
             let (mut alpha, mut beta) = if depth >= 3 {
@@ -428,17 +494,23 @@ impl<P: GamePosition> SearchEngine<P> {
         if let Some(score) = position.terminal_score() {
             return Ok(normalize_terminal(score, ply));
         }
-        if ply >= MAX_PLY - 1 {
-            return Ok(position.evaluate());
+        let repetition_key = self.repetition_key(position);
+        if self.is_repetition(repetition_key) {
+            return Ok(repetition_score(ply));
         }
-        let key = position.position_hash();
-        if self.path.contains(&key) {
-            return Ok(0);
+        let convergence_key = position.convergence_hash();
+        let convergence_visits = self.convergence_visits(convergence_key);
+        if convergence_visits != 0 && self.policy.convergence_history_penalty > 0 {
+            return Ok(self.convergence_evaluation(position, ply, convergence_visits));
+        }
+        if ply >= MAX_PLY - 1 {
+            return Ok(self.convergence_evaluation(position, ply, 0));
         }
         if depth == 0 {
             return self.quiescence(position, alpha, beta, self.config.quiescence_depth, ply);
         }
 
+        let key = position.position_hash();
         let original_alpha = alpha;
         let entry = self.tt.get(key);
         if let Some(hit) = entry {
@@ -465,7 +537,8 @@ impl<P: GamePosition> SearchEngine<P> {
         self.limit_moves(position, &mut moves);
         let mut best = -INF;
         let mut best_move = moves[0];
-        self.path.push(key);
+        self.path.push(repetition_key);
+        self.convergence_path.push(convergence_key);
 
         for (index, mv) in moves.into_iter().enumerate() {
             let child = position.apply_move(mv);
@@ -501,6 +574,7 @@ impl<P: GamePosition> SearchEngine<P> {
             }
         }
         self.path.pop();
+        self.convergence_path.pop();
 
         let bound = if best <= original_alpha {
             Bound::Upper
@@ -534,7 +608,16 @@ impl<P: GamePosition> SearchEngine<P> {
             return Ok(normalize_terminal(score, ply));
         }
 
-        let stand_pat = position.evaluate();
+        let repetition_key = self.repetition_key(position);
+        if self.is_repetition(repetition_key) {
+            return Ok(repetition_score(ply));
+        }
+        let convergence_key = position.convergence_hash();
+        let convergence_visits = self.convergence_visits(convergence_key);
+        if convergence_visits != 0 && self.policy.convergence_history_penalty > 0 {
+            return Ok(self.convergence_evaluation(position, ply, convergence_visits));
+        }
+        let stand_pat = self.convergence_evaluation(position, ply, 0);
         if stand_pat >= beta {
             return Ok(stand_pat);
         }
@@ -543,10 +626,6 @@ impl<P: GamePosition> SearchEngine<P> {
             return Ok(alpha);
         }
 
-        let key = position.position_hash();
-        if self.path.contains(&key) {
-            return Ok(0);
-        }
         let mut tactical = Vec::new();
         let mut legal = Vec::new();
         position.legal_moves(&mut legal);
@@ -563,16 +642,19 @@ impl<P: GamePosition> SearchEngine<P> {
             Reverse((position.move_ordering_score(*mv, child), Reverse(*mv)))
         });
 
-        self.path.push(key);
+        self.path.push(repetition_key);
+        self.convergence_path.push(convergence_key);
         for (_, child) in tactical {
             let score = -self.quiescence(&child, -beta, -alpha, depth - 1, ply + 1)?;
             if score >= beta {
                 self.path.pop();
+                self.convergence_path.pop();
                 return Ok(score);
             }
             alpha = alpha.max(score);
         }
         self.path.pop();
+        self.convergence_path.pop();
         Ok(alpha)
     }
 
@@ -659,6 +741,53 @@ impl<P: GamePosition> SearchEngine<P> {
             *score /= 2;
             *score != 0
         });
+    }
+
+    #[inline]
+    fn is_repetition(&self, key: u64) -> bool {
+        self.path.contains(&key) || self.prior_hashes.binary_search(&key).is_ok()
+    }
+
+    #[inline]
+    fn repetition_key(&self, position: &P) -> u64 {
+        if self.policy.canonical_repetition {
+            position.repetition_hash()
+        } else {
+            position.position_hash()
+        }
+    }
+
+    #[inline]
+    fn convergence_visits(&self, key: u64) -> u16 {
+        self.prior_convergence
+            .get(&key)
+            .copied()
+            .unwrap_or(0)
+            .saturating_add(u16::from(self.convergence_path.contains(&key)))
+    }
+
+    #[inline]
+    fn convergence_evaluation(&self, position: &P, ply: usize, extra_visits: u16) -> i32 {
+        let base = position.evaluate();
+        let per_visit = self.policy.convergence_history_penalty.max(0);
+        if per_visit == 0 {
+            return base;
+        }
+        let visits = i32::from(
+            self.prior_convergence
+                .get(&position.convergence_hash())
+                .copied()
+                .unwrap_or(0)
+                .max(extra_visits),
+        );
+        let root_penalty = per_visit
+            .saturating_mul(visits)
+            .min(REPETITION_CONTEMPT / 2);
+        if ply & 1 == 0 {
+            base.saturating_sub(root_penalty)
+        } else {
+            base.saturating_add(root_penalty)
+        }
     }
 
     #[inline]
@@ -751,6 +880,15 @@ fn normalize_terminal(score: i32, ply: usize) -> i32 {
         -MATE_SCORE + ply as i32
     } else {
         score
+    }
+}
+
+#[inline]
+fn repetition_score(ply: usize) -> i32 {
+    if ply & 1 == 0 {
+        -REPETITION_CONTEMPT
+    } else {
+        REPETITION_CONTEMPT
     }
 }
 
@@ -868,6 +1006,65 @@ mod tests {
         let result = engine(Duration::from_secs(1)).search(&TakeAway { stones: 0 });
         assert_eq!(result.best_move, None);
         assert_eq!(result.score, -MATE_SCORE);
+    }
+
+    #[derive(Clone)]
+    struct HistoryChoice(u8);
+
+    impl GamePosition for HistoryChoice {
+        type Move = u8;
+
+        fn legal_moves(&self, moves: &mut Vec<Self::Move>) {
+            if self.0 == 0 {
+                moves.extend([0, 1]);
+            }
+        }
+
+        fn apply_move(&self, mv: Self::Move) -> Self {
+            Self(if mv == 0 { 1 } else { 2 })
+        }
+
+        fn position_hash(&self) -> u64 {
+            match self.0 {
+                1 => 42,
+                value => u64::from(value),
+            }
+        }
+
+        fn terminal_score(&self) -> Option<i32> {
+            None
+        }
+
+        fn evaluate(&self) -> i32 {
+            0
+        }
+    }
+
+    #[test]
+    fn historical_repetition_is_unfavorable_to_the_root() {
+        let config = SearchConfig {
+            time_limit: Duration::from_secs(1),
+            max_depth: 1,
+            quiescence_depth: 0,
+            deadline_check_interval: 1,
+            ..SearchConfig::default()
+        };
+        let mut baseline = SearchEngine::new_with_policy(config.clone(), SearchPolicy::default());
+        assert_eq!(baseline.search(&HistoryChoice(0)).best_move, Some(0));
+
+        let mut with_history =
+            SearchEngine::new_with_policy(config.clone(), SearchPolicy::default());
+        let result = with_history.search_with_history(&HistoryChoice(0), &[99, 42, 42, 7]);
+        assert_eq!(result.best_move, Some(1));
+        assert!(result.score > -REPETITION_CONTEMPT);
+
+        let convergence_policy = SearchPolicy {
+            convergence_history_penalty: 300,
+            ..SearchPolicy::default()
+        };
+        let mut with_convergence = SearchEngine::new_with_policy(config, convergence_policy);
+        let result = with_convergence.search_with_context(&HistoryChoice(0), &[], &[42, 42, 99]);
+        assert_eq!(result.best_move, Some(1));
     }
 
     #[test]

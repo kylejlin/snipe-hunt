@@ -115,12 +115,14 @@ struct TurnMoveDto {
     captures: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AnalysisRequestDto {
     position: PositionDto,
     time_limit_ms: u64,
     request_id: u64,
+    #[serde(default)]
+    history: Vec<PositionDto>,
 }
 
 #[derive(Debug, Serialize)]
@@ -185,9 +187,10 @@ pub fn apply_move(position_json: &str, move_json: &str) -> Result<String, JsValu
 pub fn analyze(request_json: &str) -> Result<String, JsValue> {
     let request: AnalysisRequestDto = decode(request_json)?;
     let state = dto_to_state(&request.position)?;
+    let (repetition_hashes, convergence_hashes) = history_context(&request.history)?;
     let config = browser_search_config(request.time_limit_ms);
     let mut engine = SearchEngine::<State>::new(config);
-    let result = engine.search(&state);
+    let result = engine.search_with_context(&state, &repetition_hashes, &convergence_hashes);
     let best = result
         .best_move
         .ok_or_else(|| js_error("no legal moves are available"))?;
@@ -248,6 +251,19 @@ pub fn analyze(request_json: &str) -> Result<String, JsValue> {
         engine_name: ENGINE_NAME,
     };
     encode(&response)
+}
+
+fn history_context(history: &[PositionDto]) -> Result<(Vec<u64>, Vec<u64>), JsValue> {
+    let states = history
+        .iter()
+        .map(dto_to_state)
+        .collect::<Result<Vec<_>, _>>()?;
+    let repetition_hashes = states.iter().map(|state| state.repetition_hash()).collect();
+    let convergence_hashes = states
+        .iter()
+        .map(|state| state.convergence_hash())
+        .collect();
+    Ok((repetition_hashes, convergence_hashes))
 }
 
 fn browser_search_config(requested_time_ms: u64) -> SearchConfig {
@@ -606,6 +622,53 @@ mod tests {
         assert_eq!(
             browser_search_config(u64::MAX).time_limit,
             Duration::from_millis(MAX_ANALYSIS_TIME_MS)
+        );
+    }
+
+    #[test]
+    fn analysis_request_history_is_backward_compatible() {
+        let request = AnalysisRequestDto {
+            position: position_to_dto(State::initial(99), 99, 1),
+            time_limit_ms: 1_000,
+            request_id: 7,
+            history: Vec::new(),
+        };
+        let mut value = serde_json::to_value(request).unwrap();
+        value
+            .as_object_mut()
+            .expect("analysis request is an object")
+            .remove("history");
+
+        let decoded: AnalysisRequestDto = serde_json::from_value(value).unwrap();
+        assert!(decoded.history.is_empty());
+    }
+
+    #[test]
+    fn analysis_request_accepts_prior_positions() {
+        let first = State::initial(101);
+        let second = first.apply_move(first.legal_moves()[0]).unwrap();
+        let prior = vec![
+            position_to_dto(first, 101, 1),
+            position_to_dto(second, 101, 2),
+        ];
+        let request = AnalysisRequestDto {
+            position: position_to_dto(second, 101, 2),
+            time_limit_ms: 5_000,
+            request_id: 8,
+            history: prior,
+        };
+
+        let decoded: AnalysisRequestDto =
+            serde_json::from_str(&serde_json::to_string(&request).unwrap()).unwrap();
+        assert_eq!(decoded.history.len(), 2);
+        let (repetition_hashes, convergence_hashes) = history_context(&decoded.history).unwrap();
+        assert_eq!(
+            repetition_hashes,
+            vec![first.repetition_hash(), second.repetition_hash()]
+        );
+        assert_eq!(
+            convergence_hashes,
+            vec![first.convergence_hash(), second.convergence_hash()]
         );
     }
 }

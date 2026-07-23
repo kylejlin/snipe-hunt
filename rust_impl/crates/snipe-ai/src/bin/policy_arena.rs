@@ -15,6 +15,7 @@ struct Summary {
     candidate_nodes: u64,
     baseline_depth: u64,
     candidate_depth: u64,
+    capped_games: u64,
 }
 
 fn main() {
@@ -23,28 +24,67 @@ fn main() {
     let candidate_name = std::env::args().nth(3).unwrap_or_else(|| "tt".to_owned());
     let max_turns = argument(4, 120_usize);
 
-    let baseline_policy = SearchPolicy {
-        node_limit: Some(node_limit),
-        ..SearchPolicy::default()
+    let macro_penalty = candidate_name
+        .strip_prefix("macro")
+        .and_then(|value| value.parse::<i32>().ok());
+    let baseline_policy = if candidate_name == "canonical" {
+        SearchPolicy {
+            canonical_repetition: false,
+            node_limit: Some(node_limit),
+            ..SearchPolicy::production()
+        }
+    } else if macro_penalty.is_some() {
+        SearchPolicy {
+            convergence_history_penalty: 0,
+            node_limit: Some(node_limit),
+            ..SearchPolicy::production()
+        }
+    } else {
+        SearchPolicy {
+            node_limit: Some(node_limit),
+            ..SearchPolicy::default()
+        }
     };
-    let candidate_policy = SearchPolicy {
-        protect_deep_tt_entries: matches!(candidate_name.as_str(), "tt" | "both"),
-        qsearch_direct_snipe_threats: matches!(
-            candidate_name.as_str(),
-            "threat" | "both" | "threat-defense"
-        ),
-        preserve_critical_snipe_defenses: matches!(
-            candidate_name.as_str(),
-            "defense" | "threat-defense"
-        ),
-        node_limit: Some(node_limit),
+    let candidate_policy = if candidate_name == "canonical" {
+        SearchPolicy {
+            node_limit: Some(node_limit),
+            ..SearchPolicy::production()
+        }
+    } else if let Some(convergence_history_penalty) = macro_penalty {
+        SearchPolicy {
+            convergence_history_penalty,
+            node_limit: Some(node_limit),
+            ..SearchPolicy::production()
+        }
+    } else {
+        SearchPolicy {
+            protect_deep_tt_entries: matches!(candidate_name.as_str(), "tt" | "both"),
+            qsearch_direct_snipe_threats: matches!(
+                candidate_name.as_str(),
+                "threat" | "both" | "threat-defense"
+            ),
+            preserve_critical_snipe_defenses: matches!(
+                candidate_name.as_str(),
+                "defense" | "threat-defense"
+            ),
+            canonical_repetition: false,
+            convergence_history_penalty: 0,
+            node_limit: Some(node_limit),
+        }
     };
     assert!(
         matches!(
             candidate_name.as_str(),
-            "tt" | "threat" | "both" | "defense" | "threat-defense"
+            "tt" | "threat"
+                | "both"
+                | "defense"
+                | "threat-defense"
+                | "canonical"
+                | "macro100"
+                | "macro300"
+                | "macro1000"
         ),
-        "candidate must be tt, threat, both, defense, or threat-defense"
+        "unsupported candidate"
     );
 
     let config = SearchConfig {
@@ -66,6 +106,7 @@ fn main() {
             play_one(
                 State::initial(seed),
                 mirror == 0,
+                candidate_name == "canonical",
                 &mut baseline,
                 &mut candidate,
                 max_turns,
@@ -82,6 +123,7 @@ fn main() {
     println!(
         "RESULT candidate={candidate_name} pairs={pairs} node_limit={node_limit} \
 baseline_wins={} candidate_wins={} draws={} avg_turns={:.1} \
+capped_games={} \
 baseline_nodes_per_turn={baseline_nodes_per_turn:.1} \
 candidate_nodes_per_turn={candidate_nodes_per_turn:.1} \
 baseline_depth={baseline_depth:.2} candidate_depth={candidate_depth:.2}",
@@ -89,24 +131,34 @@ baseline_depth={baseline_depth:.2} candidate_depth={candidate_depth:.2}",
         summary.candidate_wins,
         summary.draws,
         summary.turns as f64 / games as f64,
+        summary.capped_games,
     );
 }
 
 fn play_one(
     mut state: State,
     baseline_moves_first: bool,
+    baseline_uses_exact_history: bool,
     baseline: &mut SearchEngine<State>,
     candidate: &mut SearchEngine<State>,
     max_turns: usize,
     summary: &mut Summary,
 ) {
     let mut turns = 0;
+    let mut exact_history = Vec::new();
+    let mut repetition_history = Vec::new();
+    let mut convergence_history = Vec::new();
     while state.winner().is_none() && turns < max_turns {
         let use_baseline = (turns & 1 == 0) == baseline_moves_first;
         let result = if use_baseline {
-            baseline.search(&state)
+            let baseline_repetition_history = if baseline_uses_exact_history {
+                &exact_history
+            } else {
+                &repetition_history
+            };
+            baseline.search_with_context(&state, baseline_repetition_history, &convergence_history)
         } else {
-            candidate.search(&state)
+            candidate.search_with_context(&state, &repetition_history, &convergence_history)
         };
         let mv = result
             .best_move
@@ -121,11 +173,17 @@ fn play_one(
             summary.candidate_nodes += searched_nodes;
             summary.candidate_depth += u64::from(result.depth);
         }
+        exact_history.push(state.position_hash());
+        repetition_history.push(state.repetition_hash());
+        convergence_history.push(state.convergence_hash());
         state = state.apply_move(mv).expect("generated move must apply");
         turns += 1;
     }
     summary.turns += turns as u64;
 
+    if state.winner().is_none() {
+        summary.capped_games += 1;
+    }
     let winner = state.winner().or_else(|| {
         let score = state.evaluate();
         if score > 0 {

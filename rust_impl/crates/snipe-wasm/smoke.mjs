@@ -2,7 +2,9 @@ import { readFile } from "node:fs/promises";
 
 import init, {
   analyze,
+  apply_move,
   create_game,
+  legal_moves,
 } from "../../web/src/wasm/pkg/snipe_wasm.js";
 
 const packageDirectory = new URL("../../web/src/wasm/pkg/", import.meta.url);
@@ -41,3 +43,26 @@ for (const timeLimitMs of requestedBudgets) {
     }),
   );
 }
+
+// Exercise the browser's history-aware request shape separately so the timing
+// samples above remain directly comparable to pre-history baselines.
+const firstMove = JSON.parse(legal_moves(JSON.stringify(position)))[0];
+const nextPosition = JSON.parse(
+  apply_move(JSON.stringify(position), JSON.stringify(firstMove)),
+);
+const historyResult = JSON.parse(
+  analyze(
+    JSON.stringify({
+      position: nextPosition,
+      timeLimitMs: 1,
+      requestId: 0,
+      history: [position],
+    }),
+  ),
+);
+console.log(
+  JSON.stringify({
+    historyPositions: 1,
+    historyRequestAccepted: typeof historyResult.bestMove?.id === "string",
+  }),
+);

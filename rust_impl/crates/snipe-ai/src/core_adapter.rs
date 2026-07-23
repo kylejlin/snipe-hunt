@@ -21,6 +21,16 @@ impl GamePosition for State {
         State::position_hash(*self)
     }
 
+    #[inline]
+    fn repetition_hash(&self) -> u64 {
+        State::repetition_hash(*self)
+    }
+
+    #[inline]
+    fn convergence_hash(&self) -> u64 {
+        State::convergence_hash(*self)
+    }
+
     fn terminal_score(&self) -> Option<i32> {
         State::winner(*self).map(|winner| {
             if winner == self.side_to_move() {
@@ -67,23 +77,15 @@ impl GamePosition for State {
         let mut data = self.to_data();
         data.side_to_move = attacker as u8;
         data.pending_animal = u8::MAX;
+        data.pending_destination = 0;
         let attacker_to_move =
             State::from_data(data).expect("changing only side-to-move preserves state validity");
-        side_to_move_can_capture_snipe(attacker_to_move)
+        attacker_to_move.has_winning_snipe_capture()
     }
 
     fn side_to_move_has_snipe_capture(&self) -> bool {
-        side_to_move_can_capture_snipe(*self)
+        self.has_winning_snipe_capture()
     }
-}
-
-fn side_to_move_can_capture_snipe(state: State) -> bool {
-    let attacker = state.side_to_move();
-    state.legal_moves().into_iter().any(|mv| {
-        state
-            .apply_move(mv)
-            .is_ok_and(|child| child.captured_snipe_winner() == Some(attacker))
-    })
 }
 
 pub fn evaluate_state(state: State) -> i32 {

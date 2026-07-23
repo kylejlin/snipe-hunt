@@ -35,6 +35,8 @@ export interface TurnMove {
 
 export interface AnalysisRequest {
   position: Position;
+  /** Earlier positions on the active timeline, oldest first. */
+  history?: Position[];
   timeLimitMs: number;
   requestId: number;
 }

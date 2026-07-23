@@ -10,5 +10,10 @@ The JavaFX implementation contains a [user guide](./java_impl/Snipe%20Hunt%20Jav
 
 ## Roadmap
 
-In the future, the main goal is to improve the AI agent's strength.
-The TypeScript implementation contains a Monte-Carlo-Tree-Search-based approach, but it's slow and not very strong (I can easily beat it 9 times out of 10).
+Mission 7 is implemented in [`rust_impl`](./rust_impl): an authoritative Rust
+rules engine, a tuned alpha-beta computer player compiled to WebAssembly, and a
+modern browser interface. The original Java and TypeScript versions remain as
+historical references.
+
+See [`rust_impl/README.md`](./rust_impl/README.md) for development, testing, and
+strength-benchmark commands.

@@ -21,8 +21,8 @@ fn sample_timeline() -> Vec<State> {
     for line in &lines[2..] {
         let (_, body) = line.split_once(' ').expect("move line has a ply prefix");
         let notation = body
-            .strip_suffix(" +#0")
-            .or_else(|| body.strip_suffix(" -#0"))
+            .strip_suffix("+#0")
+            .or_else(|| body.strip_suffix("-#0"))
             .unwrap_or(body);
         let mv = position
             .legal_moves()
@@ -120,7 +120,7 @@ fn animal_name(animal: Animal) -> &'static str {
 
 fn step_notation(name: &str, source: Location, destination: Row, player: Player) -> String {
     if source == Location::reserve_of(player) {
-        return format!("{name} {}!", destination.number());
+        return format!("{name} &{}", destination.number());
     }
     let source_rank = source.row().expect("played card starts on a row").number();
     let destination_rank = destination.number();
@@ -129,7 +129,7 @@ fn step_notation(name: &str, source: Location, destination: Row, player: Player)
         Player::Beta => destination_rank < source_rank,
     };
     format!(
-        "{name} {destination_rank}{}",
+        "{name} {}{destination_rank}",
         if advances { "" } else { "*" }
     )
 }

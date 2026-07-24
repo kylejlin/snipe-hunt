@@ -94,7 +94,7 @@ const {
   const reply: TurnMove = {
     id: "beta-reply",
     player: "Beta",
-    label: "Ox 1, Rat 2*",
+    label: "Ox 1, Rat *2",
     steps: [
       { cardId: "animal-1", from: "row-2", to: "row-1" },
       { cardId: "animal-0", from: "row-1", to: "row-2" },
@@ -462,7 +462,7 @@ describe("subply history navigation", () => {
 
     render(<App />);
 
-    expect(screen.getByText("1α. Ox 3, Rat 2 +#0")).toBeInTheDocument();
+    expect(screen.getByText("1α. Ox 3, Rat 2+#0")).toBeInTheDocument();
   });
 
   it("shows an animal-capture suffix on the capturing subply", () => {
@@ -503,7 +503,7 @@ describe("subply history navigation", () => {
 
     render(<App />);
 
-    expect(screen.getByText("1α. Ox 3, Rat 2 &")).toBeInTheDocument();
+    expect(screen.getByText("1α. Ox 3, Rat 2x")).toBeInTheDocument();
   });
 
   it("starts a new line as soon as a different first subply is played", () => {
@@ -694,7 +694,7 @@ describe("game mode and live analysis", () => {
       ),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Game Log settings")).toBeInTheDocument();
-    expect(screen.getByText("Version 0.28.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.29.0")).toBeInTheDocument();
 
     const mode = screen.getByLabelText("Mode");
     expect(mode).toHaveValue("computer-beta");
@@ -731,11 +731,11 @@ describe("game mode and live analysis", () => {
     expect(suggestedLine).toHaveTextContent("1α.");
     expect(suggestedLine).toHaveTextContent("Rat 2, Ox 3");
     expect(suggestedLine).toHaveTextContent("2β.");
-    expect(suggestedLine).toHaveTextContent("Ox 1, Rat 2*");
+    expect(suggestedLine).toHaveTextContent("Ox 1, Rat *2");
     expect(screen.getByText("1α. Rat 2, Ox 3")).toHaveClass(
       "move-list__ply--alpha",
     );
-    expect(screen.getByText("2β. Ox 1, Rat 2*")).toHaveClass(
+    expect(screen.getByText("2β. Ox 1, Rat *2")).toHaveClass(
       "move-list__ply--beta",
     );
     expect(suggestedLine.querySelector(".move-number")).not.toBeInTheDocument();
@@ -770,7 +770,7 @@ describe("game mode and live analysis", () => {
 
     fireEvent.click(
       await screen.findByRole("button", {
-        name: "Play suggested line through 2β. Ox 1, Rat 2*",
+        name: "Play suggested line through 2β. Ox 1, Rat *2",
       }),
     );
 
@@ -778,7 +778,7 @@ describe("game mode and live analysis", () => {
       "1α. Rat 2, Ox 3",
     );
     expect(screen.getByLabelText("Alternative line")).toHaveTextContent(
-      "2β. Ox 1, Rat 2*",
+      "2β. Ox 1, Rat *2",
     );
     expect(
       screen.getByText("Exploring an alternative line. Actual history is unchanged."),
@@ -823,7 +823,7 @@ describe("game mode and live analysis", () => {
     view.unmount();
     render(<App />);
     expect(screen.getByLabelText("Alternative line")).toHaveTextContent(
-      "2β. Ox 1, Rat 2*",
+      "2β. Ox 1, Rat *2",
     );
     expect(screen.getByText("2 / 2")).toBeInTheDocument();
   });
@@ -884,7 +884,7 @@ describe("game mode and live analysis", () => {
     fireEvent.click(screen.getByRole("switch", { name: "Analysis" }));
     fireEvent.click(
       await screen.findByRole("button", {
-        name: "Play suggested line through 2β. Ox 1, Rat 2*",
+        name: "Play suggested line through 2β. Ox 1, Rat *2",
       }),
     );
     expect(screen.getByLabelText("Alternative line").children).toHaveLength(2);
@@ -904,7 +904,7 @@ describe("game mode and live analysis", () => {
       "1α. Rat 2, Ox 3",
     );
     expect(screen.getByLabelText("Alternative line")).not.toHaveTextContent(
-      "2β. Ox 1, Rat 2*",
+      "2β. Ox 1, Rat *2",
     );
   });
 

@@ -123,11 +123,11 @@ function moveFor(card: Card, from: Location, to: Location): TurnMove {
     sourceRank !== null &&
     destinationRank !== null &&
     (card.owner === "Alpha" ? destinationRank > sourceRank : destinationRank < sourceRank);
-  const suffix = isDrop ? "!" : isAdvance ? "" : "R";
+  const prefix = isDrop ? "&" : isAdvance ? "" : "*";
   return {
     id: `${card.id}:${from}:${to}`,
     player: card.owner,
-    label: `${card.isSnipe ? card.owner : card.animal} ${destinationRank}${suffix}`,
+    label: `${card.isSnipe ? card.owner : card.animal} ${prefix}${destinationRank}`,
     steps: [{ cardId: card.id, from, to }],
     captures: [],
   };

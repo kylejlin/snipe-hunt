@@ -59,8 +59,8 @@ describe("compact history notation", () => {
       "0a. =Fish; Rabbit Fish Alpha; Rat Snake Ram Monkey Rooster Dog Boar Tiger Ram Rooster Elephant Squid; Horse",
       "1b. Beta 5",
       "2a. Alpha 2",
-      "3b. Beta 6*",
-      "4a. Alpha 1*",
+      "3b. Beta *6",
+      "4a. Alpha *1",
       "",
     ].join("\n");
 
@@ -90,7 +90,7 @@ describe("compact history notation", () => {
         position,
         move("Beta", [{ cardId: betaRetreater!.id, from: "row-5", to: "row-6" }]),
       ),
-    ).toBe(`${betaRetreater!.animal} 6*`);
+    ).toBe(`${betaRetreater!.animal} *6`);
     expect(
       formatMove(
         position,
@@ -98,7 +98,7 @@ describe("compact history notation", () => {
           { cardId: betaReserve!.id, from: "beta-reserve", to: "row-4" },
         ]),
       ),
-    ).toBe(`${betaReserve!.animal} 4!`);
+    ).toBe(`${betaReserve!.animal} &4`);
     expect(
       formatMove(
         position,
@@ -113,7 +113,7 @@ describe("compact history notation", () => {
           { cardId: betaRetreater!.id, from: "row-5", to: "row-6" },
         ]),
       ),
-    ).toBe(`${betaOther!.animal} 4, ${betaRetreater!.animal} 6*`);
+    ).toBe(`${betaOther!.animal} 4, ${betaRetreater!.animal} *6`);
   });
 
   it("round-trips a complete active timeline", () => {
@@ -202,10 +202,10 @@ describe("compact history notation", () => {
     expect(snipeCaptureSuffix(before, alphaWin)).toBe("+#0");
     expect(snipeCaptureSuffix(before, betaWin)).toBe("-#0");
     expect(formatCompletedMove(before, betaMove, alphaWin)).toBe(
-      `${formatMove(before, betaMove)} +#0`,
+      `${formatMove(before, betaMove)}+#0`,
     );
     expect(formatCompletedMove(before, betaMove, betaWin)).toBe(
-      `${formatMove(before, betaMove)} -#0`,
+      `${formatMove(before, betaMove)}-#0`,
     );
     expect(
       formatCompletedMove(before, betaMove, { ...before, winner: "Beta" }),
@@ -240,7 +240,14 @@ describe("compact history notation", () => {
 
     expect(
       formatCompletedMove(before, twoStepMove, after, () => afterFirst),
-    ).toBe(`${movers[0].animal} 3 &, ${movers[1].animal} 3 &`);
+    ).toBe(`${movers[0].animal} 3x, ${movers[1].animal} 3x`);
+
+    const retreatCapture = move("Alpha", [
+      { cardId: movers[0].id, from: "row-4", to: "row-3" },
+    ]);
+    expect(formatCompletedMove(before, retreatCapture, afterFirst)).toBe(
+      `${movers[0].animal} *3x`,
+    );
 
     const betaSnipe = before.locations["row-6"].find(
       (card) => card.id === "beta-snipe",
@@ -266,36 +273,42 @@ describe("compact history notation", () => {
         winningAfter,
         () => afterFirst,
       ),
-    ).toBe(`${movers[0].animal} 3 &, ${movers[1].animal} 3 +#0`);
+    ).toBe(`${movers[0].animal} 3x, ${movers[1].animal} 3+#0`);
+    expect(formatCompletedMove(before, retreatCapture, winningAfter)).toBe(
+      `${movers[0].animal} *3+#0`,
+    );
   });
 
-  it("exports terminal captures and accepts legacy histories without the annotation", () => {
+  it("exports terminal captures and accepts histories with omitted annotations", () => {
     const timeline = betaCaptureTimeline();
     const annotated = serializeHistory(timeline);
-    expect(annotated.trimEnd()).toMatch(/ -#0$/);
+    expect(annotated.trimEnd()).toMatch(/-#0$/);
     expect(serializeHistory(parseHistory(annotated, fallbackEngine))).toBe(annotated);
 
-    const legacy = annotated.replace(" -#0", "");
-    expect(serializeHistory(parseHistory(legacy, fallbackEngine))).toBe(annotated);
+    const unannotated = annotated.replace("-#0", "");
+    expect(serializeHistory(parseHistory(unannotated, fallbackEngine))).toBe(annotated);
   });
 
   it("rejects lying terminal annotations", () => {
     const timeline = betaCaptureTimeline();
     const annotated = serializeHistory(timeline);
     expect(() =>
-      parseHistory(annotated.replace(" -#0", " +#0"), fallbackEngine),
+      parseHistory(annotated.replace("-#0", " -#0"), fallbackEngine),
+    ).toThrow(/not a legal move/);
+    expect(() =>
+      parseHistory(annotated.replace("-#0", "+#0"), fallbackEngine),
     ).toThrow(/asserted result.*does not match/);
 
     const nonWinning = serializeHistory(timeline.slice(0, 2));
     expect(() =>
-      parseHistory(nonWinning.replace(/\n$/, " -#0\n"), fallbackEngine),
+      parseHistory(nonWinning.replace(/\n$/, "-#0\n"), fallbackEngine),
     ).toThrow(/asserted result.*does not match/);
 
     expect(() =>
-      parseHistory(annotated.replace(" -#0", " & -#0"), fallbackEngine),
+      parseHistory(annotated.replace("-#0", "x-#0"), fallbackEngine),
     ).toThrow(/asserted capture on subply 1 does not match/);
     expect(() =>
-      parseHistory(annotated.replace(" -#0", " &"), fallbackEngine),
+      parseHistory(annotated.replace("-#0", "x"), fallbackEngine),
     ).toThrow(/asserted capture on subply 1 does not match/);
   });
 
@@ -303,7 +316,7 @@ describe("compact history notation", () => {
     const sample = [
       "0b. =Monkey; Squid Frog Beta; Ox Tiger Rabbit Dragon Horse Elephant Rat Ox Snake Dog Boar Frog; Dragon",
       "0a. =Fish; Rabbit Fish Alpha; Rat Snake Ram Monkey Rooster Dog Boar Tiger Ram Rooster Elephant Squid; Horse",
-      "1b. Beta 5 &",
+      "1b. Beta 5x",
       "",
     ].join("\n");
 
@@ -361,7 +374,7 @@ describe("compact history notation", () => {
       },
     };
     const unannotated = [...layout, "1b. Ox 4", ""].join("\n");
-    const annotated = [...layout, "1b. Ox 4 &", ""].join("\n");
+    const annotated = [...layout, "1b. Ox 4x", ""].join("\n");
 
     expect(
       serializeHistory(parseHistory(unannotated, captureEngine)),
@@ -369,12 +382,33 @@ describe("compact history notation", () => {
     expect(
       serializeHistory(parseHistory(annotated, captureEngine)),
     ).toBe(annotated);
+    expect(() =>
+      parseHistory(annotated.replace("4x", "4 &"), captureEngine),
+    ).toThrow(/not a legal move/);
+  });
+
+  it("rejects the superseded postfix drop marker", () => {
+    let position = createFallbackGame(7_071);
+    const drop = fallbackLegalMoves(position).find((candidate) =>
+      candidate.steps[0].from.includes("reserve"),
+    );
+    expect(drop).toBeTruthy();
+    position = applyFallbackMove(position, drop!);
+    const history = serializeHistory([
+      { position: createFallbackGame(7_071), move: null },
+      { position, move: drop! },
+    ]);
+
+    expect(() =>
+      parseHistory(history.replace(/&(\d)/, "$1!"), fallbackEngine),
+    ).toThrow(/not a legal move/);
   });
 
   it.each([
     ["uppercase player prefix", (history: string) => history.replace("1b.", "1B.")],
     ["Greek player prefix", (history: string) => history.replace("1b.", "1β.")],
-    ["legacy retreat suffix", (history: string) => history.replace(/(\d)\*/, "$1R")],
+    ["legacy retreat suffix", (history: string) => history.replace(/\*(\d)/, "$1*")],
+    ["legacy retreat letter", (history: string) => history.replace(/\*(\d)/, "$1R")],
   ])("rejects %s", (_name, mutate) => {
     let position = createFallbackGame(7_071);
     const first = fallbackLegalMoves(position).find(

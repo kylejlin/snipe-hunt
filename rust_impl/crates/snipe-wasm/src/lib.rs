@@ -679,8 +679,8 @@ fn card_label(id: &str) -> String {
 
 fn compact_step_label(step: &MoveStepDto, player: Player, is_drop: bool) -> String {
     let destination = step.to.trim_start_matches("row-");
-    let suffix = if is_drop {
-        "!"
+    let prefix = if is_drop {
+        "&"
     } else {
         let source = step
             .from
@@ -697,10 +697,10 @@ fn compact_step_label(step: &MoveStepDto, player: Player, is_drop: bool) -> Stri
         if advances {
             ""
         } else {
-            "R"
+            "*"
         }
     };
-    format!("{} {destination}{suffix}", card_label(&step.card_id))
+    format!("{} {prefix}{destination}", card_label(&step.card_id))
 }
 
 fn player_slug(player: Player) -> &'static str {
@@ -780,11 +780,11 @@ mod tests {
         );
         assert_eq!(
             compact_step_label(&beta_retreat, Player::Beta, false),
-            "Rabbit 6R"
+            "Rabbit *6"
         );
         assert_eq!(
             compact_step_label(&beta_retreat, Player::Beta, true),
-            "Rabbit 6!"
+            "Rabbit &6"
         );
         assert_eq!(
             compact_step_label(&beta_snipe, Player::Beta, false),

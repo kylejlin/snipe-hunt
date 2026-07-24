@@ -71,7 +71,7 @@ function stepNotation(position: Position, move: TurnMove, stepIndex: number): st
   if (destinationRank === null) throw new Error("Moves into a reserve cannot be serialized.");
 
   if (step.from.includes("reserve")) {
-    return `${cardNotation(card)} ${destinationRank}!`;
+    return `${cardNotation(card)} &${destinationRank}`;
   }
 
   const sourceRank = rankOf(step.from);
@@ -80,7 +80,7 @@ function stepNotation(position: Position, move: TurnMove, stepIndex: number): st
     move.player === "Alpha"
       ? destinationRank > sourceRank
       : destinationRank < sourceRank;
-  return `${cardNotation(card)} ${destinationRank}${isAdvance ? "" : "*"}`;
+  return `${cardNotation(card)} ${isAdvance ? "" : "*"}${destinationRank}`;
 }
 
 export function formatMove(position: Position, move: TurnMove): string {
@@ -110,14 +110,14 @@ function captureAnnotation(
   before: Position,
   after: Position,
   player: Player,
-): "" | " &" {
+): "" | "x" {
   const reserve = player === "Alpha" ? "alpha-reserve" : "beta-reserve";
   const beforeIds = new Set(before.locations[reserve].map((card) => card.id));
   const captured = after.locations[reserve].filter(
     (card) => !beforeIds.has(card.id),
   );
   return captured.length > 0 && !captured.some((card) => card.isSnipe)
-    ? " &"
+    ? "x"
     : "";
 }
 
@@ -152,7 +152,7 @@ export function formatCompletedMove(
     )
     .join(", ");
   const suffix = snipeCaptureSuffix(before, after);
-  return suffix ? `${notation} ${suffix}` : notation;
+  return suffix ? `${notation}${suffix}` : notation;
 }
 
 export function formatPlyPrefix(timelineIndex: number, player: Player): string {
@@ -377,16 +377,16 @@ export function parseHistory(
       throw new Error(`Line ${lineNumber}: expected prefix "${expectedPrefix}".`);
     }
     const body = text.slice(expectedPrefix.length + 1);
-    const suffixMatch = body.match(/ ([+-]#0)$/);
+    const suffixMatch = body.match(/([+-]#0)$/);
     const assertedSuffix = suffixMatch?.[1] ?? "";
     const annotatedMoveBody = suffixMatch
       ? body.slice(0, -suffixMatch[0].length)
       : body;
     const annotatedSteps = annotatedMoveBody.split(", ");
-    const assertedCaptures = annotatedSteps.map((step) => step.endsWith(" &"));
+    const assertedCaptures = annotatedSteps.map((step) => step.endsWith("x"));
     const moveBody = annotatedSteps
       .map((step, index) =>
-        assertedCaptures[index] ? step.slice(0, -" &".length) : step,
+        assertedCaptures[index] ? step.slice(0, -"x".length) : step,
       )
       .join(", ");
     const legalMoves = engine
@@ -419,7 +419,7 @@ export function parseHistory(
           positions[stepIndex],
           positions[stepIndex + 1],
           move.player,
-        ) !== " &"
+        ) !== "x"
       ) {
         throw new Error(
           `Line ${lineNumber}: asserted capture on subply ${stepIndex + 1} does not match the actual result.`,

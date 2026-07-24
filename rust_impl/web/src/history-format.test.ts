@@ -138,10 +138,33 @@ describe("compact history notation", () => {
     );
   });
 
-  it("rejects embedded blank lines without changing parser state", () => {
+  it("ignores blank lines and single-line comments without changing parser state", () => {
+    let position = createFallbackGame(7_071);
+    const first = fallbackLegalMoves(position)[0];
+    position = applyFallbackMove(position, first);
+    const history = serializeHistory([
+      { position: createFallbackGame(7_071), move: null },
+      { position, move: first },
+    ]);
+    const annotated = `// Game notes
+
+${history
+  .replace("\n0a.", "\n\n// Alpha layout follows\n0a.")
+  .replace("\n1b.", "\n\n// First move\n1b.")}
+
+// End of game
+`;
+
+    expect(serializeHistory(parseHistory(annotated, fallbackEngine))).toBe(history);
+  });
+
+  it("reports physical line numbers after ignored lines", () => {
     const history = serializeHistory([{ position: createFallbackGame(7_071), move: null }]);
-    expect(() => parseHistory(history.replace("\n0a.", "\n\n0a."), fallbackEngine)).toThrow(
-      "blank lines",
-    );
+    const invalid = `// Header
+
+${history}1b. Not a move
+`;
+
+    expect(() => parseHistory(invalid, fallbackEngine)).toThrow("Line 5:");
   });
 });

@@ -198,9 +198,14 @@ function cardFromName(
   };
 }
 
-function parseInitialPosition(betaLine: string, alphaLine: string): Position {
-  const beta = parseLayoutLine(betaLine, 1, "Beta", "0b.");
-  const alpha = parseLayoutLine(alphaLine, 2, "Alpha", "0a.");
+function parseInitialPosition(
+  betaLine: string,
+  betaLineNumber: number,
+  alphaLine: string,
+  alphaLineNumber: number,
+): Position {
+  const beta = parseLayoutLine(betaLine, betaLineNumber, "Beta", "0b.");
+  const alpha = parseLayoutLine(alphaLine, alphaLineNumber, "Alpha", "0a.");
   const occurrences = new Map<string, number>();
   const cards = (names: string[], owner: Player) =>
     names.map((name) => cardFromName(name, owner, occurrences));
@@ -234,18 +239,24 @@ export function parseHistory(
   source: string,
   engine: Pick<EngineAdapter, "legalMoves" | "applyMove">,
 ): TimelineEntry[] {
-  const lines = source.replace(/\r\n?/g, "\n").split("\n");
-  while (lines.length > 0 && lines.at(-1)?.trim() === "") lines.pop();
+  const lines = source
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((text, index) => ({ text, lineNumber: index + 1 }))
+    .filter(({ text }) => text.trim().length > 0 && !text.startsWith("//"));
   if (lines.length < 2) throw new Error("History must begin with 0b. and 0a. layout lines.");
-  const blankLine = lines.findIndex((line) => line.trim().length === 0);
-  if (blankLine >= 0) throw new Error(`Line ${blankLine + 1}: blank lines are not allowed.`);
 
-  let position = parseInitialPosition(lines[0], lines[1]);
+  let position = parseInitialPosition(
+    lines[0].text,
+    lines[0].lineNumber,
+    lines[1].text,
+    lines[1].lineNumber,
+  );
   try {
     engine.legalMoves(position);
   } catch (reason) {
     throw new Error(
-      `Line 1: invalid initial position${reason instanceof Error ? ` (${reason.message})` : ""}.`,
+      `Line ${lines[0].lineNumber}: invalid initial position${reason instanceof Error ? ` (${reason.message})` : ""}.`,
     );
   }
   const timeline: TimelineEntry[] = [{ position, move: null }];
@@ -253,23 +264,24 @@ export function parseHistory(
   for (let lineIndex = 2; lineIndex < lines.length; lineIndex += 1) {
     const timelineIndex = lineIndex - 1;
     const expectedPrefix = formatPlyPrefix(timelineIndex, position.turn);
-    if (!lines[lineIndex].startsWith(`${expectedPrefix} `)) {
-      throw new Error(`Line ${lineIndex + 1}: expected prefix "${expectedPrefix}".`);
+    const { text, lineNumber } = lines[lineIndex];
+    if (!text.startsWith(`${expectedPrefix} `)) {
+      throw new Error(`Line ${lineNumber}: expected prefix "${expectedPrefix}".`);
     }
-    const body = lines[lineIndex].slice(expectedPrefix.length + 1);
+    const body = text.slice(expectedPrefix.length + 1);
     const legalMoves = engine
       .legalMoves(position)
       .filter((move) => formatMove(position, move) === body)
       .sort((left, right) => left.id.localeCompare(right.id));
     const move = legalMoves[0];
     if (!move) {
-      throw new Error(`Line ${lineIndex + 1}: "${body}" is not a legal move.`);
+      throw new Error(`Line ${lineNumber}: "${body}" is not a legal move.`);
     }
     try {
       position = engine.applyMove(position, move);
     } catch (reason) {
       throw new Error(
-        `Line ${lineIndex + 1}: move could not be applied${reason instanceof Error ? ` (${reason.message})` : ""}.`,
+        `Line ${lineNumber}: move could not be applied${reason instanceof Error ? ` (${reason.message})` : ""}.`,
       );
     }
     timeline.push({ position, move });

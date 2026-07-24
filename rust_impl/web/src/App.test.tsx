@@ -312,7 +312,7 @@ describe("game mode and live analysis", () => {
       ),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Game Log settings")).toBeInTheDocument();
-    expect(screen.getByText("Version 0.14.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.15.0")).toBeInTheDocument();
 
     const mode = screen.getByLabelText("Mode");
     expect(mode).toHaveValue("computer-beta");
@@ -350,9 +350,13 @@ describe("game mode and live analysis", () => {
     expect(suggestedLine).toHaveTextContent("Rat 2, Ox 3");
     expect(suggestedLine).toHaveTextContent("1β.");
     expect(suggestedLine).toHaveTextContent("Ox 1, Rat 2*");
-    expect(screen.getByText("1α.")).toHaveClass("move-number");
-    expect(screen.getByText("1α.").parentElement).toHaveClass("move-list__ply--alpha");
-    expect(screen.getByText("1β.").parentElement).toHaveClass("move-list__ply--beta");
+    expect(screen.getByText("1α. Rat 2, Ox 3")).toHaveClass(
+      "move-list__ply--alpha",
+    );
+    expect(screen.getByText("1β. Ox 1, Rat 2*")).toHaveClass(
+      "move-list__ply--beta",
+    );
+    expect(suggestedLine.querySelector(".move-number")).not.toBeInTheDocument();
     expect(screen.queryByText("Analyzing")).not.toBeInTheDocument();
     expect(screen.queryByText("Complete")).not.toBeInTheDocument();
     expect(screen.getByText("Depth 3 / 5")).toBeInTheDocument();
@@ -373,7 +377,7 @@ describe("game mode and live analysis", () => {
         to: "row-2",
       });
     });
-    expect(await screen.findByText("Rat 2, Ox 3")).toBeInTheDocument();
+    expect(await screen.findByText("1α. Rat 2, Ox 3")).toBeInTheDocument();
     expect(screen.getByLabelText("Suggested line")).toHaveTextContent("1α.");
     expect(screen.getByLabelText("Suggested line")).toHaveTextContent("1β.");
   });

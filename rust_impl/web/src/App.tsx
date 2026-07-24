@@ -884,8 +884,7 @@ export default function App() {
                             key={ply.key}
                             className={`suggested-line__ply move-list__ply--${ply.player.toLowerCase()}`}
                           >
-                            <span className="move-number">{ply.prefix}</span>
-                            <span className="suggested-line__move">{ply.notation}</span>
+                            {`${ply.prefix} ${ply.notation}`}
                           </li>
                         ))}
                       </ol>
@@ -910,21 +909,17 @@ export default function App() {
                       aria-label="Pending ply"
                     >
                       <div>
-                        <span className="move-number">
-                          {formatDisplayPlyPrefix(
+                        <small>
+                          {`${formatDisplayPlyPrefix(
                             Math.ceil(position.turnNumber / 2),
                             position.turn,
-                          )}
-                        </span>
-                        <small>
-                          {formatMove(position, {
+                          )} ${formatMove(position, {
                             id: "pending-subply",
                             player: position.turn,
                             label: "",
                             steps: movePrefix,
                             captures: [],
-                          })}
-                          , ...
+                          })}, ...`}
                         </small>
                       </div>
                     </li>
@@ -942,10 +937,9 @@ export default function App() {
                           className={game.cursor === 0 ? "move-list__active" : ""}
                           onClick={() => moveCursor(0)}
                         >
-                          <span className="move-number">
-                            {formatDisplayPlyPrefix(0, player)}
-                          </span>
-                          <small>{line.slice(4)}</small>
+                          <small>
+                            {`${formatDisplayPlyPrefix(0, player)} ${line.slice(4)}`}
+                          </small>
                         </button>
                       </li>
                     );
@@ -964,11 +958,14 @@ export default function App() {
                       className={game.cursor === timelineIndex ? "move-list__active" : ""}
                       onClick={() => moveCursor(timelineIndex)}
                     >
-                      <span className="move-number">
-                        {formatDisplayPlyPrefix(Math.ceil(timelineIndex / 2), move.player)}
-                      </span>
                       <small>
-                        {formatMove(game.timeline[timelineIndex - 1].position, move)}
+                        {`${formatDisplayPlyPrefix(
+                          Math.ceil(timelineIndex / 2),
+                          move.player,
+                        )} ${formatMove(
+                          game.timeline[timelineIndex - 1].position,
+                          move,
+                        )}`}
                       </small>
                     </button>
                   </li>

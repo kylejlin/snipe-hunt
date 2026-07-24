@@ -692,22 +692,7 @@ input[type="text"] {
 }
 
 .suggested-line__ply {
-  display: inline-flex;
   min-width: 0;
-  align-items: center;
-  gap: 6px;
-}
-
-.suggested-line .move-number {
-  flex: 0 0 auto;
-  width: auto;
-  min-width: 34px;
-  height: 22px;
-  padding: 0 5px;
-}
-
-.suggested-line__move {
-  color: #43546c;
   font-size: 0.76rem;
   line-height: 1.35;
   white-space: nowrap;
@@ -728,14 +713,11 @@ input[type="text"] {
 .move-list button,
 .move-list__pending > div {
   width: 100%;
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
-  gap: 8px;
-  align-items: start;
+  display: block;
   padding: 7px;
   border: 1px solid transparent;
   border-radius: 7px;
-  color: #3d4147;
+  color: inherit;
   background: transparent;
   text-align: left;
   cursor: pointer;
@@ -759,47 +741,30 @@ input[type="text"] {
   background: rgba(45, 49, 55, 0.05);
 }
 
-.move-number {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 24px;
-  border-radius: 5px;
-  color: var(--muted);
-  background: rgba(45, 49, 55, 0.06);
-  font: 500 0.66rem "DM Mono", monospace;
-}
-
 .move-list small {
+  display: block;
   min-width: 0;
   overflow: hidden;
-  color: var(--muted);
+  color: inherit;
   font-size: 0.76rem;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.move-list__pending small {
-  color: var(--ink);
-}
-
 .move-list__layout small {
-  display: block;
   overflow: visible;
   line-height: 1.4;
   text-overflow: clip;
   white-space: normal;
 }
 
-.move-list__ply--alpha .move-number {
+.move-list__ply--alpha {
   color: var(--alpha);
-  background: rgba(22, 118, 173, 0.1);
 }
 
-.move-list__ply--beta .move-number {
+.move-list__ply--beta {
   color: var(--beta);
-  background: rgba(200, 76, 59, 0.1);
 }
 
 .move-list__empty {

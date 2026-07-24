@@ -820,6 +820,16 @@ export default function App() {
               <div className="analysis-content">
                 {analysisError ? (
                   <p className="error-message">{analysisError}</p>
+                ) : position.winner ? (
+                  <div className="evaluation">
+                    <span className="meta-label">Alpha evaluation</span>
+                    <strong>
+                      {formatAlphaScore(
+                        position.winner === "Alpha" ? MATE_SCORE : -MATE_SCORE,
+                        "Alpha",
+                      )}
+                    </strong>
+                  </div>
                 ) : analysis ? (
                   <>
                     <div className="evaluation">

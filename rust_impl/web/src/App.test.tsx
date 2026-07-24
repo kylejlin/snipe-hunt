@@ -283,7 +283,7 @@ describe("game mode and live analysis", () => {
       ),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Game Log settings")).toBeInTheDocument();
-    expect(screen.getByText("Version 0.6.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.7.0")).toBeInTheDocument();
 
     const mode = screen.getByLabelText("Mode");
     expect(mode).toHaveValue("computer-beta");
@@ -356,6 +356,30 @@ describe("game mode and live analysis", () => {
     expect(screen.getByRole("switch", { name: "Analysis" })).not.toBeChecked();
     expect(analyzerAnalyze).not.toHaveBeenCalled();
     expect(agentChoose).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["Alpha", "+#0"],
+    ["Beta", "-#0"],
+  ] as const)("shows %s's terminal score without running analysis", (winner, score) => {
+    localStorage.setItem(
+      "snipe-hunt.mission-7.game",
+      JSON.stringify({
+        schemaVersion: 2,
+        timeline: [{ position: { ...current, winner }, move: null }],
+        cursor: 0,
+        gameMode: "pass-and-play",
+        thinkingTimeSeconds: 5,
+        analysisEnabled: true,
+        analysisDepth: 5,
+      }),
+    );
+
+    render(<App />);
+
+    expect(screen.getByText(score)).toBeInTheDocument();
+    expect(screen.queryByText("No legal analysis is available.")).not.toBeInTheDocument();
+    expect(analyzerAnalyze).not.toHaveBeenCalled();
   });
 
   it("runs the computer agent and analyzer independently on a computer turn", async () => {

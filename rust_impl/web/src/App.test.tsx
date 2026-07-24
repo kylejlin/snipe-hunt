@@ -7,7 +7,16 @@ import type {
   TurnMove,
 } from "./engine/types";
 
-const { engine, earlier, current, move, earlierMove, analyzerAnalyze, agentChoose } = vi.hoisted(() => {
+const {
+  engine,
+  earlier,
+  current,
+  move,
+  reply,
+  earlierMove,
+  analyzerAnalyze,
+  agentChoose,
+} = vi.hoisted(() => {
   const locations = (ratLocation: Location): Position["locations"] => ({
     "alpha-reserve": [],
     "beta-reserve": [],
@@ -81,6 +90,16 @@ const { engine, earlier, current, move, earlierMove, analyzerAnalyze, agentChoos
     ],
     captures: [],
   };
+  const reply: TurnMove = {
+    id: "beta-reply",
+    player: "Beta",
+    label: "Ox 1, Rat 2*",
+    steps: [
+      { cardId: "animal-1", from: "row-2", to: "row-1" },
+      { cardId: "animal-0", from: "row-1", to: "row-2" },
+    ],
+    captures: [],
+  };
   const applied: Position = {
     ...earlier,
     turn: "Beta",
@@ -96,6 +115,7 @@ const { engine, earlier, current, move, earlierMove, analyzerAnalyze, agentChoos
         bestMove: move,
         score: 125,
         depth: 3,
+        principalVariation: [move, reply],
       };
       onProgress(update);
       return Promise.resolve(update);
@@ -153,7 +173,16 @@ const { engine, earlier, current, move, earlierMove, analyzerAnalyze, agentChoos
       dispose: () => undefined,
     },
   } satisfies EngineServices;
-  return { engine: services, earlier, current, move, earlierMove, analyzerAnalyze, agentChoose };
+  return {
+    engine: services,
+    earlier,
+    current,
+    move,
+    reply,
+    earlierMove,
+    analyzerAnalyze,
+    agentChoose,
+  };
 });
 
 vi.mock("./engine/fallback-adapter", () => ({
@@ -283,7 +312,7 @@ describe("game mode and live analysis", () => {
       ),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Game Log settings")).toBeInTheDocument();
-    expect(screen.getByText("Version 0.12.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.13.0")).toBeInTheDocument();
 
     const mode = screen.getByLabelText("Mode");
     expect(mode).toHaveValue("computer-beta");
@@ -314,8 +343,16 @@ describe("game mode and live analysis", () => {
     const score = await screen.findByText("+1.3");
     expect(score).toHaveClass("history-analysis__score--positive");
     expect(score.parentElement).not.toHaveTextContent("Alpha");
-    expect(screen.getByText("Rat 2, Ox 3")).toBeInTheDocument();
-    expect(screen.getByText("Best next ply")).toBeInTheDocument();
+    expect(screen.getByText("Suggested line")).toBeInTheDocument();
+    const suggestedLine = screen.getByLabelText("Suggested line");
+    expect(suggestedLine).toHaveClass("suggested-line");
+    expect(suggestedLine).toHaveTextContent("1α.");
+    expect(suggestedLine).toHaveTextContent("Rat 2, Ox 3");
+    expect(suggestedLine).toHaveTextContent("1β.");
+    expect(suggestedLine).toHaveTextContent("Ox 1, Rat 2*");
+    expect(screen.getByText("1α.")).toHaveClass("move-number");
+    expect(screen.getByText("1α.").parentElement).toHaveClass("move-list__ply--alpha");
+    expect(screen.getByText("1β.").parentElement).toHaveClass("move-list__ply--beta");
     expect(screen.queryByText("Analyzing")).not.toBeInTheDocument();
     expect(screen.queryByText("Complete")).not.toBeInTheDocument();
     expect(screen.getByText("Depth 3 / 5")).toBeInTheDocument();
@@ -336,8 +373,31 @@ describe("game mode and live analysis", () => {
         to: "row-2",
       });
     });
-    expect(await screen.findByText("Ox to Rank 3")).toBeInTheDocument();
-    expect(screen.getByText("Best next subply")).toBeInTheDocument();
+    expect(await screen.findByText("Rat 2, Ox 3")).toBeInTheDocument();
+    expect(screen.getByLabelText("Suggested line")).toHaveTextContent("1α.");
+    expect(screen.getByLabelText("Suggested line")).toHaveTextContent("1β.");
+  });
+
+  it("falls back to the best move when the live variation is empty", async () => {
+    analyzerAnalyze.mockImplementationOnce((request, onProgress) => {
+      const update = {
+        requestId: request.requestId,
+        bestMove: move,
+        score: 125,
+        depth: 3,
+        principalVariation: [],
+      };
+      onProgress(update);
+      return Promise.resolve(update);
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("switch", { name: "Analysis" }));
+
+    const suggestedLine = await screen.findByLabelText("Suggested line");
+    expect(suggestedLine).toHaveTextContent("1α.");
+    expect(suggestedLine).toHaveTextContent("Rat 2, Ox 3");
+    expect(suggestedLine).not.toHaveTextContent(reply.label);
   });
 
   it("constrains the analysis depth from the Game Log settings", () => {

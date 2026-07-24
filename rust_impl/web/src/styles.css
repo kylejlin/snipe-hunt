@@ -682,12 +682,34 @@ input[type="number"] {
   border-top: 1px solid rgba(83, 101, 126, 0.15);
 }
 
-.history-analysis__advice strong {
+.suggested-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.suggested-line__ply {
+  display: inline-flex;
   min-width: 0;
-  overflow: hidden;
+  align-items: center;
+  gap: 6px;
+}
+
+.suggested-line .move-number {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 34px;
+  height: 22px;
+  padding: 0 5px;
+}
+
+.suggested-line__move {
   color: #43546c;
   font-size: 0.76rem;
-  text-overflow: ellipsis;
+  line-height: 1.35;
   white-space: nowrap;
 }
 

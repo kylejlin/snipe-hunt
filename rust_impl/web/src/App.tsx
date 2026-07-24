@@ -558,13 +558,27 @@ export default function App() {
       : computerTurn
         ? `${position.turn} computer turn`
         : `${position.turn} to move`;
-  const suggestedStep =
-    analysis && movePrefix.length > 0 ? analysis.bestMove.steps[1] : undefined;
-  const suggestion = analysis
-    ? suggestedStep
-      ? `${cardName(boardPosition, suggestedStep.cardId)} to ${locationLabel(suggestedStep.to)}`
-      : analysis.bestMove.label
-    : null;
+  const suggestedLine = useMemo(() => {
+    if (!analysis) return [];
+    const moves =
+      analysis.principalVariation.length > 0
+        ? analysis.principalVariation
+        : [analysis.bestMove];
+    let variationPosition = position;
+    return moves.map((move, index) => {
+      const item = {
+        key: `${index}-${move.id}`,
+        player: move.player,
+        prefix: formatDisplayPlyPrefix(
+          Math.ceil((game.cursor + index + 1) / 2),
+          move.player,
+        ),
+        notation: formatMove(variationPosition, move),
+      };
+      variationPosition = engine.applyMove(variationPosition, move);
+      return item;
+    });
+  }, [analysis, game.cursor, position]);
   const alphaEvaluation = position.winner
     ? position.winner === "Alpha"
       ? MATE_SCORE
@@ -805,10 +819,18 @@ export default function App() {
                     </>
                   ) : analysis ? (
                     <>
-                      <span className="meta-label">
-                        Best next {movePrefix.length > 0 ? "subply" : "ply"}
-                      </span>
-                      <strong>{suggestion}</strong>
+                      <span className="meta-label">Suggested line</span>
+                      <ol className="suggested-line" aria-label="Suggested line">
+                        {suggestedLine.map((ply) => (
+                          <li
+                            key={ply.key}
+                            className={`suggested-line__ply move-list__ply--${ply.player.toLowerCase()}`}
+                          >
+                            <span className="move-number">{ply.prefix}</span>
+                            <span className="suggested-line__move">{ply.notation}</span>
+                          </li>
+                        ))}
+                      </ol>
                     </>
                   ) : (
                     <p className="empty-copy">

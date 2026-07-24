@@ -284,10 +284,29 @@ export function analyzeFallbackAtDepth(
   firstStep?: MoveStep,
 ): LiveAnalysisUpdate {
   const result = analyzeFallback(position, requestId, depth * 65, firstStep);
+  const principalVariation: TurnMove[] = [];
+  let variationPosition = position;
+  for (let ply = 0; ply < depth && !variationPosition.winner; ply += 1) {
+    const candidates = fallbackLegalMoves(variationPosition)
+      .filter((move) =>
+        ply === 0 && firstStep
+          ? move.steps[0]?.cardId === firstStep.cardId &&
+            move.steps[0]?.from === firstStep.from &&
+            move.steps[0]?.to === firstStep.to
+          : true,
+      )
+      .map((move) => ({ move, score: scoreMove(variationPosition, move) }))
+      .sort((left, right) => right.score - left.score || left.move.id.localeCompare(right.move.id));
+    const best = candidates[0]?.move;
+    if (!best) break;
+    principalVariation.push(best);
+    variationPosition = applyFallbackMove(variationPosition, best);
+  }
   return {
     requestId,
     bestMove: result.bestMove,
     score: result.score,
     depth,
+    principalVariation,
   };
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   analyzeFallback,
+  analyzeFallbackAtDepth,
   applyFallbackMove,
   createFallbackGame,
   fallbackLegalMoves,
@@ -60,5 +61,24 @@ describe("engine adapter contract", () => {
     expect(result.bestMove.player).toBe(position.turn);
     expect(result.nodes).toBeGreaterThan(0);
     expect(result.principalVariation.length).toBeGreaterThan(0);
+  });
+
+  it("returns a legal sequential live variation and honors the first-step constraint", () => {
+    const position = createFallbackGame(31);
+    const selected = fallbackLegalMoves(position)[3]!;
+    const result = analyzeFallbackAtDepth(position, 82, 4, selected.steps[0]);
+
+    expect(result.principalVariation.length).toBeGreaterThan(1);
+    expect(result.principalVariation.length).toBeLessThanOrEqual(4);
+    expect(result.principalVariation[0]).toEqual(result.bestMove);
+    expect(result.principalVariation[0].steps[0]).toEqual(selected.steps[0]);
+
+    let variationPosition = position;
+    for (const move of result.principalVariation) {
+      expect(fallbackLegalMoves(variationPosition).map((candidate) => candidate.id)).toContain(
+        move.id,
+      );
+      variationPosition = applyFallbackMove(variationPosition, move);
+    }
   });
 });

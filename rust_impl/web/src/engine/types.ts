@@ -72,6 +72,7 @@ export interface LiveAnalysisUpdate {
   bestMove: TurnMove;
   score: number;
   depth: number;
+  principalVariation: TurnMove[];
 }
 
 export interface RulesEngine {

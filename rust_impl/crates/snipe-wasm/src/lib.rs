@@ -166,6 +166,7 @@ struct LiveAnalysisUpdateDto {
     best_move: TurnMoveDto,
     score: i32,
     depth: u8,
+    principal_variation: Vec<TurnMoveDto>,
 }
 
 #[wasm_bindgen]
@@ -320,11 +321,17 @@ pub fn analyze_live(request_json: &str, on_progress: &js_sys::Function) -> Resul
             let Ok(best_move) = move_to_dto(state, best) else {
                 return;
             };
+            let Ok(principal_variation) =
+                principal_variation_to_dtos(state, &progress.principal_variation)
+            else {
+                return;
+            };
             let update = LiveAnalysisUpdateDto {
                 request_id: request.request_id,
                 best_move,
                 score: progress.score,
                 depth: progress.depth,
+                principal_variation,
             };
             if let Ok(json) = serde_json::to_string(&update) {
                 let _ = on_progress.call1(&JsValue::NULL, &JsValue::from_str(&json));
@@ -334,12 +341,28 @@ pub fn analyze_live(request_json: &str, on_progress: &js_sys::Function) -> Resul
     let best = result
         .best_move
         .ok_or_else(|| js_error("no legal moves are available"))?;
+    let principal_variation = principal_variation_to_dtos(state, &result.principal_variation)?;
     encode(&LiveAnalysisUpdateDto {
         request_id: request.request_id,
         best_move: move_to_dto(state, best)?,
         score: result.score,
         depth: result.depth,
+        principal_variation,
     })
+}
+
+fn principal_variation_to_dtos(
+    mut state: State,
+    moves: &[Move],
+) -> Result<Vec<TurnMoveDto>, JsValue> {
+    let mut principal_variation = Vec::with_capacity(moves.len());
+    for &mv in moves {
+        principal_variation.push(move_to_dto(state, mv)?);
+        state = state
+            .apply_move(mv)
+            .map_err(|error| js_error(format!("invalid principal variation: {error}")))?;
+    }
+    Ok(principal_variation)
 }
 
 fn constrained_root_moves(state: State, requested: &MoveStepDto) -> Result<Vec<Move>, JsValue> {
@@ -815,6 +838,30 @@ mod tests {
         assert!(constrained
             .into_iter()
             .all(|mv| matches!(mv, Move::Animals { first, .. } if first == selected)));
+    }
+
+    #[test]
+    fn principal_variation_dtos_follow_each_resulting_position() {
+        let mut state = State::initial(7_071);
+        let mut moves = Vec::new();
+        let mut expected_ids = Vec::new();
+        for _ in 0..3 {
+            let mv = state.legal_moves()[0];
+            expected_ids.push(move_to_dto(state, mv).unwrap().id);
+            moves.push(mv);
+            state = state.apply_move(mv).unwrap();
+            if state.winner().is_some() {
+                break;
+            }
+        }
+
+        let dtos = principal_variation_to_dtos(State::initial(7_071), &moves).unwrap();
+
+        assert_eq!(dtos.len(), moves.len());
+        assert_eq!(
+            dtos.into_iter().map(|dto| dto.id).collect::<Vec<_>>(),
+            expected_ids
+        );
     }
 
     #[test]

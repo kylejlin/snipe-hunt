@@ -309,7 +309,9 @@ button {
   box-shadow: 0 5px 13px rgba(31, 34, 38, 0.18);
   cursor: pointer;
   transform-origin: bottom center;
-  transition: 150ms ease;
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .card:first-child {

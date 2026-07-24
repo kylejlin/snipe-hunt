@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { version } from "../package.json";
 import { createEngineServices } from "./engine/fallback-adapter";
 import {
@@ -47,6 +47,124 @@ const locations: Location[] = [
   "row-6",
   "beta-reserve",
 ];
+const CARD_MOVE_DURATION_MS = 200;
+
+interface MovingCard {
+  animation: Animation;
+  clone: HTMLButtonElement;
+  card: HTMLButtonElement;
+}
+
+function useCardMovementAnimation(boardPosition: Position) {
+  const boardRef = useRef<HTMLDivElement>(null);
+  const previousRects = useRef(new Map<string, DOMRect>());
+  const previousLocations = useRef(new Map<string, Location>());
+  const movingCards = useRef<MovingCard[]>([]);
+
+  useLayoutEffect(() => {
+    const board = boardRef.current;
+    if (!board) return;
+
+    const settleMovingCards = () => {
+      for (const movement of movingCards.current) {
+        movement.animation.finish();
+        movement.card.style.visibility = "";
+        movement.clone.remove();
+      }
+      movingCards.current = [];
+    };
+
+    // A newer board state wins immediately. Its animation starts from the
+    // settled destination of the previous ply/subply, never from mid-flight.
+    settleMovingCards();
+
+    const cards = Array.from(
+      board.querySelectorAll<HTMLButtonElement>("[data-card-id]"),
+    );
+    const nextRects = new Map<string, DOMRect>();
+    for (const card of cards) {
+      nextRects.set(card.dataset.cardId!, card.getBoundingClientRect());
+    }
+    const nextLocations = new Map<string, Location>();
+    for (const location of locations) {
+      for (const card of boardPosition.locations[location]) {
+        nextLocations.set(card.id, location);
+      }
+    }
+
+    const reduceMotion = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (
+      previousRects.current.size > 0 &&
+      !reduceMotion &&
+      typeof cards[0]?.animate === "function"
+    ) {
+      for (const card of cards) {
+        const cardId = card.dataset.cardId!;
+        const start = previousRects.current.get(cardId);
+        const end = nextRects.get(cardId)!;
+        if (
+          !start ||
+          previousLocations.current.get(cardId) === nextLocations.get(cardId)
+        ) {
+          continue;
+        }
+
+        // The real card is clipped by its new lane, so animate a fixed clone
+        // above the board and reveal the real card at the destination.
+        const clone = card.cloneNode(true) as HTMLButtonElement;
+        clone.setAttribute("aria-hidden", "true");
+        clone.tabIndex = -1;
+        Object.assign(clone.style, {
+          position: "fixed",
+          left: `${start.left}px`,
+          top: `${start.top}px`,
+          width: `${end.width}px`,
+          height: `${end.height}px`,
+          margin: "0",
+          pointerEvents: "none",
+          transform: "none",
+          transition: "none",
+          zIndex: "1000",
+        });
+        card.style.visibility = "hidden";
+        document.body.append(clone);
+
+        const animation = clone.animate(
+          [
+            { transform: "translate(0, 0)" },
+            {
+              transform: `translate(${end.left - start.left}px, ${end.top - start.top}px)`,
+            },
+          ],
+          {
+            duration: CARD_MOVE_DURATION_MS,
+            easing: "ease-out",
+            fill: "forwards",
+          },
+        );
+        const movement = { animation, clone, card };
+        movingCards.current.push(movement);
+        void animation.finished
+          .then(() => {
+            movement.card.style.visibility = "";
+            movement.clone.remove();
+            movingCards.current = movingCards.current.filter(
+              (candidate) => candidate !== movement,
+            );
+          })
+          .catch(() => undefined);
+      }
+    }
+
+    previousRects.current = nextRects;
+    previousLocations.current = nextLocations;
+    return settleMovingCards;
+  }, [boardPosition]);
+
+  return boardRef;
+}
 
 function initialState(): StoredGame {
   try {
@@ -73,7 +191,7 @@ function initialState(): StoredGame {
             gameMode === "pass-and-play"
           ) {
             const draftStep =
-              parsed.draftStep == null ? null : parsed.draftStep as MoveStep;
+              parsed.draftStep == null ? null : (parsed.draftStep as MoveStep);
             if (draftStep) {
               engine.previewFirstStep(timeline.at(-1)!.position, draftStep);
             }
@@ -81,9 +199,10 @@ function initialState(): StoredGame {
             const nextMove = timeline[cursor + 1]?.move;
             const validSubply =
               !subply ||
-              (nextMove?.steps.length === 2) ||
+              nextMove?.steps.length === 2 ||
               (cursor === timeline.length - 1 && Boolean(draftStep));
-            if (!validSubply) throw new Error("Stored subply cursor is invalid.");
+            if (!validSubply)
+              throw new Error("Stored subply cursor is invalid.");
             return {
               schemaVersion: 3,
               timeline,
@@ -91,7 +210,12 @@ function initialState(): StoredGame {
               subply,
               draftStep,
               gameMode,
-              thinkingTimeSeconds: clampNumber(parsed.thinkingTimeSeconds, 0.25, 120, 5),
+              thinkingTimeSeconds: clampNumber(
+                parsed.thinkingTimeSeconds,
+                0.25,
+                120,
+                5,
+              ),
               analysisEnabled: parsed.analysisEnabled === true,
               analysisDepth: clampNumber(parsed.analysisDepth, 1, 10, 5),
             };
@@ -111,7 +235,12 @@ function initialState(): StoredGame {
                 : oldMode === "beta"
                   ? "computer-beta"
                   : "pass-and-play",
-            thinkingTimeSeconds: clampNumber(parsed.timeLimitSeconds, 0.25, 120, 5),
+            thinkingTimeSeconds: clampNumber(
+              parsed.timeLimitSeconds,
+              0.25,
+              120,
+              5,
+            ),
             analysisEnabled: false,
             analysisDepth: 5,
           };
@@ -130,7 +259,12 @@ function initialState(): StoredGame {
               subply: false,
               draftStep: null,
               gameMode,
-              thinkingTimeSeconds: clampNumber(parsed.thinkingTimeSeconds, 0.25, 120, 5),
+              thinkingTimeSeconds: clampNumber(
+                parsed.thinkingTimeSeconds,
+                0.25,
+                120,
+                5,
+              ),
               analysisEnabled: parsed.analysisEnabled === true,
               analysisDepth: clampNumber(parsed.analysisDepth, 1, 10, 5),
             };
@@ -173,9 +307,13 @@ function normalizeNumber(
   maximum: number,
   increment: number,
 ): number {
-  const rounded = minimum + Math.round((value - minimum) / increment) * increment;
+  const rounded =
+    minimum + Math.round((value - minimum) / increment) * increment;
   const precision = Math.max(0, (String(increment).split(".")[1] ?? "").length);
-  return Math.max(minimum, Math.min(maximum, Number(rounded.toFixed(precision))));
+  return Math.max(
+    minimum,
+    Math.min(maximum, Number(rounded.toFixed(precision))),
+  );
 }
 
 function NumericTextInput({
@@ -221,7 +359,12 @@ function NumericTextInput({
           return;
         }
 
-        const normalized = normalizeNumber(numeric, minimum, maximum, increment);
+        const normalized = normalizeNumber(
+          numeric,
+          minimum,
+          maximum,
+          increment,
+        );
         setDraft(String(normalized));
         onCommit(normalized);
       }}
@@ -266,14 +409,25 @@ function CardTile({
   return (
     <button
       className={`card ${selected ? "card--selected" : ""}`}
+      data-card-id={card.id}
       type="button"
       aria-pressed={selected}
       aria-label={`${card.owner} ${card.animal}${card.canRetreat && !card.isSnipe ? ", retreater" : ""}`}
       onClick={onSelect}
       disabled={disabled}
     >
-      <img aria-hidden="true" className="card__layer" src={cardBackground(card)} alt="" />
-      <img aria-hidden="true" className="card__layer" src={cardImage(card)} alt="" />
+      <img
+        aria-hidden="true"
+        className="card__layer"
+        src={cardBackground(card)}
+        alt=""
+      />
+      <img
+        aria-hidden="true"
+        className="card__layer"
+        src={cardImage(card)}
+        alt=""
+      />
     </button>
   );
 }
@@ -309,9 +463,15 @@ function BoardLane({
         type="button"
         onClick={() => onDestination(location)}
         disabled={!legalDestination}
-        aria-label={legalDestination ? `Move selected card to ${locationLabel(location)}` : locationLabel(location)}
+        aria-label={
+          legalDestination
+            ? `Move selected card to ${locationLabel(location)}`
+            : locationLabel(location)
+        }
       >
-        <span className="lane__rank">{rank ?? (location === "alpha-reserve" ? "α" : "β")}</span>
+        <span className="lane__rank">
+          {rank ?? (location === "alpha-reserve" ? "α" : "β")}
+        </span>
         <span>{isReserve ? "Reserve" : `Rank ${rank}`}</span>
         {legalDestination && <span className="lane__move-hint">Move here</span>}
       </button>
@@ -363,24 +523,21 @@ export default function App() {
   const entry = game.timeline[game.cursor];
   const position = entry.position;
   const midpointStep = game.subply
-    ? game.timeline[game.cursor + 1]?.move?.steps[0] ?? game.draftStep
+    ? (game.timeline[game.cursor + 1]?.move?.steps[0] ?? game.draftStep)
     : null;
   const movePrefix = midpointStep ? [midpointStep] : [];
   const boardPosition = useMemo(
     () =>
-      midpointStep
-        ? engine.previewFirstStep(position, midpointStep)
-        : position,
+      midpointStep ? engine.previewFirstStep(position, midpointStep) : position,
     [midpointStep, position],
   );
-  const totalPlyCount =
-    game.timeline.length - 1 + (game.draftStep ? 0.5 : 0);
+  const boardRef = useCardMovementAnimation(boardPosition);
+  const totalPlyCount = game.timeline.length - 1 + (game.draftStep ? 0.5 : 0);
   const currentPlyCount = game.cursor + (game.subply ? 0.5 : 0);
   const atPresent = currentPlyCount === totalPlyCount;
-  const canMoveForward =
-    game.subply
-      ? game.cursor < game.timeline.length - 1
-      : game.cursor < game.timeline.length - 1 || Boolean(game.draftStep);
+  const canMoveForward = game.subply
+    ? game.cursor < game.timeline.length - 1
+    : game.cursor < game.timeline.length - 1 || Boolean(game.draftStep);
   const computerTurn = computerControls(game.gameMode, position.turn);
   const legalMoves = useMemo(() => engine.legalMoves(position), [position]);
   const prefixCandidates = legalMoves.filter((move) =>
@@ -493,7 +650,11 @@ export default function App() {
         controller.signal,
       )
       .then((result) => {
-        if (requestId !== agentRequestSequence.current || controller.signal.aborted) return;
+        if (
+          requestId !== agentRequestSequence.current ||
+          controller.signal.aborted
+        )
+          return;
         // Keep rule execution out of React's updater for the same reason as
         // human moves: an updater may be replayed after the position changes.
         const nextPosition = engine.applyMove(position, result.bestMove);
@@ -520,7 +681,8 @@ export default function App() {
         });
       })
       .catch((reason: unknown) => {
-        if (reason instanceof DOMException && reason.name === "AbortError") return;
+        if (reason instanceof DOMException && reason.name === "AbortError")
+          return;
         if (requestId === agentRequestSequence.current) {
           setAgentThinking(false);
           setAgentError(
@@ -581,15 +743,22 @@ export default function App() {
         controller.signal,
       )
       .then((result) => {
-        if (requestId !== analysisRequestSequence.current || controller.signal.aborted) return;
+        if (
+          requestId !== analysisRequestSequence.current ||
+          controller.signal.aborted
+        )
+          return;
         setAnalysis(result);
         setAnalysisRunning(false);
       })
       .catch((reason: unknown) => {
-        if (reason instanceof DOMException && reason.name === "AbortError") return;
+        if (reason instanceof DOMException && reason.name === "AbortError")
+          return;
         if (requestId === analysisRequestSequence.current) {
           setAnalysisRunning(false);
-          setAnalysisError(reason instanceof Error ? reason.message : "Analysis failed.");
+          setAnalysisError(
+            reason instanceof Error ? reason.message : "Analysis failed.",
+          );
         }
       });
 
@@ -685,7 +854,12 @@ export default function App() {
   };
 
   const resetGame = () => {
-    if (!window.confirm("Start a fresh game? The current history will be replaced.")) return;
+    if (
+      !window.confirm(
+        "Start a fresh game? The current history will be replaced.",
+      )
+    )
+      return;
     agentRequestSequence.current += 1;
     analysisRequestSequence.current += 1;
     const next = engine.createGame(Date.now() & 0x7fffffff);
@@ -711,7 +885,10 @@ export default function App() {
       const blob = new Blob([contents], { type: "text/plain;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      const timestamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
+      const timestamp = new Date()
+        .toISOString()
+        .slice(0, 16)
+        .replace(/[:T]/g, "-");
       link.href = url;
       link.download = `snipe-hunt-${timestamp}.shgh`;
       document.body.append(link);
@@ -719,7 +896,11 @@ export default function App() {
       link.remove();
       URL.revokeObjectURL(url);
     } catch (reason) {
-      setHistoryError(reason instanceof Error ? reason.message : "History could not be exported.");
+      setHistoryError(
+        reason instanceof Error
+          ? reason.message
+          : "History could not be exported.",
+      );
     }
   };
 
@@ -733,7 +914,9 @@ export default function App() {
       const timeline = parseHistory(await file.text(), engine);
       if (
         game.timeline.length > 1 &&
-        !window.confirm("Import this history? The current game will be replaced.")
+        !window.confirm(
+          "Import this history? The current game will be replaced.",
+        )
       ) {
         return;
       }
@@ -752,7 +935,11 @@ export default function App() {
         gameMode: "pass-and-play",
       }));
     } catch (reason) {
-      setHistoryError(reason instanceof Error ? reason.message : "History could not be imported.");
+      setHistoryError(
+        reason instanceof Error
+          ? reason.message
+          : "History could not be imported.",
+      );
     }
   };
 
@@ -806,7 +993,10 @@ export default function App() {
         <div>
           <h1>Snipe Hunt</h1>
         </div>
-        <div className={`turn-chip turn-chip--${position.turn.toLowerCase()}`} aria-live="polite">
+        <div
+          className={`turn-chip turn-chip--${position.turn.toLowerCase()}`}
+          aria-live="polite"
+        >
           <span className="turn-chip__dot" />
           {status}
         </div>
@@ -854,7 +1044,7 @@ export default function App() {
             </div>
           )}
 
-          <div className="board">
+          <div className="board" ref={boardRef}>
             {locations.map((location) => (
               <BoardLane
                 key={location}
@@ -875,11 +1065,14 @@ export default function App() {
               <div>
                 <strong>First animal step chosen</strong>
                 <span>
-                  {locationLabel(movePrefix[0].from)} → {locationLabel(movePrefix[0].to)}.
-                  Choose the second animal.
+                  {locationLabel(movePrefix[0].from)} →{" "}
+                  {locationLabel(movePrefix[0].to)}. Choose the second animal.
                 </span>
               </div>
-              <div className="turn-builder__choices" aria-label="Legal second animals">
+              <div
+                className="turn-builder__choices"
+                aria-label="Legal second animals"
+              >
                 {nextStepChoices.map((step) => (
                   <button
                     className="button button--quiet"
@@ -887,7 +1080,8 @@ export default function App() {
                     key={`${step.cardId}:${step.from}`}
                     onClick={() => setSelectedCardId(step.cardId)}
                   >
-                    {cardName(boardPosition, step.cardId)} from {locationLabel(step.from)}
+                    {cardName(boardPosition, step.cardId)} from{" "}
+                    {locationLabel(step.from)}
                   </button>
                 ))}
                 <button
@@ -923,7 +1117,10 @@ export default function App() {
                   {totalPlyCount} {totalPlyCount === 1 ? "ply" : "plies"}
                 </span>
                 <details className="history-menu">
-                  <summary aria-label="Game Log settings" title="Game Log settings">
+                  <summary
+                    aria-label="Game Log settings"
+                    title="Game Log settings"
+                  >
                     <span aria-hidden="true">⚙</span>
                   </summary>
                   <div className="history-menu__items">
@@ -947,7 +1144,10 @@ export default function App() {
                     <button type="button" onClick={exportHistory}>
                       Export
                     </button>
-                    <button type="button" onClick={() => importInput.current?.click()}>
+                    <button
+                      type="button"
+                      onClick={() => importInput.current?.click()}
+                    >
                       Import
                     </button>
                   </div>
@@ -998,11 +1198,13 @@ export default function App() {
                           ? "—"
                           : alphaEvaluation !== null
                             ? formatAlphaScore(alphaEvaluation, "Alpha")
-                              : "—"}
+                            : "—"}
                       </strong>
                     </div>
                   ) : (
-                    <span className="history-analysis__disabled">Analysis disabled</span>
+                    <span className="history-analysis__disabled">
+                      Analysis disabled
+                    </span>
                   )}
                 </div>
                 {game.analysisEnabled && (
@@ -1023,7 +1225,10 @@ export default function App() {
                   ) : analysis ? (
                     <>
                       <span className="meta-label">Suggested line</span>
-                      <ol className="suggested-line" aria-label="Suggested line">
+                      <ol
+                        className="suggested-line"
+                        aria-label="Suggested line"
+                      >
                         {suggestedLine.map((ply) => (
                           <li
                             key={ply.key}
@@ -1047,7 +1252,9 @@ export default function App() {
             <ol className="move-list">
               {game.timeline.flatMap((timelineEntry, timelineIndex) => {
                 const pendingSubply =
-                  timelineIndex === game.cursor && game.subply && midpointStep ? (
+                  timelineIndex === game.cursor &&
+                  game.subply &&
+                  midpointStep ? (
                     <li
                       key="pending-subply"
                       className={`move-list__pending move-list__ply--${position.turn.toLowerCase()}`}
@@ -1071,7 +1278,9 @@ export default function App() {
                     </li>
                   ) : null;
                 if (timelineIndex === 0) {
-                  const initialLines = formatInitialLines(timelineEntry.position).map((line, index) => {
+                  const initialLines = formatInitialLines(
+                    timelineEntry.position,
+                  ).map((line, index) => {
                     const player: Player = index === 0 ? "Beta" : "Alpha";
                     return (
                       <li
@@ -1094,7 +1303,9 @@ export default function App() {
                       </li>
                     );
                   });
-                  return pendingSubply ? [...initialLines, pendingSubply] : initialLines;
+                  return pendingSubply
+                    ? [...initialLines, pendingSubply]
+                    : initialLines;
                 }
                 const move = timelineEntry.move;
                 if (!move) return [];
@@ -1124,7 +1335,9 @@ export default function App() {
                     </button>
                   </li>
                 );
-                return pendingSubply ? [completedPly, pendingSubply] : [completedPly];
+                return pendingSubply
+                  ? [completedPly, pendingSubply]
+                  : [completedPly];
               })}
             </ol>
           </section>
@@ -1132,7 +1345,9 @@ export default function App() {
           <section className="control-card">
             <div className="section-heading">
               <h2>Game Mode</h2>
-              {agentThinking && <span className="thinking-spinner" aria-hidden="true" />}
+              {agentThinking && (
+                <span className="thinking-spinner" aria-hidden="true" />
+              )}
             </div>
 
             <label className="field">
@@ -1178,11 +1393,14 @@ export default function App() {
 
             {agentError && <p className="error-message">{agentError}</p>}
 
-            <button className="button button--danger" type="button" onClick={resetGame}>
+            <button
+              className="button button--danger"
+              type="button"
+              onClick={resetGame}
+            >
               Reset game
             </button>
           </section>
-
         </aside>
       </main>
 

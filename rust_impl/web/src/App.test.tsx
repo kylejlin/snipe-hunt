@@ -271,6 +271,92 @@ describe("subply history navigation", () => {
     expect(screen.getByText("1.5 / 1.5")).toBeInTheDocument();
   });
 
+  it("settles an active card slide before animating the next subply", () => {
+    const originalAnimate = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "animate",
+    );
+    const animations: Array<{
+      finish: ReturnType<typeof vi.fn>;
+      options: KeyframeAnimationOptions;
+    }> = [];
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        const lane = this.closest<HTMLElement>(".lane")?.getAttribute("aria-label");
+        const top = lane === "Rank 1" ? 100 : lane === "Rank 2" ? 200 : 0;
+        return {
+          x: 0,
+          y: top,
+          top,
+          right: 50,
+          bottom: top + 70,
+          left: 0,
+          width: 50,
+          height: 70,
+          toJSON: () => ({}),
+        };
+      });
+    Object.defineProperty(HTMLElement.prototype, "animate", {
+      configurable: true,
+      value: vi.fn(
+        (
+          _keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
+          options: number | KeyframeAnimationOptions | undefined,
+        ) => {
+          const animation = {
+            finish: vi.fn(),
+            finished: new Promise<void>(() => undefined),
+            options: options as KeyframeAnimationOptions,
+          };
+          animations.push(animation);
+          return animation;
+        },
+      ),
+    });
+
+    try {
+      render(<App />);
+      fireEvent.click(
+        screen.getByRole("button", { name: "Alpha Rat, retreater" }),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Move selected card to Rank 2" }),
+      );
+
+      expect(animations).toHaveLength(1);
+      expect(animations[0].options).toMatchObject({
+        duration: 200,
+        fill: "forwards",
+      });
+      expect(document.querySelectorAll('[aria-hidden="true"][data-card-id]'))
+        .toHaveLength(1);
+      expect(
+        document.querySelector<HTMLElement>(
+          '.board [data-card-id="animal-0"]',
+        ),
+      ).toHaveStyle({ visibility: "hidden" });
+
+      fireEvent.click(screen.getByRole("button", { name: "← Back" }));
+
+      expect(animations[0].finish).toHaveBeenCalledOnce();
+      expect(animations).toHaveLength(2);
+      expect(document.querySelectorAll('[aria-hidden="true"][data-card-id]'))
+        .toHaveLength(1);
+    } finally {
+      rectSpy.mockRestore();
+      if (originalAnimate) {
+        Object.defineProperty(
+          HTMLElement.prototype,
+          "animate",
+          originalAnimate,
+        );
+      } else {
+        delete (HTMLElement.prototype as { animate?: unknown }).animate;
+      }
+    }
+  });
+
   it("walks backward and forward through a committed two-step ply", () => {
     localStorage.setItem(
       "snipe-hunt.mission-7.game",
@@ -522,7 +608,7 @@ describe("game mode and live analysis", () => {
       ),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Game Log settings")).toBeInTheDocument();
-    expect(screen.getByText("Version 0.18.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.20.0")).toBeInTheDocument();
 
     const mode = screen.getByLabelText("Mode");
     expect(mode).toHaveValue("computer-beta");

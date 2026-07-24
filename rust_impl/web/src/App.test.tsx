@@ -312,7 +312,7 @@ describe("game mode and live analysis", () => {
       ),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Game Log settings")).toBeInTheDocument();
-    expect(screen.getByText("Version 0.13.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.14.0")).toBeInTheDocument();
 
     const mode = screen.getByLabelText("Mode");
     expect(mode).toHaveValue("computer-beta");
@@ -321,10 +321,10 @@ describe("game mode and live analysis", () => {
       "Computer plays as Beta",
       "Pass-and-play",
     ]);
-    expect(screen.getByLabelText("Thinking Time")).toHaveValue(5);
+    expect(screen.getByLabelText("Thinking Time")).toHaveValue("5");
     expect(screen.getByRole("switch", { name: "Analysis" })).not.toBeChecked();
     expect(screen.getByText("Analysis disabled")).toBeInTheDocument();
-    expect(screen.getByLabelText("Depth limit")).toHaveValue(5);
+    expect(screen.getByLabelText("Depth limit")).toHaveValue("5");
     expect(screen.queryByText("Idle")).not.toBeInTheDocument();
     expect(
       screen.queryByText("Turn on impartial, live evaluation of the displayed position."),
@@ -338,7 +338,7 @@ describe("game mode and live analysis", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("switch", { name: "Analysis" }));
 
-    expect(screen.getByLabelText("Depth limit")).toHaveValue(5);
+    expect(screen.getByLabelText("Depth limit")).toHaveValue("5");
     expect(screen.queryByText("Analysis disabled")).not.toBeInTheDocument();
     const score = await screen.findByText("+1.3");
     expect(score).toHaveClass("history-analysis__score--positive");
@@ -400,14 +400,45 @@ describe("game mode and live analysis", () => {
     expect(suggestedLine).not.toHaveTextContent(reply.label);
   });
 
-  it("constrains the analysis depth from the Game Log settings", () => {
+  it("normalizes numeric text fields on blur", () => {
     render(<App />);
 
     const depth = screen.getByLabelText("Depth limit");
+    const thinkingTime = screen.getByLabelText("Thinking Time");
+
+    expect(depth).toHaveAttribute("type", "text");
+    expect(depth).not.toHaveAttribute("min");
+    expect(depth).not.toHaveAttribute("max");
+    expect(depth).not.toHaveAttribute("step");
+    expect(thinkingTime).toHaveAttribute("type", "text");
+    expect(thinkingTime).not.toHaveAttribute("min");
+    expect(thinkingTime).not.toHaveAttribute("max");
+    expect(thinkingTime).not.toHaveAttribute("step");
+
     fireEvent.change(depth, { target: { value: "12" } });
-    expect(depth).toHaveValue(10);
-    fireEvent.change(depth, { target: { value: "0" } });
-    expect(depth).toHaveValue(1);
+    expect(depth).toHaveValue("12");
+    fireEvent.blur(depth);
+    expect(depth).toHaveValue("10");
+
+    fireEvent.focus(depth);
+    fireEvent.change(depth, { target: { value: "4.6" } });
+    fireEvent.blur(depth);
+    expect(depth).toHaveValue("5");
+
+    fireEvent.focus(depth);
+    fireEvent.change(depth, { target: { value: "not a number" } });
+    fireEvent.blur(depth);
+    expect(depth).toHaveValue("5");
+
+    fireEvent.change(thinkingTime, { target: { value: "1.37" } });
+    expect(thinkingTime).toHaveValue("1.37");
+    fireEvent.blur(thinkingTime);
+    expect(thinkingTime).toHaveValue("1.25");
+
+    fireEvent.focus(thinkingTime);
+    fireEvent.change(thinkingTime, { target: { value: "" } });
+    fireEvent.blur(thinkingTime);
+    expect(thinkingTime).toHaveValue("1.25");
   });
 
   it("migrates old manual automation to pass-and-play with analysis off", () => {

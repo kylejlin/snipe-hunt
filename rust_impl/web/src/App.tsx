@@ -127,6 +127,68 @@ function clampNumber(
     : fallback;
 }
 
+function normalizeNumber(
+  value: number,
+  minimum: number,
+  maximum: number,
+  increment: number,
+): number {
+  const rounded = minimum + Math.round((value - minimum) / increment) * increment;
+  const precision = Math.max(0, (String(increment).split(".")[1] ?? "").length);
+  return Math.max(minimum, Math.min(maximum, Number(rounded.toFixed(precision))));
+}
+
+function NumericTextInput({
+  value,
+  minimum,
+  maximum,
+  increment,
+  ariaLabel,
+  onCommit,
+}: {
+  value: number;
+  minimum: number;
+  maximum: number;
+  increment: number;
+  ariaLabel: string;
+  onCommit: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  const focused = useRef(false);
+
+  useEffect(() => {
+    if (!focused.current) {
+      setDraft(String(value));
+    }
+  }, [value]);
+
+  return (
+    <input
+      type="text"
+      aria-label={ariaLabel}
+      value={draft}
+      onFocus={() => {
+        focused.current = true;
+      }}
+      onChange={(event) => {
+        setDraft(event.target.value);
+      }}
+      onBlur={() => {
+        focused.current = false;
+        const numeric = draft.trim() === "" ? Number.NaN : Number(draft);
+        if (!Number.isFinite(numeric)) {
+          setDraft(String(value));
+          return;
+        }
+
+        const normalized = normalizeNumber(numeric, minimum, maximum, increment);
+        setDraft(String(normalized));
+        onCommit(normalized);
+      }}
+    />
+  );
+}
+
 function computerControls(mode: GameMode, turn: Player): boolean {
   return (
     (mode === "computer-alpha" && turn === "Alpha") ||
@@ -722,21 +784,17 @@ export default function App() {
                   <div className="history-menu__items">
                     <label className="field history-menu__depth">
                       <span>Analysis depth</span>
-                      <input
-                        type="number"
-                        aria-label="Depth limit"
-                        min="1"
-                        max="10"
-                        step="1"
+                      <NumericTextInput
                         value={game.analysisDepth}
-                        onChange={(event) => {
-                          const value = Number(event.target.value);
-                          if (Number.isFinite(value)) {
-                            setGame((current) => ({
-                              ...current,
-                              analysisDepth: Math.max(1, Math.min(10, Math.round(value))),
-                            }));
-                          }
+                        minimum={1}
+                        maximum={10}
+                        increment={1}
+                        ariaLabel="Depth limit"
+                        onCommit={(analysisDepth) => {
+                          setGame((current) => ({
+                            ...current,
+                            analysisDepth,
+                          }));
                         }}
                       />
                     </label>
@@ -950,21 +1008,17 @@ export default function App() {
               <label className="field">
                 <span>Thinking Time</span>
                 <div className="time-input">
-                  <input
-                    type="number"
-                    aria-label="Thinking Time"
-                    min="0.25"
-                    max="120"
-                    step="0.25"
+                  <NumericTextInput
                     value={game.thinkingTimeSeconds}
-                    onChange={(event) => {
-                      const value = Number(event.target.value);
-                      if (Number.isFinite(value)) {
-                        setGame((current) => ({
-                          ...current,
-                          thinkingTimeSeconds: Math.max(0.25, Math.min(120, value)),
-                        }));
-                      }
+                    minimum={0.25}
+                    maximum={120}
+                    increment={0.25}
+                    ariaLabel="Thinking Time"
+                    onCommit={(thinkingTimeSeconds) => {
+                      setGame((current) => ({
+                        ...current,
+                        thinkingTimeSeconds,
+                      }));
                     }}
                   />
                   <span>seconds</span>

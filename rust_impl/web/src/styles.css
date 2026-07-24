@@ -594,13 +594,14 @@ input[type="number"] {
 .history-menu summary {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--line);
-  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  border: 0;
   color: var(--muted);
-  background: rgba(45, 49, 55, 0.045);
+  background: transparent;
   cursor: pointer;
+  font-size: 1.25rem;
+  line-height: 1;
   list-style: none;
 }
 
@@ -611,7 +612,6 @@ input[type="number"] {
 .history-menu[open] summary,
 .history-menu summary:hover {
   color: var(--acid);
-  border-color: rgba(83, 101, 126, 0.4);
 }
 
 .history-menu__items {

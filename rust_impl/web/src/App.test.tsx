@@ -252,6 +252,21 @@ describe("game mode and live analysis", () => {
   it("uses the new independent defaults and conditional fields", () => {
     render(<App />);
 
+    expect(
+      screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent),
+    ).toEqual(["Game Log", "Analysis", "Game Mode"]);
+    expect(screen.queryByText("Position")).not.toBeInTheDocument();
+    expect(screen.queryByText("PLAY")).not.toBeInTheDocument();
+    expect(screen.queryByText("ENGINE")).not.toBeInTheDocument();
+    expect(screen.queryByText("On")).not.toBeInTheDocument();
+    expect(screen.queryByText("Off")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Select one of the current player’s cards to see its legal destinations.",
+      ),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Game Log settings")).toBeInTheDocument();
+
     const mode = screen.getByLabelText("Mode");
     expect(mode).toHaveValue("computer-beta");
     expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
@@ -274,6 +289,15 @@ describe("game mode and live analysis", () => {
     expect(screen.getByLabelText("Depth limit")).toHaveValue(5);
     expect(await screen.findByText("+1.25")).toBeInTheDocument();
     expect(screen.getByText("Rat 2, Ox 3")).toBeInTheDocument();
+    expect(
+      screen.getByText("+1.25").compareDocumentPosition(screen.getByText("Rat 2, Ox 3")),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(
+      screen.getByText("Rat 2, Ox 3").compareDocumentPosition(screen.getByText("Depth 3 / 5")),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(
+      screen.getByText("Depth 3 / 5").compareDocumentPosition(screen.getByLabelText("Depth limit")),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     const rat = screen.getByRole("button", { name: "Alpha Rat, retreater" });
     expect(rat).toBeEnabled();
 

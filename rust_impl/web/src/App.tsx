@@ -577,7 +577,6 @@ export default function App() {
         <section className="table-panel" aria-label="Snipe Hunt board">
           <div className="table-panel__topline">
             <div>
-              <span className="meta-label">Position</span>
               <strong>
                 Ply{" "}
                 {formatDisplayPlyPrefix(
@@ -665,28 +664,25 @@ export default function App() {
             </div>
           )}
 
-          <p className="board-help">
-            {computerTurn
-              ? `${position.turn} is controlled by the computer.`
-              : selectedCardId
-                ? "Choose a highlighted rank to complete the move."
-                : movePrefix.length > 0
-                  ? "Choose the second animal to complete this ply."
-                : "Select one of the current player’s cards to see its legal destinations."}
-          </p>
+          {(computerTurn || selectedCardId || movePrefix.length > 0) && (
+            <p className="board-help">
+              {computerTurn
+                ? `${position.turn} is controlled by the computer.`
+                : selectedCardId
+                  ? "Choose a highlighted rank to complete the move."
+                  : "Choose the second animal to complete this ply."}
+            </p>
+          )}
         </section>
 
         <aside className="sidebar">
           <section className="control-card history-card">
             <div className="section-heading">
-              <div>
-                <p className="eyebrow">GAME LOG</p>
-                <h2>Ply history</h2>
-              </div>
+              <h2>Game Log</h2>
               <div className="history-heading-actions">
                 <span className="move-count">{game.timeline.length - 1} plies</span>
                 <details className="history-menu">
-                  <summary aria-label="Ply history settings" title="Ply history settings">
+                  <summary aria-label="Game Log settings" title="Game Log settings">
                     <span aria-hidden="true">⚙</span>
                   </summary>
                   <div className="history-menu__items">
@@ -795,12 +791,85 @@ export default function App() {
             </ol>
           </section>
 
+          <section className="control-card analysis-card" aria-live="polite">
+            <div className="section-heading">
+              <h2>Analysis</h2>
+              <label className="analysis-switch">
+                <input
+                  type="checkbox"
+                  role="switch"
+                  aria-label="Analysis"
+                  checked={game.analysisEnabled}
+                  onChange={(event) => {
+                    analysisRequestSequence.current += 1;
+                    setGame((current) => ({
+                      ...current,
+                      analysisEnabled: event.target.checked,
+                    }));
+                  }}
+                />
+              </label>
+            </div>
+
+            {game.analysisEnabled ? (
+              <div className="analysis-content">
+                {analysisError ? (
+                  <p className="error-message">{analysisError}</p>
+                ) : analysis ? (
+                  <>
+                    <div className="evaluation">
+                      <span className="meta-label">Alpha evaluation</span>
+                      <strong>{formatAlphaScore(analysis.score, position.turn)}</strong>
+                    </div>
+                    <div className="suggestion">
+                      <span className="meta-label">
+                        Suggested next {movePrefix.length > 0 ? "subply" : "ply"}
+                      </span>
+                      <strong>{suggestion}</strong>
+                    </div>
+                    <div className="analysis-progress">
+                      <span className={`status-light ${analysisRunning ? "status-light--on" : ""}`}>
+                        {analysisRunning ? "Analyzing" : "Complete"}
+                      </span>
+                      <span>Depth {analysis.depth} / {game.analysisDepth}</span>
+                    </div>
+                  </>
+                ) : (
+                  <p className="empty-copy">
+                    {analysisRunning ? "Searching for the first completed depth…" : "No legal analysis is available."}
+                  </p>
+                )}
+                <label className="field">
+                  <span>Depth limit</span>
+                  <input
+                    type="number"
+                    aria-label="Depth limit"
+                    min="1"
+                    max="10"
+                    step="1"
+                    value={game.analysisDepth}
+                    onChange={(event) => {
+                      const value = Number(event.target.value);
+                      if (Number.isFinite(value)) {
+                        setGame((current) => ({
+                          ...current,
+                          analysisDepth: Math.max(1, Math.min(10, Math.round(value))),
+                        }));
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+            ) : (
+              <p className="empty-copy">
+                Turn on impartial, live evaluation of the displayed position.
+              </p>
+            )}
+          </section>
+
           <section className="control-card">
             <div className="section-heading">
-              <div>
-                <p className="eyebrow">PLAY</p>
-                <h2>Game Mode</h2>
-              </div>
+              <h2>Game Mode</h2>
               {agentThinking && <span className="thinking-spinner" aria-hidden="true" />}
             </div>
 
@@ -855,86 +924,6 @@ export default function App() {
             <button className="button button--danger" type="button" onClick={resetGame}>
               Reset game
             </button>
-          </section>
-
-          <section className="control-card analysis-card" aria-live="polite">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">ENGINE</p>
-                <h2>Analysis</h2>
-              </div>
-              <label className="analysis-switch">
-                <span>{game.analysisEnabled ? "On" : "Off"}</span>
-                <input
-                  type="checkbox"
-                  role="switch"
-                  aria-label="Analysis"
-                  checked={game.analysisEnabled}
-                  onChange={(event) => {
-                    analysisRequestSequence.current += 1;
-                    setGame((current) => ({
-                      ...current,
-                      analysisEnabled: event.target.checked,
-                    }));
-                  }}
-                />
-              </label>
-            </div>
-
-            {game.analysisEnabled ? (
-              <div className="analysis-content">
-                <label className="field">
-                  <span>Depth limit</span>
-                  <input
-                    type="number"
-                    aria-label="Depth limit"
-                    min="1"
-                    max="10"
-                    step="1"
-                    value={game.analysisDepth}
-                    onChange={(event) => {
-                      const value = Number(event.target.value);
-                      if (Number.isFinite(value)) {
-                        setGame((current) => ({
-                          ...current,
-                          analysisDepth: Math.max(1, Math.min(10, Math.round(value))),
-                        }));
-                      }
-                    }}
-                  />
-                </label>
-                {analysisError ? (
-                  <p className="error-message">{analysisError}</p>
-                ) : analysis ? (
-                  <>
-                    <div className="analysis-progress">
-                      <span className={`status-light ${analysisRunning ? "status-light--on" : ""}`}>
-                        {analysisRunning ? "Analyzing" : "Complete"}
-                      </span>
-                      <span>Depth {analysis.depth} / {game.analysisDepth}</span>
-                    </div>
-                    <div className="evaluation">
-                      <span className="meta-label">Alpha evaluation</span>
-                      <strong>{formatAlphaScore(analysis.score, position.turn)}</strong>
-                    </div>
-                    <div className="suggestion">
-                      <span className="meta-label">
-                        Suggested next {movePrefix.length > 0 ? "subply" : "ply"}
-                      </span>
-                      <strong>{suggestion}</strong>
-                    </div>
-                  </>
-                ) : (
-                  <p className="empty-copy">
-                    {analysisRunning ? "Searching for the first completed depth…" : "No legal analysis is available."}
-                  </p>
-                )}
-              </div>
-            ) : (
-              <p className="empty-copy">
-                Turn on impartial, live evaluation of the displayed position.
-              </p>
-            )}
           </section>
 
         </aside>

@@ -1,79 +1,183 @@
 use std::time::Duration;
 
-use serde_json::Value;
 use snipe_ai::{extract_features, SearchConfig, SearchEngine, SearchPolicy};
-use snipe_core::{Move, Player, State, StateData};
+use snipe_core::{Animal, AnimalStep, Location, Move, Player, Row, State, StateData};
 
-const SAMPLE: &str = include_str!("../../../../sample1.json");
-const STORAGE_KEY: &str = "snipe-hunt.mission-7.game";
-const LOCATIONS: [&str; 8] = [
-    "alpha-reserve",
-    "row-1",
-    "row-2",
-    "row-3",
-    "row-4",
-    "row-5",
-    "row-6",
-    "beta-reserve",
+const GAME: &str = include_str!("../../../../game3.shgh");
+const ANIMAL_NAMES: [&str; 16] = [
+    "Rat", "Ox", "Tiger", "Rabbit", "Dragon", "Snake", "Horse", "Ram", "Monkey", "Rooster", "Dog",
+    "Boar", "Fish", "Elephant", "Squid", "Frog",
 ];
 
 fn sample_timeline() -> Vec<State> {
-    let dump: Value = serde_json::from_str(SAMPLE).expect("sample localStorage dump is JSON");
-    let saved: Value = serde_json::from_str(
-        dump[STORAGE_KEY]
-            .as_str()
-            .expect("saved game is a JSON string"),
-    )
-    .expect("saved game string is JSON");
-    saved["timeline"]
-        .as_array()
-        .expect("saved game has a timeline")
-        .iter()
-        .map(|entry| state_from_json(&entry["position"]))
-        .collect()
+    let lines = GAME
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with("//"))
+        .collect::<Vec<_>>();
+    let mut position = initial_state(lines[0], lines[1]);
+    let mut timeline = vec![position];
+
+    for line in &lines[2..] {
+        let (_, body) = line.split_once(' ').expect("move line has a ply prefix");
+        let notation = body
+            .strip_suffix(" +#0")
+            .or_else(|| body.strip_suffix(" -#0"))
+            .unwrap_or(body);
+        let mv = position
+            .legal_moves()
+            .into_iter()
+            .filter(|mv| format_move(position, *mv) == notation)
+            .min()
+            .unwrap_or_else(|| panic!("recorded move is legal: {line}"));
+        position = position.apply_move(mv).expect("recorded move applies");
+        timeline.push(position);
+    }
+    timeline
 }
 
-fn state_from_json(position: &Value) -> State {
+fn initial_state(beta_line: &str, alpha_line: &str) -> State {
     let mut data = StateData {
         alpha_animals: [0; 8],
         beta_animals: [0; 8],
         snipes: [0; 8],
-        side_to_move: match position["turn"].as_str() {
-            Some("Alpha") => Player::Alpha as u8,
-            Some("Beta") => Player::Beta as u8,
-            turn => panic!("invalid side to move: {turn:?}"),
-        },
+        side_to_move: Player::Beta as u8,
         pending_animal: u8::MAX,
         pending_destination: 0,
     };
+    let mut occurrences = [0_u8; 16];
+    add_layout(
+        &mut data,
+        beta_line,
+        Player::Beta,
+        [
+            Location::BetaReserve,
+            Location::Row6,
+            Location::Row5,
+            Location::Row4,
+        ],
+        &mut occurrences,
+    );
+    add_layout(
+        &mut data,
+        alpha_line,
+        Player::Alpha,
+        [
+            Location::AlphaReserve,
+            Location::Row1,
+            Location::Row2,
+            Location::Row3,
+        ],
+        &mut occurrences,
+    );
+    assert!(occurrences.into_iter().all(|count| count == 2));
+    State::from_data(data).expect("game3 initial position is valid")
+}
 
-    for (location_index, location) in LOCATIONS.into_iter().enumerate() {
-        for card in position["locations"][location]
-            .as_array()
-            .expect("location contains cards")
-        {
-            let owner = match card["owner"].as_str() {
-                Some("Alpha") => Player::Alpha,
-                Some("Beta") => Player::Beta,
-                owner => panic!("invalid owner: {owner:?}"),
-            };
-            if card["isSnipe"].as_bool() == Some(true) {
-                data.snipes[location_index] |= 1 << owner as u8;
-            } else {
-                let index = card["id"]
-                    .as_str()
-                    .and_then(|id| id.strip_prefix("animal-"))
-                    .and_then(|index| index.parse::<u8>().ok())
-                    .expect("animal card has a numeric id");
-                let animals = match owner {
-                    Player::Alpha => &mut data.alpha_animals,
-                    Player::Beta => &mut data.beta_animals,
-                };
-                animals[location_index] |= 1_u32 << index;
+fn add_layout(
+    data: &mut StateData,
+    line: &str,
+    owner: Player,
+    locations: [Location; 4],
+    occurrences: &mut [u8; 16],
+) {
+    let (_, layout) = line
+        .split_once('=')
+        .expect("layout line has an equals sign");
+    let groups = layout.split(';').map(str::trim).collect::<Vec<_>>();
+    assert_eq!(groups.len(), locations.len());
+    for (group, location) in groups.into_iter().zip(locations) {
+        for name in group.split_whitespace() {
+            if name == player_name(owner) {
+                data.snipes[location.index()] |= 1 << owner as u8;
+                continue;
+            }
+            let base = ANIMAL_NAMES
+                .iter()
+                .position(|candidate| *candidate == name)
+                .unwrap_or_else(|| panic!("known animal name: {name}"));
+            let animal = Animal::from_index(base as u8 + occurrences[base] * 16)
+                .expect("game contains at most two copies of each animal");
+            occurrences[base] += 1;
+            match owner {
+                Player::Alpha => data.alpha_animals[location.index()] |= animal.bit(),
+                Player::Beta => data.beta_animals[location.index()] |= animal.bit(),
             }
         }
     }
-    State::from_data(data).expect("sample position is a valid core state")
+}
+
+fn player_name(player: Player) -> &'static str {
+    match player {
+        Player::Alpha => "Alpha",
+        Player::Beta => "Beta",
+    }
+}
+
+fn animal_name(animal: Animal) -> &'static str {
+    ANIMAL_NAMES[animal.index() % 16]
+}
+
+fn step_notation(name: &str, source: Location, destination: Row, player: Player) -> String {
+    if source == Location::reserve_of(player) {
+        return format!("{name} {}!", destination.number());
+    }
+    let source_rank = source.row().expect("played card starts on a row").number();
+    let destination_rank = destination.number();
+    let advances = match player {
+        Player::Alpha => destination_rank > source_rank,
+        Player::Beta => destination_rank < source_rank,
+    };
+    format!(
+        "{name} {destination_rank}{}",
+        if advances { "" } else { "*" }
+    )
+}
+
+fn animal_step_notation(position: State, step: AnimalStep, player: Player) -> String {
+    step_notation(
+        animal_name(step.moved),
+        position
+            .location_of_animal(step.moved)
+            .expect("played animal is on the board"),
+        step.destination,
+        player,
+    )
+}
+
+fn format_move(position: State, mv: Move) -> String {
+    let player = position.side_to_move();
+    match mv {
+        Move::Snipe { destination } => step_notation(
+            player_name(player),
+            position
+                .snipe_location(player)
+                .expect("current player's snipe is on the board"),
+            destination,
+            player,
+        ),
+        Move::Drop {
+            animal,
+            destination,
+        } => step_notation(
+            animal_name(animal),
+            Location::reserve_of(player),
+            destination,
+            player,
+        ),
+        Move::Animals { first, second } => {
+            let first = animal_step_notation(position, first, player);
+            match second {
+                Some(second) => {
+                    format!(
+                        "{first}, {}",
+                        animal_step_notation(position, second, player)
+                    )
+                }
+                None => first,
+            }
+        }
+    }
 }
 
 fn played_move(before: State, after: State) -> Move {

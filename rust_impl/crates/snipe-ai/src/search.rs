@@ -472,7 +472,7 @@ impl<P: GamePosition> SearchEngine<P> {
                         best_move,
                         score: best_score,
                         depth,
-                        principal_variation: self.extract_pv(root, depth, best_move),
+                        principal_variation: self.extract_pv(root, depth, best_move, best_score),
                         stats: self.stats.clone(),
                         completed_iteration: true,
                     };
@@ -490,7 +490,7 @@ impl<P: GamePosition> SearchEngine<P> {
 
         self.stats.elapsed = started.elapsed();
         let pv = if completed {
-            self.extract_pv(root, self.stats.completed_depth, best_move)
+            self.extract_pv(root, self.stats.completed_depth, best_move, best_score)
         } else {
             best_move.into_iter().collect()
         };
@@ -901,29 +901,48 @@ impl<P: GamePosition> SearchEngine<P> {
         }
     }
 
-    fn extract_pv(&self, root: &P, depth: u8, accepted_root_move: Option<P::Move>) -> Vec<P::Move> {
+    fn extract_pv(
+        &self,
+        root: &P,
+        depth: u8,
+        accepted_root_move: Option<P::Move>,
+        score: i32,
+    ) -> Vec<P::Move> {
+        let mate_plies = (score.abs() >= MATE_THRESHOLD)
+            .then(|| MATE_SCORE.saturating_sub(score.abs()) as usize);
+        let line_length = mate_plies.map_or(depth as usize, |plies| plies.max(depth as usize));
         let mut position = root.clone();
-        let mut pv = Vec::with_capacity(depth as usize);
-        let mut seen = Vec::with_capacity(depth as usize);
-        for ply in 0..depth {
+        let mut pv = Vec::with_capacity(line_length);
+        let mut seen = Vec::with_capacity(line_length);
+        for ply in 0..line_length {
             let key = position.position_hash();
             if seen.contains(&key) {
                 break;
             }
             seen.push(key);
-            let mv = if ply == 0 {
+            let candidate = if ply == 0 {
                 accepted_root_move
             } else {
                 self.tt.get(key).and_then(|entry| entry.best_move)
             };
+            let mut legal = Vec::new();
+            position.legal_moves(&mut legal);
+            let mv = candidate.filter(|mv| legal.contains(mv)).or_else(|| {
+                // Quiescence does not populate the principal-variation table.
+                // When it proves mate just beyond the regular depth, recover
+                // the final mating move directly from the penultimate position.
+                (mate_plies == Some(ply + 1)).then(|| {
+                    legal.iter().copied().find(|mv| {
+                        position
+                            .apply_move(*mv)
+                            .terminal_score()
+                            .is_some_and(|s| s < 0)
+                    })
+                })?
+            });
             let Some(mv) = mv else {
                 break;
             };
-            let mut legal = Vec::new();
-            position.legal_moves(&mut legal);
-            if !legal.contains(&mv) {
-                break;
-            }
             pv.push(mv);
             position = position.apply_move(mv);
             if position.terminal_score().is_some() {
@@ -1080,6 +1099,23 @@ mod tests {
         assert_eq!(result.best_move, Some(2));
         assert!(result.score >= MATE_THRESHOLD);
         assert!(result.stats.nodes > 0);
+    }
+
+    #[test]
+    fn principal_variation_includes_mate_found_beyond_regular_depth() {
+        // At depth one, quiescence sees the opponent's immediate winning
+        // capture. The reported mate-in-two line must include that second ply.
+        let result = engine(Duration::ZERO).search_to_depth_with_context_and_progress(
+            &TakeAway { stones: 4 },
+            &[],
+            &[],
+            None,
+            1,
+            |_| {},
+        );
+
+        assert_eq!(result.score, -MATE_SCORE + 2);
+        assert_eq!(result.principal_variation, vec![3, 1]);
     }
 
     #[test]

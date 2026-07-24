@@ -565,6 +565,21 @@ export default function App() {
       ? `${cardName(boardPosition, suggestedStep.cardId)} to ${locationLabel(suggestedStep.to)}`
       : analysis.bestMove.label
     : null;
+  const alphaEvaluation = position.winner
+    ? position.winner === "Alpha"
+      ? MATE_SCORE
+      : -MATE_SCORE
+    : analysis
+      ? position.turn === "Alpha"
+        ? analysis.score
+        : -analysis.score
+      : null;
+  const evaluationTone =
+    alphaEvaluation === null || alphaEvaluation === 0
+      ? ""
+      : alphaEvaluation > 0
+        ? " history-analysis__score--positive"
+        : " history-analysis__score--negative";
 
   return (
     <div className="app-shell">
@@ -762,31 +777,14 @@ export default function App() {
                 {game.analysisEnabled && (
                   <div className="history-analysis__summary" aria-live="polite">
                     <div className="history-analysis__score">
-                      <span>Alpha</span>
-                      <strong>
+                      <strong className={evaluationTone}>
                         {analysisError
                           ? "—"
-                          : position.winner
-                            ? formatAlphaScore(
-                                position.winner === "Alpha" ? MATE_SCORE : -MATE_SCORE,
-                                "Alpha",
-                              )
-                            : analysis
-                              ? formatAlphaScore(analysis.score, position.turn)
+                          : alphaEvaluation !== null
+                            ? formatAlphaScore(alphaEvaluation, "Alpha")
                               : "—"}
                       </strong>
                     </div>
-                    <span
-                      className={`status-light ${analysisRunning ? "status-light--on" : ""}`}
-                    >
-                      {analysisError
-                        ? "Error"
-                        : analysisRunning
-                          ? "Analyzing"
-                          : analysis || position.winner
-                            ? "Complete"
-                            : "Idle"}
-                    </span>
                     <span className="history-analysis__depth">
                       Depth {analysis?.depth ?? "—"} / {game.analysisDepth}
                     </span>

@@ -283,7 +283,7 @@ describe("game mode and live analysis", () => {
       ),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Game Log settings")).toBeInTheDocument();
-    expect(screen.getByText("Version 0.8.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.9.0")).toBeInTheDocument();
 
     const mode = screen.getByLabelText("Mode");
     expect(mode).toHaveValue("computer-beta");
@@ -309,10 +309,13 @@ describe("game mode and live analysis", () => {
     fireEvent.click(screen.getByRole("switch", { name: "Analysis" }));
 
     expect(screen.getByLabelText("Depth limit")).toHaveValue(5);
-    expect(await screen.findByText("+1.3")).toBeInTheDocument();
+    const score = await screen.findByText("+1.3");
+    expect(score).toHaveClass("history-analysis__score--positive");
+    expect(score.parentElement).not.toHaveTextContent("Alpha");
     expect(screen.getByText("Rat 2, Ox 3")).toBeInTheDocument();
     expect(screen.getByText("Best next ply")).toBeInTheDocument();
-    expect(screen.getByText("Complete")).toBeInTheDocument();
+    expect(screen.queryByText("Analyzing")).not.toBeInTheDocument();
+    expect(screen.queryByText("Complete")).not.toBeInTheDocument();
     expect(screen.getByText("Depth 3 / 5")).toBeInTheDocument();
     const rat = screen.getByRole("button", { name: "Alpha Rat, retreater" });
     expect(rat).toBeEnabled();
@@ -367,9 +370,9 @@ describe("game mode and live analysis", () => {
   });
 
   it.each([
-    ["Alpha", "+#0"],
-    ["Beta", "-#0"],
-  ] as const)("shows %s's terminal score without running analysis", (winner, score) => {
+    ["Alpha", "+#0", "history-analysis__score--positive"],
+    ["Beta", "-#0", "history-analysis__score--negative"],
+  ] as const)("shows %s's terminal score without running analysis", (winner, score, tone) => {
     localStorage.setItem(
       "snipe-hunt.mission-7.game",
       JSON.stringify({
@@ -385,7 +388,7 @@ describe("game mode and live analysis", () => {
 
     render(<App />);
 
-    expect(screen.getByText(score)).toBeInTheDocument();
+    expect(screen.getByText(score)).toHaveClass(tone);
     expect(screen.queryByText("No legal analysis is available.")).not.toBeInTheDocument();
     expect(analyzerAnalyze).not.toHaveBeenCalled();
   });

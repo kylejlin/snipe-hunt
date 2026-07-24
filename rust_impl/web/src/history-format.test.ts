@@ -132,6 +132,7 @@ describe("compact history notation", () => {
   it("uses Greek player letters only in display prefixes", () => {
     expect(formatDisplayPlyPrefix(0, "Beta")).toBe("0β.");
     expect(formatDisplayPlyPrefix(3, "Alpha")).toBe("3α.");
+    expect(formatDisplayPlyPrefix(12, "Alpha", true)).toBe("12.5α.");
     expect(serializeHistory([{ position: createFallbackGame(7_071), move: null }])).toMatch(
       /^0b\.[^\n]*\n0a\./,
     );

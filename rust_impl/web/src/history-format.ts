@@ -83,9 +83,13 @@ export function formatPlyPrefix(timelineIndex: number, player: Player): string {
   return `${Math.ceil(timelineIndex / 2)}${player === "Alpha" ? "a" : "b"}.`;
 }
 
-export function formatDisplayPlyPrefix(plyNumber: number, player: Player): string {
+export function formatDisplayPlyPrefix(
+  plyNumber: number,
+  player: Player,
+  firstSubplyPlayed = false,
+): string {
   if (plyNumber < 0) throw new Error("Ply numbers cannot be negative.");
-  return `${plyNumber}${player === "Alpha" ? "α" : "β"}.`;
+  return `${plyNumber}${firstSubplyPlayed ? ".5" : ""}${player === "Alpha" ? "α" : "β"}.`;
 }
 
 function formatLocation(position: Position, location: Location): string {

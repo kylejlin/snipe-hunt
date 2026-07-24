@@ -23,9 +23,11 @@ import {
 type GameMode = "computer-alpha" | "computer-beta" | "pass-and-play";
 
 interface StoredGame {
-  schemaVersion: 2;
+  schemaVersion: 3;
   timeline: TimelineEntry[];
   cursor: number;
+  subply: boolean;
+  draftStep: MoveStep | null;
   gameMode: GameMode;
   thinkingTimeSeconds: number;
   analysisEnabled: boolean;
@@ -63,17 +65,31 @@ function initialState(): StoredGame {
         // Let the authoritative engine reject stale or malformed schemas
         // before they can crash the first render.
         engine.legalMoves(timeline[cursor].position);
-        if (parsed.schemaVersion === 2) {
+        if (parsed.schemaVersion === 3) {
           const gameMode = parsed.gameMode;
           if (
             gameMode === "computer-alpha" ||
             gameMode === "computer-beta" ||
             gameMode === "pass-and-play"
           ) {
+            const draftStep =
+              parsed.draftStep == null ? null : parsed.draftStep as MoveStep;
+            if (draftStep) {
+              engine.previewFirstStep(timeline.at(-1)!.position, draftStep);
+            }
+            const subply = parsed.subply === true;
+            const nextMove = timeline[cursor + 1]?.move;
+            const validSubply =
+              !subply ||
+              (nextMove?.steps.length === 2) ||
+              (cursor === timeline.length - 1 && Boolean(draftStep));
+            if (!validSubply) throw new Error("Stored subply cursor is invalid.");
             return {
-              schemaVersion: 2,
+              schemaVersion: 3,
               timeline,
               cursor,
+              subply,
+              draftStep,
               gameMode,
               thinkingTimeSeconds: clampNumber(parsed.thinkingTimeSeconds, 0.25, 120, 5),
               analysisEnabled: parsed.analysisEnabled === true,
@@ -84,9 +100,11 @@ function initialState(): StoredGame {
         if (parsed.schemaVersion === 1) {
           const oldMode = parsed.mode;
           return {
-            schemaVersion: 2,
+            schemaVersion: 3,
             timeline,
             cursor,
+            subply: false,
+            draftStep: null,
             gameMode:
               oldMode === "alpha"
                 ? "computer-alpha"
@@ -98,6 +116,26 @@ function initialState(): StoredGame {
             analysisDepth: 5,
           };
         }
+        if (parsed.schemaVersion === 2) {
+          const gameMode = parsed.gameMode;
+          if (
+            gameMode === "computer-alpha" ||
+            gameMode === "computer-beta" ||
+            gameMode === "pass-and-play"
+          ) {
+            return {
+              schemaVersion: 3,
+              timeline,
+              cursor,
+              subply: false,
+              draftStep: null,
+              gameMode,
+              thinkingTimeSeconds: clampNumber(parsed.thinkingTimeSeconds, 0.25, 120, 5),
+              analysisEnabled: parsed.analysisEnabled === true,
+              analysisDepth: clampNumber(parsed.analysisDepth, 1, 10, 5),
+            };
+          }
+        }
       }
     }
   } catch {
@@ -105,9 +143,11 @@ function initialState(): StoredGame {
   }
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     timeline: [{ position: engine.createGame(), move: null }],
     cursor: 0,
+    subply: false,
+    draftStep: null,
     gameMode: "computer-beta",
     thinkingTimeSeconds: 5,
     analysisEnabled: false,
@@ -310,7 +350,6 @@ export function formatAlphaScore(score: number, turn: Player): string {
 export default function App() {
   const [game, setGame] = useState<StoredGame>(initialState);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
-  const [movePrefix, setMovePrefix] = useState<MoveStep[]>([]);
   const [analysis, setAnalysis] = useState<LiveAnalysisUpdate | null>(null);
   const [analysisRunning, setAnalysisRunning] = useState(false);
   const [agentThinking, setAgentThinking] = useState(false);
@@ -323,14 +362,25 @@ export default function App() {
 
   const entry = game.timeline[game.cursor];
   const position = entry.position;
+  const midpointStep = game.subply
+    ? game.timeline[game.cursor + 1]?.move?.steps[0] ?? game.draftStep
+    : null;
+  const movePrefix = midpointStep ? [midpointStep] : [];
   const boardPosition = useMemo(
     () =>
-      movePrefix.length > 0
-        ? engine.previewFirstStep(position, movePrefix[0])
+      midpointStep
+        ? engine.previewFirstStep(position, midpointStep)
         : position,
-    [movePrefix, position],
+    [midpointStep, position],
   );
-  const atPresent = game.cursor === game.timeline.length - 1;
+  const totalPlyCount =
+    game.timeline.length - 1 + (game.draftStep ? 0.5 : 0);
+  const currentPlyCount = game.cursor + (game.subply ? 0.5 : 0);
+  const atPresent = currentPlyCount === totalPlyCount;
+  const canMoveForward =
+    game.subply
+      ? game.cursor < game.timeline.length - 1
+      : game.cursor < game.timeline.length - 1 || Boolean(game.draftStep);
   const computerTurn = computerControls(game.gameMode, position.turn);
   const legalMoves = useMemo(() => engine.legalMoves(position), [position]);
   const prefixCandidates = legalMoves.filter((move) =>
@@ -374,14 +424,12 @@ export default function App() {
 
   useEffect(() => {
     setSelectedCardId(null);
-    setMovePrefix([]);
     setAgentError(null);
     setAnalysisError(null);
-  }, [game.cursor, position.turnNumber]);
+  }, [game.cursor, game.subply, position.turnNumber]);
 
   const commitMove = (move: TurnMove) => {
     setSelectedCardId(null);
-    setMovePrefix([]);
     setHistoryError(null);
     analysisRequestSequence.current += 1;
     setAnalysis(null);
@@ -405,12 +453,24 @@ export default function App() {
       }
       const timeline = current.timeline.slice(0, current.cursor + 1);
       timeline.push({ position: nextPosition, move });
-      return { ...current, timeline, cursor: timeline.length - 1 };
+      return {
+        ...current,
+        timeline,
+        cursor: timeline.length - 1,
+        subply: false,
+        draftStep: null,
+      };
     });
   };
 
   useEffect(() => {
-    if (!computerTurn || !atPresent || position.winner || legalMoves.length === 0) {
+    if (
+      !computerTurn ||
+      !atPresent ||
+      game.subply ||
+      position.winner ||
+      legalMoves.length === 0
+    ) {
       setAgentThinking(false);
       return;
     }
@@ -450,7 +510,13 @@ export default function App() {
             ...current.timeline,
             { position: nextPosition, move: result.bestMove },
           ];
-          return { ...current, timeline, cursor: timeline.length - 1 };
+          return {
+            ...current,
+            timeline,
+            cursor: timeline.length - 1,
+            subply: false,
+            draftStep: null,
+          };
         });
       })
       .catch((reason: unknown) => {
@@ -471,6 +537,7 @@ export default function App() {
   }, [
     computerTurn,
     atPresent,
+    game.subply,
     game.thinkingTimeSeconds,
     legalMoves.length,
     position,
@@ -501,7 +568,7 @@ export default function App() {
             .map((timelineEntry) => timelineEntry.position),
           maxDepth: game.analysisDepth,
           requestId,
-          firstStep: movePrefix[0],
+          firstStep: midpointStep ?? undefined,
         },
         (update) => {
           if (
@@ -533,7 +600,7 @@ export default function App() {
     game.cursor,
     game.timeline,
     legalMoves.length,
-    movePrefix,
+    midpointStep,
     position,
   ]);
 
@@ -552,8 +619,13 @@ export default function App() {
     if (matching.steps.length === nextStepIndex + 1) {
       commitMove(matching);
     } else {
-      setMovePrefix((current) => [...current, chosenStep]);
       setSelectedCardId(null);
+      setGame((current) => ({
+        ...current,
+        timeline: current.timeline.slice(0, current.cursor + 1),
+        subply: true,
+        draftStep: chosenStep,
+      }));
     }
   };
 
@@ -564,11 +636,52 @@ export default function App() {
     setAnalysisRunning(false);
     setAnalysis(null);
     setSelectedCardId(null);
-    setMovePrefix([]);
     setGame((current) => ({
       ...current,
       cursor: Math.max(0, Math.min(current.timeline.length - 1, nextCursor)),
+      subply: false,
     }));
+  };
+
+  const moveHistoryBackward = () => {
+    agentRequestSequence.current += 1;
+    analysisRequestSequence.current += 1;
+    setAgentThinking(false);
+    setAnalysisRunning(false);
+    setAnalysis(null);
+    setSelectedCardId(null);
+    setGame((current) => {
+      if (current.subply) return { ...current, subply: false };
+      if (current.cursor === 0) return current;
+      const move = current.timeline[current.cursor].move;
+      return {
+        ...current,
+        cursor: current.cursor - 1,
+        subply: move?.steps.length === 2,
+      };
+    });
+  };
+
+  const moveHistoryForward = () => {
+    agentRequestSequence.current += 1;
+    analysisRequestSequence.current += 1;
+    setAgentThinking(false);
+    setAnalysisRunning(false);
+    setAnalysis(null);
+    setSelectedCardId(null);
+    setGame((current) => {
+      if (current.subply) {
+        if (current.cursor >= current.timeline.length - 1) return current;
+        return { ...current, cursor: current.cursor + 1, subply: false };
+      }
+      if (current.cursor < current.timeline.length - 1) {
+        const move = current.timeline[current.cursor + 1].move;
+        return move?.steps.length === 2
+          ? { ...current, subply: true }
+          : { ...current, cursor: current.cursor + 1 };
+      }
+      return current.draftStep ? { ...current, subply: true } : current;
+    });
   };
 
   const resetGame = () => {
@@ -582,11 +695,12 @@ export default function App() {
     setAnalysisRunning(false);
     setHistoryError(null);
     setSelectedCardId(null);
-    setMovePrefix([]);
     setGame((current) => ({
       ...current,
       timeline: [{ position: next, move: null }],
       cursor: 0,
+      subply: false,
+      draftStep: null,
     }));
   };
 
@@ -629,11 +743,12 @@ export default function App() {
       setAgentThinking(false);
       setAnalysisRunning(false);
       setSelectedCardId(null);
-      setMovePrefix([]);
       setGame((current) => ({
         ...current,
         timeline,
         cursor: timeline.length - 1,
+        subply: false,
+        draftStep: null,
         gameMode: "pass-and-play",
       }));
     } catch (reason) {
@@ -706,6 +821,7 @@ export default function App() {
                 {formatDisplayPlyPrefix(
                   Math.ceil(position.turnNumber / 2),
                   position.turn,
+                  game.subply,
                 ).slice(0, -1)}
               </strong>
             </div>
@@ -713,19 +829,19 @@ export default function App() {
               <button
                 className="button button--quiet"
                 type="button"
-                onClick={() => moveCursor(game.cursor - 1)}
-                disabled={game.cursor === 0}
+                onClick={moveHistoryBackward}
+                disabled={game.cursor === 0 && !game.subply}
               >
                 ← Back
               </button>
               <span aria-live="polite">
-                {game.cursor + 1} / {game.timeline.length}
+                {currentPlyCount} / {totalPlyCount}
               </span>
               <button
                 className="button button--quiet"
                 type="button"
-                onClick={() => moveCursor(game.cursor + 1)}
-                disabled={atPresent}
+                onClick={moveHistoryForward}
+                disabled={!canMoveForward}
               >
                 Forward →
               </button>
@@ -778,8 +894,7 @@ export default function App() {
                   className="button button--quiet"
                   type="button"
                   onClick={() => {
-                    setMovePrefix([]);
-                    setSelectedCardId(null);
+                    moveHistoryBackward();
                   }}
                 >
                   Undo first subply
@@ -804,7 +919,9 @@ export default function App() {
             <div className="section-heading">
               <h2>Game Log</h2>
               <div className="history-heading-actions">
-                <span className="move-count">{game.timeline.length - 1} plies</span>
+                <span className="move-count">
+                  {totalPlyCount} {totalPlyCount === 1 ? "ply" : "plies"}
+                </span>
                 <details className="history-menu">
                   <summary aria-label="Game Log settings" title="Game Log settings">
                     <span aria-hidden="true">⚙</span>
@@ -930,24 +1047,25 @@ export default function App() {
             <ol className="move-list">
               {game.timeline.flatMap((timelineEntry, timelineIndex) => {
                 const pendingSubply =
-                  timelineIndex === game.cursor && movePrefix.length > 0 ? (
+                  timelineIndex === game.cursor && game.subply && midpointStep ? (
                     <li
                       key="pending-subply"
                       className={`move-list__pending move-list__ply--${position.turn.toLowerCase()}`}
-                      aria-label="Pending ply"
+                      aria-label="Subply position"
                     >
-                      <div>
+                      <div className="move-list__active">
                         <small>
                           {`${formatDisplayPlyPrefix(
                             Math.ceil(position.turnNumber / 2),
                             position.turn,
+                            true,
                           )} ${formatMove(position, {
                             id: "pending-subply",
                             player: position.turn,
                             label: "",
                             steps: movePrefix,
                             captures: [],
-                          })}, ...`}
+                          })}, …`}
                         </small>
                       </div>
                     </li>
@@ -962,7 +1080,11 @@ export default function App() {
                       >
                         <button
                           type="button"
-                          className={game.cursor === 0 ? "move-list__active" : ""}
+                          className={
+                            game.cursor === 0 && !game.subply
+                              ? "move-list__active"
+                              : ""
+                          }
                           onClick={() => moveCursor(0)}
                         >
                           <small>
@@ -983,7 +1105,11 @@ export default function App() {
                   >
                     <button
                       type="button"
-                      className={game.cursor === timelineIndex ? "move-list__active" : ""}
+                      className={
+                        game.cursor === timelineIndex && !game.subply
+                          ? "move-list__active"
+                          : ""
+                      }
                       onClick={() => moveCursor(timelineIndex)}
                     >
                       <small>
@@ -1016,7 +1142,6 @@ export default function App() {
                 onChange={(event) => {
                   agentRequestSequence.current += 1;
                   setSelectedCardId(null);
-                  setMovePrefix([]);
                   setGame((current) => ({
                     ...current,
                     gameMode: event.target.value as GameMode,

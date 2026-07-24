@@ -179,7 +179,8 @@ stronger playing-strength gate.
   deepening result, so both searches can run independently.
 - Analysis can constrain its root to a committed first animal step and then
   suggest the best legal second subply without changing the game.
-- The complete game timeline, game mode, agent time, and analysis settings are
-  versioned and stored in `localStorage`.
-- Back and Forward navigate the timeline; moving from a prior position creates
-  a new continuation.
+- The complete game timeline, subply-aware history cursor, game mode, agent
+  time, and analysis settings are versioned and stored in `localStorage`.
+- Back and Forward navigate animal subplies. Two-animal plies include a
+  midpoint after the first step; moving from a prior position creates a new
+  continuation.

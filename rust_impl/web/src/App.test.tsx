@@ -212,12 +212,14 @@ describe("Alpha evaluation formatting", () => {
   });
 });
 
-describe("pending subply history navigation", () => {
+describe("subply history navigation", () => {
   afterEach(cleanup);
 
   beforeEach(() => {
     localStorage.clear();
     applyMove.mockClear();
+    analyzerAnalyze.mockClear();
+    agentChoose.mockClear();
     applyMove.mockImplementation((_position: Position, _move: TurnMove) => ({
       ...earlier,
       turn: "Beta",
@@ -239,7 +241,7 @@ describe("pending subply history navigation", () => {
     );
   });
 
-  it("discards a pending first subply before moving backward in history", () => {
+  it("undoes and redoes a draft first subply", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Alpha Rat, retreater" }));
@@ -249,20 +251,96 @@ describe("pending subply history navigation", () => {
     expect(
       screen.getByRole("button", { name: "Undo first subply" }),
     ).toBeInTheDocument();
-    const pendingPly = screen.getByLabelText("Pending ply");
-    expect(pendingPly).toHaveTextContent("1α.");
-    expect(pendingPly).toHaveTextContent("Rat 2, ...");
+    const pendingPly = screen.getByLabelText("Subply position");
+    expect(pendingPly).toHaveTextContent("1.5α.");
+    expect(pendingPly).toHaveTextContent("Rat 2, …");
+    expect(screen.getByText("Ply 1.5α")).toBeInTheDocument();
+    expect(screen.getByText("1.5 / 1.5")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "← Back" }));
 
     expect(
       screen.queryByRole("button", { name: "Undo first subply" }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Pending ply")).not.toBeInTheDocument();
-    expect(screen.getByText("1 / 2")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Subply position")).not.toBeInTheDocument();
+    expect(screen.getByText("1 / 1.5")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Forward →" }));
+
+    expect(screen.getByLabelText("Subply position")).toHaveTextContent("1.5α.");
+    expect(screen.getByText("1.5 / 1.5")).toBeInTheDocument();
   });
 
-  it("discards a pending first subply before moving forward in history", () => {
+  it("walks backward and forward through a committed two-step ply", () => {
+    localStorage.setItem(
+      "snipe-hunt.mission-7.game",
+      JSON.stringify({
+        schemaVersion: 1,
+        timeline: [
+          { position: earlier, move: null },
+          { position: current, move: earlierMove },
+        ],
+        cursor: 1,
+        mode: "manual",
+        manualAnalysis: false,
+        timeLimitSeconds: 5,
+      }),
+    );
+    render(<App />);
+
+    expect(screen.getByText("1 / 1")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "← Back" }));
+
+    expect(screen.getByText("0.5 / 1")).toBeInTheDocument();
+    expect(screen.getByText("Ply 1.5α")).toBeInTheDocument();
+    expect(screen.getByLabelText("Subply position")).toHaveTextContent(
+      "1.5α. Ox 3, …",
+    );
+    expect(screen.getByRole("button", { name: "Alpha Ox" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Alpha Rat, retreater" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "← Back" }));
+    expect(screen.getByText("0 / 1")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Forward →" }));
+    expect(screen.getByText("0.5 / 1")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Forward →" }));
+    expect(screen.getByText("1 / 1")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Subply position")).not.toBeInTheDocument();
+  });
+
+  it("keeps one-step plies atomic", () => {
+    const oneStepMove: TurnMove = {
+      ...earlierMove,
+      id: "one-step",
+      steps: [earlierMove.steps[0]],
+    };
+    localStorage.setItem(
+      "snipe-hunt.mission-7.game",
+      JSON.stringify({
+        schemaVersion: 1,
+        timeline: [
+          { position: earlier, move: null },
+          { position: current, move: oneStepMove },
+        ],
+        cursor: 1,
+        mode: "manual",
+        timeLimitSeconds: 5,
+      }),
+    );
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "← Back" }));
+    expect(screen.getByText("0 / 1")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Subply position")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Forward →" }));
+    expect(screen.getByText("1 / 1")).toBeInTheDocument();
+  });
+
+  it("starts a new line as soon as a different first subply is played", () => {
     localStorage.setItem(
       "snipe-hunt.mission-7.game",
       JSON.stringify({
@@ -273,7 +351,6 @@ describe("pending subply history navigation", () => {
         ],
         cursor: 0,
         mode: "manual",
-        manualAnalysis: false,
         timeLimitSeconds: 5,
       }),
     );
@@ -283,16 +360,54 @@ describe("pending subply history navigation", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Move selected card to Rank 3" }),
     );
-    expect(
-      screen.getByRole("button", { name: "Undo first subply" }),
-    ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Forward →" }));
+    expect(screen.getByText("0.5 / 0.5")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Forward →" })).toBeDisabled();
 
-    expect(
-      screen.queryByRole("button", { name: "Undo first subply" }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByText("2 / 2")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Alpha Rat, retreater" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Move selected card to Rank 2" }),
+    );
+
+    expect(screen.getByText("1 / 1")).toBeInTheDocument();
+    const stored = JSON.parse(
+      localStorage.getItem("snipe-hunt.mission-7.game")!,
+    ) as {
+      timeline: unknown[];
+      draftStep: unknown;
+    };
+    expect(stored.timeline).toHaveLength(2);
+    expect(stored.draftStep).toBeNull();
+  });
+
+  it("analyzes a historical midpoint without starting the computer", async () => {
+    localStorage.setItem(
+      "snipe-hunt.mission-7.game",
+      JSON.stringify({
+        schemaVersion: 3,
+        timeline: [
+          { position: earlier, move: null },
+          { position: current, move: earlierMove },
+        ],
+        cursor: 0,
+        subply: true,
+        draftStep: null,
+        gameMode: "computer-alpha",
+        thinkingTimeSeconds: 5,
+        analysisEnabled: true,
+        analysisDepth: 5,
+      }),
+    );
+    render(<App />);
+
+    await waitFor(() => {
+      const request = analyzerAnalyze.mock.calls.at(-1)?.[0] as
+        | { firstStep?: TurnMove["steps"][number] }
+        | undefined;
+      expect(request?.firstStep).toEqual(earlierMove.steps[0]);
+    });
+    expect(agentChoose).not.toHaveBeenCalled();
+    expect(screen.getByText("0.5 / 1")).toBeInTheDocument();
   });
 
   it("keeps the app running and reports an engine rejection", () => {
@@ -314,7 +429,31 @@ describe("pending subply history navigation", () => {
       "Move could not be played: move is not legal in this position",
     );
     expect(screen.getByRole("heading", { name: "Snipe Hunt" })).toBeInTheDocument();
-    expect(screen.getByText("2 / 2")).toBeInTheDocument();
+    expect(screen.getByText("1.5 / 1.5")).toBeInTheDocument();
+  });
+
+  it("persists and restores a draft midpoint", () => {
+    const view = render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Alpha Rat, retreater" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Move selected card to Rank 2" }),
+    );
+
+    const stored = JSON.parse(
+      localStorage.getItem("snipe-hunt.mission-7.game")!,
+    ) as {
+      schemaVersion: number;
+      subply: boolean;
+      draftStep: TurnMove["steps"][number];
+    };
+    expect(stored.schemaVersion).toBe(3);
+    expect(stored.subply).toBe(true);
+    expect(stored.draftStep).toEqual(move.steps[0]);
+
+    view.unmount();
+    render(<App />);
+    expect(screen.getByText("Ply 1.5α")).toBeInTheDocument();
+    expect(screen.getByText("1.5 / 1.5")).toBeInTheDocument();
   });
 
   it("clears stale analysis before rendering the position after a move", async () => {
@@ -383,7 +522,7 @@ describe("game mode and live analysis", () => {
       ),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Game Log settings")).toBeInTheDocument();
-    expect(screen.getByText("Version 0.17.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.18.0")).toBeInTheDocument();
 
     const mode = screen.getByLabelText("Mode");
     expect(mode).toHaveValue("computer-beta");

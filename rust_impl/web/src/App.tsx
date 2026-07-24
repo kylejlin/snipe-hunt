@@ -691,6 +691,27 @@ export default function App() {
                     <span aria-hidden="true">⚙</span>
                   </summary>
                   <div className="history-menu__items">
+                    <label className="field history-menu__depth">
+                      <span>Analysis depth</span>
+                      <input
+                        type="number"
+                        aria-label="Depth limit"
+                        min="1"
+                        max="10"
+                        step="1"
+                        value={game.analysisDepth}
+                        onChange={(event) => {
+                          const value = Number(event.target.value);
+                          if (Number.isFinite(value)) {
+                            setGame((current) => ({
+                              ...current,
+                              analysisDepth: Math.max(1, Math.min(10, Math.round(value))),
+                            }));
+                          }
+                        }}
+                      />
+                    </label>
+                    <div className="history-menu__divider" role="separator" />
                     <button type="button" onClick={exportHistory}>
                       Export
                     </button>
@@ -718,6 +739,86 @@ export default function App() {
                 {historyError}
               </p>
             )}
+            <div
+              className={`history-analysis${game.analysisEnabled ? " history-analysis--enabled" : ""}`}
+            >
+              <div className="history-analysis__toolbar">
+                <label className="analysis-switch">
+                  <span>Analysis</span>
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    aria-label="Analysis"
+                    checked={game.analysisEnabled}
+                    onChange={(event) => {
+                      analysisRequestSequence.current += 1;
+                      setGame((current) => ({
+                        ...current,
+                        analysisEnabled: event.target.checked,
+                      }));
+                    }}
+                  />
+                </label>
+                {game.analysisEnabled && (
+                  <div className="history-analysis__summary" aria-live="polite">
+                    <div className="history-analysis__score">
+                      <span>Alpha</span>
+                      <strong>
+                        {analysisError
+                          ? "—"
+                          : position.winner
+                            ? formatAlphaScore(
+                                position.winner === "Alpha" ? MATE_SCORE : -MATE_SCORE,
+                                "Alpha",
+                              )
+                            : analysis
+                              ? formatAlphaScore(analysis.score, position.turn)
+                              : "—"}
+                      </strong>
+                    </div>
+                    <span
+                      className={`status-light ${analysisRunning ? "status-light--on" : ""}`}
+                    >
+                      {analysisError
+                        ? "Error"
+                        : analysisRunning
+                          ? "Analyzing"
+                          : analysis || position.winner
+                            ? "Complete"
+                            : "Idle"}
+                    </span>
+                    <span className="history-analysis__depth">
+                      Depth {analysis?.depth ?? "—"} / {game.analysisDepth}
+                    </span>
+                  </div>
+                )}
+              </div>
+              {game.analysisEnabled && (
+                <div className="history-analysis__advice" aria-live="polite">
+                  {analysisError ? (
+                    <p className="error-message">{analysisError}</p>
+                  ) : position.winner ? (
+                    <>
+                      <span className="meta-label">Best next ply</span>
+                      <strong>Game complete</strong>
+                    </>
+                  ) : analysis ? (
+                    <>
+                      <span className="meta-label">
+                        Best next {movePrefix.length > 0 ? "subply" : "ply"}
+                      </span>
+                      <strong>{suggestion}</strong>
+                    </>
+                  ) : (
+                    <p className="empty-copy">
+                      {analysisRunning
+                        ? "Searching for the first completed depth…"
+                        : "No legal analysis is available."}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
             <ol className="move-list">
               {game.timeline.flatMap((timelineEntry, timelineIndex) => {
                 const pendingSubply =
@@ -794,92 +895,6 @@ export default function App() {
                 return pendingSubply ? [completedPly, pendingSubply] : [completedPly];
               })}
             </ol>
-          </section>
-
-          <section className="control-card analysis-card" aria-live="polite">
-            <div className="section-heading">
-              <h2>Analysis</h2>
-              <label className="analysis-switch">
-                <input
-                  type="checkbox"
-                  role="switch"
-                  aria-label="Analysis"
-                  checked={game.analysisEnabled}
-                  onChange={(event) => {
-                    analysisRequestSequence.current += 1;
-                    setGame((current) => ({
-                      ...current,
-                      analysisEnabled: event.target.checked,
-                    }));
-                  }}
-                />
-              </label>
-            </div>
-
-            {game.analysisEnabled ? (
-              <div className="analysis-content">
-                {analysisError ? (
-                  <p className="error-message">{analysisError}</p>
-                ) : position.winner ? (
-                  <div className="evaluation">
-                    <span className="meta-label">Alpha evaluation</span>
-                    <strong>
-                      {formatAlphaScore(
-                        position.winner === "Alpha" ? MATE_SCORE : -MATE_SCORE,
-                        "Alpha",
-                      )}
-                    </strong>
-                  </div>
-                ) : analysis ? (
-                  <>
-                    <div className="evaluation">
-                      <span className="meta-label">Alpha evaluation</span>
-                      <strong>{formatAlphaScore(analysis.score, position.turn)}</strong>
-                    </div>
-                    <div className="suggestion">
-                      <span className="meta-label">
-                        Suggested next {movePrefix.length > 0 ? "subply" : "ply"}
-                      </span>
-                      <strong>{suggestion}</strong>
-                    </div>
-                    <div className="analysis-progress">
-                      <span className={`status-light ${analysisRunning ? "status-light--on" : ""}`}>
-                        {analysisRunning ? "Analyzing" : "Complete"}
-                      </span>
-                      <span>Depth {analysis.depth} / {game.analysisDepth}</span>
-                    </div>
-                  </>
-                ) : (
-                  <p className="empty-copy">
-                    {analysisRunning ? "Searching for the first completed depth…" : "No legal analysis is available."}
-                  </p>
-                )}
-                <label className="field">
-                  <span>Depth limit</span>
-                  <input
-                    type="number"
-                    aria-label="Depth limit"
-                    min="1"
-                    max="10"
-                    step="1"
-                    value={game.analysisDepth}
-                    onChange={(event) => {
-                      const value = Number(event.target.value);
-                      if (Number.isFinite(value)) {
-                        setGame((current) => ({
-                          ...current,
-                          analysisDepth: Math.max(1, Math.min(10, Math.round(value))),
-                        }));
-                      }
-                    }}
-                  />
-                </label>
-              </div>
-            ) : (
-              <p className="empty-copy">
-                Turn on impartial, live evaluation of the displayed position.
-              </p>
-            )}
           </section>
 
           <section className="control-card">

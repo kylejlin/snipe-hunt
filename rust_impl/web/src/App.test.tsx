@@ -271,7 +271,7 @@ describe("game mode and live analysis", () => {
 
     expect(
       screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent),
-    ).toEqual(["Game Log", "Analysis", "Game Mode"]);
+    ).toEqual(["Game Log", "Game Mode"]);
     expect(screen.queryByText("Position")).not.toBeInTheDocument();
     expect(screen.queryByText("PLAY")).not.toBeInTheDocument();
     expect(screen.queryByText("ENGINE")).not.toBeInTheDocument();
@@ -283,7 +283,7 @@ describe("game mode and live analysis", () => {
       ),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Game Log settings")).toBeInTheDocument();
-    expect(screen.getByText("Version 0.7.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.8.0")).toBeInTheDocument();
 
     const mode = screen.getByLabelText("Mode");
     expect(mode).toHaveValue("computer-beta");
@@ -294,7 +294,11 @@ describe("game mode and live analysis", () => {
     ]);
     expect(screen.getByLabelText("Thinking Time")).toHaveValue(5);
     expect(screen.getByRole("switch", { name: "Analysis" })).not.toBeChecked();
-    expect(screen.queryByLabelText("Depth limit")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Depth limit")).toHaveValue(5);
+    expect(screen.queryByText("Idle")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Turn on impartial, live evaluation of the displayed position."),
+    ).not.toBeInTheDocument();
 
     fireEvent.change(mode, { target: { value: "pass-and-play" } });
     expect(screen.queryByLabelText("Thinking Time")).not.toBeInTheDocument();
@@ -307,15 +311,9 @@ describe("game mode and live analysis", () => {
     expect(screen.getByLabelText("Depth limit")).toHaveValue(5);
     expect(await screen.findByText("+1.3")).toBeInTheDocument();
     expect(screen.getByText("Rat 2, Ox 3")).toBeInTheDocument();
-    expect(
-      screen.getByText("+1.3").compareDocumentPosition(screen.getByText("Rat 2, Ox 3")),
-    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(
-      screen.getByText("Rat 2, Ox 3").compareDocumentPosition(screen.getByText("Depth 3 / 5")),
-    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(
-      screen.getByText("Depth 3 / 5").compareDocumentPosition(screen.getByLabelText("Depth limit")),
-    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(screen.getByText("Best next ply")).toBeInTheDocument();
+    expect(screen.getByText("Complete")).toBeInTheDocument();
+    expect(screen.getByText("Depth 3 / 5")).toBeInTheDocument();
     const rat = screen.getByRole("button", { name: "Alpha Rat, retreater" });
     expect(rat).toBeEnabled();
 
@@ -334,7 +332,17 @@ describe("game mode and live analysis", () => {
       });
     });
     expect(await screen.findByText("Ox to Rank 3")).toBeInTheDocument();
-    expect(screen.getByText("Suggested next subply")).toBeInTheDocument();
+    expect(screen.getByText("Best next subply")).toBeInTheDocument();
+  });
+
+  it("constrains the analysis depth from the Game Log settings", () => {
+    render(<App />);
+
+    const depth = screen.getByLabelText("Depth limit");
+    fireEvent.change(depth, { target: { value: "12" } });
+    expect(depth).toHaveValue(10);
+    fireEvent.change(depth, { target: { value: "0" } });
+    expect(depth).toHaveValue(1);
   });
 
   it("migrates old manual automation to pass-and-play with analysis off", () => {

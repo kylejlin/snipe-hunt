@@ -1,4 +1,6 @@
-// Game 3. Kyle Lin vs. Computer. 2026 July 23
+// Beta: Computer (10 seconds of thinking time per ply)
+// Alpha: Human
+// Export Date: 2026-07-23
 
 0b. =Rabbit; Boar Fish Beta; Ox Rabbit Snake Rooster Elephant Ox Tiger Dragon Monkey Rooster Boar Frog; Dog
 0a. =Frog; Tiger Ram Alpha; Rat Dragon Horse Ram Monkey Dog Squid Snake Horse Fish Elephant Squid; Rat

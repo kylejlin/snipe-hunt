@@ -151,12 +151,16 @@ describe("pending subply history navigation", () => {
     expect(
       screen.getByRole("button", { name: "Undo first subply" }),
     ).toBeInTheDocument();
+    const pendingPly = screen.getByLabelText("Pending ply");
+    expect(pendingPly).toHaveTextContent("1α.");
+    expect(pendingPly).toHaveTextContent("Rat 2, ...");
 
     fireEvent.click(screen.getByRole("button", { name: "← Back" }));
 
     expect(
       screen.queryByRole("button", { name: "Undo first subply" }),
     ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Pending ply")).not.toBeInTheDocument();
     expect(screen.getByText("1 / 2")).toBeInTheDocument();
   });
 

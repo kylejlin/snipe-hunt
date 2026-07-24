@@ -593,8 +593,35 @@ export default function App() {
             )}
             <ol className="move-list">
               {game.timeline.flatMap((timelineEntry, timelineIndex) => {
+                const pendingSubply =
+                  timelineIndex === game.cursor && movePrefix.length > 0 ? (
+                    <li
+                      key="pending-subply"
+                      className={`move-list__pending move-list__ply--${position.turn.toLowerCase()}`}
+                      aria-label="Pending ply"
+                    >
+                      <div>
+                        <span className="move-number">
+                          {formatDisplayPlyPrefix(
+                            Math.ceil(position.turnNumber / 2),
+                            position.turn,
+                          )}
+                        </span>
+                        <small>
+                          {formatMove(position, {
+                            id: "pending-subply",
+                            player: position.turn,
+                            label: "",
+                            steps: movePrefix,
+                            captures: [],
+                          })}
+                          , ...
+                        </small>
+                      </div>
+                    </li>
+                  ) : null;
                 if (timelineIndex === 0) {
-                  return formatInitialLines(timelineEntry.position).map((line, index) => {
+                  const initialLines = formatInitialLines(timelineEntry.position).map((line, index) => {
                     const player: Player = index === 0 ? "Beta" : "Alpha";
                     return (
                       <li
@@ -614,10 +641,11 @@ export default function App() {
                       </li>
                     );
                   });
+                  return pendingSubply ? [...initialLines, pendingSubply] : initialLines;
                 }
                 const move = timelineEntry.move;
                 if (!move) return [];
-                return [
+                const completedPly = (
                   <li
                     key={`${move.id}-${timelineIndex}`}
                     className={`move-list__ply--${move.player.toLowerCase()}`}
@@ -634,8 +662,9 @@ export default function App() {
                         {formatMove(game.timeline[timelineIndex - 1].position, move)}
                       </small>
                     </button>
-                  </li>,
-                ];
+                  </li>
+                );
+                return pendingSubply ? [completedPly, pendingSubply] : [completedPly];
               })}
             </ol>
           </section>

@@ -316,16 +316,18 @@ button {
   margin-left: 0;
 }
 
-.card:hover:not(:disabled),
-.card--selected {
+.card:hover:not(:disabled):not(.card--selected) {
   z-index: 5;
-  transform: translateY(-7px) rotate(-1deg);
+  transform: translateY(-7px);
   box-shadow: 0 11px 24px rgba(31, 34, 38, 0.24);
 }
 
 .card--selected {
+  z-index: 5;
+  transform: translateY(-7px);
   outline: 3px solid var(--acid);
   outline-offset: 2px;
+  box-shadow: 0 11px 24px rgba(31, 34, 38, 0.24);
 }
 
 .card:disabled {
@@ -620,9 +622,12 @@ input[type="number"] {
   padding: 0;
   overflow-y: auto;
   list-style: none;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
-.move-list button {
+.move-list button,
+.move-list__pending > div {
   width: 100%;
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr);
@@ -635,6 +640,18 @@ input[type="number"] {
   background: transparent;
   text-align: left;
   cursor: pointer;
+}
+
+.move-list__pending > div {
+  cursor: text;
+}
+
+.move-list button,
+.move-list button *,
+.move-list__pending,
+.move-list__pending * {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .move-list button:hover,
@@ -651,16 +668,21 @@ input[type="number"] {
   border-radius: 5px;
   color: var(--muted);
   background: rgba(45, 49, 55, 0.06);
-  font: 500 0.58rem "DM Mono", monospace;
+  font: 500 0.66rem "DM Mono", monospace;
 }
 
 .move-list small {
   min-width: 0;
   overflow: hidden;
   color: var(--muted);
-  font-size: 0.61rem;
+  font-size: 0.76rem;
+  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.move-list__pending small {
+  color: var(--ink);
 }
 
 .move-list__layout small {

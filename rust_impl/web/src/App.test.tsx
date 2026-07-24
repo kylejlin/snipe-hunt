@@ -532,7 +532,7 @@ describe("subply history navigation", () => {
       subply: boolean;
       draftStep: TurnMove["steps"][number];
     };
-    expect(stored.schemaVersion).toBe(3);
+    expect(stored.schemaVersion).toBe(4);
     expect(stored.subply).toBe(true);
     expect(stored.draftStep).toEqual(move.steps[0]);
 
@@ -589,6 +589,12 @@ describe("game mode and live analysis", () => {
     localStorage.clear();
     analyzerAnalyze.mockClear();
     agentChoose.mockClear();
+    applyMove.mockReset();
+    applyMove.mockImplementation((_position: Position, _move: TurnMove) => ({
+      ...earlier,
+      turn: "Beta",
+      turnNumber: 3,
+    }));
   });
 
   it("uses the new independent defaults and conditional fields", () => {
@@ -608,7 +614,7 @@ describe("game mode and live analysis", () => {
       ),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Game Log settings")).toBeInTheDocument();
-    expect(screen.getByText("Version 0.22.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.23.0")).toBeInTheDocument();
 
     const mode = screen.getByLabelText("Mode");
     expect(mode).toHaveValue("computer-beta");
@@ -676,6 +682,174 @@ describe("game mode and live analysis", () => {
     expect(await screen.findByText("1α. Rat 2, Ox 3")).toBeInTheDocument();
     expect(screen.getByLabelText("Suggested line")).toHaveTextContent("1α.");
     expect(screen.getByLabelText("Suggested line")).toHaveTextContent("1β.");
+  });
+
+  it("plays through a clicked suggestion as a persistent alternative", async () => {
+    const view = render(<App />);
+    fireEvent.click(screen.getByRole("switch", { name: "Analysis" }));
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Play suggested line through 1β. Ox 1, Rat 2*",
+      }),
+    );
+
+    expect(screen.getByLabelText("Alternative line")).toHaveTextContent(
+      "1α. Rat 2, Ox 3",
+    );
+    expect(screen.getByLabelText("Alternative line")).toHaveTextContent(
+      "1β. Ox 1, Rat 2*",
+    );
+    expect(
+      screen.getByText("Exploring an alternative line. Actual history is unchanged."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("2 / 2")).toBeInTheDocument();
+
+    await waitFor(() => {
+      const stored = JSON.parse(
+        localStorage.getItem("snipe-hunt.mission-7.game")!,
+      ) as {
+        schemaVersion: number;
+        timeline: unknown[];
+        alternativeLine: { divergenceIndex: number; entries: unknown[] };
+        activeLine: string;
+        cursor: number;
+      };
+      expect(stored.schemaVersion).toBe(4);
+      expect(stored.timeline).toHaveLength(1);
+      expect(stored.alternativeLine.divergenceIndex).toBe(0);
+      expect(stored.alternativeLine.entries).toHaveLength(2);
+      expect(stored.activeLine).toBe("alternative");
+      expect(stored.cursor).toBe(2);
+    });
+
+    const alternativeMoves = screen
+      .getByLabelText("Alternative line")
+      .querySelectorAll("button");
+    fireEvent.click(alternativeMoves[0]);
+    expect(screen.getByText("1 / 2")).toBeInTheDocument();
+
+    const actualStart = document.querySelector<HTMLButtonElement>(
+      ".move-list__layout button",
+    );
+    expect(actualStart).not.toBeNull();
+    fireEvent.click(actualStart!);
+    expect(screen.getByText("0 / 0")).toBeInTheDocument();
+    expect(screen.getByLabelText("Alternative line")).toBeInTheDocument();
+
+    fireEvent.click(alternativeMoves[1]);
+    expect(screen.getByText("2 / 2")).toBeInTheDocument();
+
+    view.unmount();
+    render(<App />);
+    expect(screen.getByLabelText("Alternative line")).toHaveTextContent(
+      "1β. Ox 1, Rat 2*",
+    );
+    expect(screen.getByText("2 / 2")).toBeInTheDocument();
+  });
+
+  it("reuses a matching actual continuation instead of duplicating it", async () => {
+    analyzerAnalyze.mockImplementationOnce((request, onProgress) => {
+      const update = {
+        requestId: request.requestId,
+        bestMove: earlierMove,
+        score: 75,
+        depth: 2,
+        principalVariation: [earlierMove],
+      };
+      onProgress(update);
+      return Promise.resolve(update);
+    });
+    localStorage.setItem(
+      "snipe-hunt.mission-7.game",
+      JSON.stringify({
+        schemaVersion: 4,
+        timeline: [
+          { position: earlier, move: null },
+          { position: current, move: earlierMove },
+        ],
+        alternativeLine: null,
+        activeLine: "actual",
+        cursor: 0,
+        subply: false,
+        draftStep: null,
+        gameMode: "pass-and-play",
+        thinkingTimeSeconds: 5,
+        analysisEnabled: true,
+        analysisDepth: 5,
+      }),
+    );
+
+    render(<App />);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Play suggested line through 1α. Ox 3, Rat 2",
+      }),
+    );
+
+    expect(screen.getByText("1 / 1")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Alternative line")).not.toBeInTheDocument();
+    await waitFor(() => {
+      const stored = JSON.parse(
+        localStorage.getItem("snipe-hunt.mission-7.game")!,
+      ) as { alternativeLine: unknown; activeLine: string; cursor: number };
+      expect(stored.alternativeLine).toBeNull();
+      expect(stored.activeLine).toBe("actual");
+      expect(stored.cursor).toBe(1);
+    });
+  });
+
+  it("replaces the single alternative when a shorter suggestion is chosen", async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("switch", { name: "Analysis" }));
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Play suggested line through 1β. Ox 1, Rat 2*",
+      }),
+    );
+    expect(screen.getByLabelText("Alternative line").children).toHaveLength(2);
+
+    const actualStart = document.querySelector<HTMLButtonElement>(
+      ".move-list__layout button",
+    );
+    expect(actualStart).not.toBeNull();
+    fireEvent.click(actualStart!);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Play suggested line through 1α. Rat 2, Ox 3",
+      }),
+    );
+
+    expect(screen.getByLabelText("Alternative line")).toHaveTextContent(
+      "1α. Rat 2, Ox 3",
+    );
+    expect(screen.getByLabelText("Alternative line")).not.toHaveTextContent(
+      "1β. Ox 1, Rat 2*",
+    );
+  });
+
+  it("leaves history unchanged when a suggested move is rejected", async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("switch", { name: "Analysis" }));
+    const suggestion = await screen.findByRole("button", {
+      name: "Play suggested line through 1α. Rat 2, Ox 3",
+    });
+    applyMove.mockImplementation(() => {
+      throw new Error("suggested move is no longer legal");
+    });
+
+    fireEvent.click(suggestion);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "suggested move is no longer legal",
+    );
+    expect(screen.queryByLabelText("Alternative line")).not.toBeInTheDocument();
+    const stored = JSON.parse(
+      localStorage.getItem("snipe-hunt.mission-7.game")!,
+    ) as { timeline: unknown[]; alternativeLine: unknown; cursor: number };
+    expect(stored.timeline).toHaveLength(1);
+    expect(stored.alternativeLine).toBeNull();
+    expect(stored.cursor).toBe(0);
   });
 
   it("falls back to the best move when the live variation is empty", async () => {

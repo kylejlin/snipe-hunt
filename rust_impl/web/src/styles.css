@@ -700,6 +700,27 @@ input[type="text"] {
   white-space: nowrap;
 }
 
+.suggested-line__ply button {
+  padding: 3px 5px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.suggested-line__ply button:hover {
+  border-color: var(--line);
+  background: rgba(45, 49, 55, 0.06);
+}
+
+.suggested-line__ply button:focus-visible {
+  border-color: currentColor;
+  outline: 2px solid color-mix(in srgb, currentColor 35%, transparent);
+  outline-offset: 2px;
+}
+
 .move-list {
   display: grid;
   gap: 3px;
@@ -727,6 +748,50 @@ input[type="text"] {
 
 .move-list__pending > div {
   cursor: text;
+}
+
+.move-list__alternative {
+  position: relative;
+  margin: 2px 0 4px 13px;
+  padding: 7px 0 2px 15px;
+  border-left: 2px solid rgba(83, 101, 126, 0.24);
+}
+
+.move-list__alternative::before {
+  position: absolute;
+  top: 0;
+  left: -2px;
+  width: 14px;
+  height: 12px;
+  border-bottom: 2px solid rgba(83, 101, 126, 0.24);
+  content: "";
+}
+
+.move-list__alternative-label {
+  display: block;
+  margin: 0 0 3px 7px;
+  color: var(--muted);
+  font: 500 0.57rem "DM Mono", monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.move-list__alternative ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.move-list__alternative ol > li {
+  min-width: min(100%, 150px);
+  flex: 1 1 150px;
+}
+
+.move-list__alternative .move-list__pending {
+  flex-basis: 100%;
 }
 
 .move-list button,
@@ -772,6 +837,12 @@ input[type="text"] {
 .move-list__empty {
   color: var(--muted);
   font: 400 0.65rem "DM Mono", monospace;
+}
+
+.past-banner--alternative {
+  border-color: rgba(83, 101, 126, 0.22);
+  color: #526279;
+  background: rgba(83, 101, 126, 0.07);
 }
 
 footer {

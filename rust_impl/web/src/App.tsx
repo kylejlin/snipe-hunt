@@ -21,10 +21,18 @@ import {
 } from "./history-format";
 
 type GameMode = "computer-alpha" | "computer-beta" | "pass-and-play";
+type ActiveLine = "actual" | "alternative";
+
+interface AlternativeLine {
+  divergenceIndex: number;
+  entries: TimelineEntry[];
+}
 
 interface StoredGame {
-  schemaVersion: 3;
+  schemaVersion: 4;
   timeline: TimelineEntry[];
+  alternativeLine: AlternativeLine | null;
+  activeLine: ActiveLine;
   cursor: number;
   subply: boolean;
   draftStep: MoveStep | null;
@@ -53,6 +61,47 @@ interface MovingCard {
   animation: Animation;
   clone: HTMLButtonElement;
   card: HTMLButtonElement;
+}
+
+function activeTimeline(game: StoredGame): TimelineEntry[] {
+  if (game.activeLine !== "alternative" || !game.alternativeLine) {
+    return game.timeline;
+  }
+  return [
+    ...game.timeline.slice(0, game.alternativeLine.divergenceIndex + 1),
+    ...game.alternativeLine.entries,
+  ];
+}
+
+function sameMove(left: TurnMove | null, right: TurnMove): boolean {
+  return left?.id === right.id && left.player === right.player;
+}
+
+function restoreAlternativeLine(
+  value: unknown,
+  timeline: TimelineEntry[],
+): AlternativeLine | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
+  const divergenceIndex = Number(candidate.divergenceIndex);
+  const entries = candidate.entries;
+  if (
+    !Number.isInteger(divergenceIndex) ||
+    divergenceIndex < 0 ||
+    divergenceIndex >= timeline.length ||
+    !Array.isArray(entries)
+  ) {
+    throw new Error("Stored alternative line is invalid.");
+  }
+
+  let position = timeline[divergenceIndex].position;
+  const restoredEntries = entries.map((entry, index) => {
+    const move = (entry as TimelineEntry | undefined)?.move;
+    if (!move) throw new Error(`Stored alternative move ${index + 1} is invalid.`);
+    position = engine.applyMove(position, move);
+    return { position, move };
+  });
+  return { divergenceIndex, entries: restoredEntries };
 }
 
 function useCardMovementAnimation(boardPosition: Position) {
@@ -172,113 +221,111 @@ function initialState(): StoredGame {
     if (stored) {
       const parsed = JSON.parse(stored) as Record<string, unknown>;
       const timeline = parsed.timeline as TimelineEntry[];
+      if (!Array.isArray(timeline) || timeline.length === 0) {
+        throw new Error("Stored timeline is invalid.");
+      }
+      if (![1, 2, 3, 4].includes(Number(parsed.schemaVersion))) {
+        throw new Error("Stored schema version is invalid.");
+      }
+
+      const gameMode =
+        parsed.schemaVersion === 1
+          ? parsed.mode === "alpha"
+            ? "computer-alpha"
+            : parsed.mode === "beta"
+              ? "computer-beta"
+              : "pass-and-play"
+          : parsed.gameMode;
+      if (
+        gameMode !== "computer-alpha" &&
+        gameMode !== "computer-beta" &&
+        gameMode !== "pass-and-play"
+      ) {
+        throw new Error("Stored game mode is invalid.");
+      }
+
+      const alternativeLine =
+        parsed.schemaVersion === 4
+          ? restoreAlternativeLine(parsed.alternativeLine, timeline)
+          : null;
+      const activeLine: ActiveLine =
+        parsed.schemaVersion === 4 &&
+        parsed.activeLine === "alternative" &&
+        alternativeLine
+          ? "alternative"
+          : "actual";
+      const restoredTimeline =
+        activeLine === "alternative" && alternativeLine
+          ? [
+              ...timeline.slice(0, alternativeLine.divergenceIndex + 1),
+              ...alternativeLine.entries,
+            ]
+          : timeline;
       const cursor = Number(parsed.cursor);
       if (
-        Array.isArray(timeline) &&
-        timeline.length > 0 &&
-        Number.isInteger(cursor) &&
-        cursor >= 0 &&
-        cursor < timeline.length
+        !Number.isInteger(cursor) ||
+        cursor < 0 ||
+        cursor >= restoredTimeline.length
       ) {
-        // Let the authoritative engine reject stale or malformed schemas
-        // before they can crash the first render.
-        engine.legalMoves(timeline[cursor].position);
-        if (parsed.schemaVersion === 3) {
-          const gameMode = parsed.gameMode;
-          if (
-            gameMode === "computer-alpha" ||
-            gameMode === "computer-beta" ||
-            gameMode === "pass-and-play"
-          ) {
-            const draftStep =
-              parsed.draftStep == null ? null : (parsed.draftStep as MoveStep);
-            if (draftStep) {
-              engine.previewFirstStep(timeline.at(-1)!.position, draftStep);
-            }
-            const subply = parsed.subply === true;
-            const nextMove = timeline[cursor + 1]?.move;
-            const validSubply =
-              !subply ||
-              nextMove?.steps.length === 2 ||
-              (cursor === timeline.length - 1 && Boolean(draftStep));
-            if (!validSubply)
-              throw new Error("Stored subply cursor is invalid.");
-            return {
-              schemaVersion: 3,
-              timeline,
-              cursor,
-              subply,
-              draftStep,
-              gameMode,
-              thinkingTimeSeconds: clampNumber(
-                parsed.thinkingTimeSeconds,
-                0.25,
-                120,
-                5,
-              ),
-              analysisEnabled: parsed.analysisEnabled === true,
-              analysisDepth: clampNumber(parsed.analysisDepth, 1, 10, 5),
-            };
-          }
-        }
-        if (parsed.schemaVersion === 1) {
-          const oldMode = parsed.mode;
-          return {
-            schemaVersion: 3,
-            timeline,
-            cursor,
-            subply: false,
-            draftStep: null,
-            gameMode:
-              oldMode === "alpha"
-                ? "computer-alpha"
-                : oldMode === "beta"
-                  ? "computer-beta"
-                  : "pass-and-play",
-            thinkingTimeSeconds: clampNumber(
-              parsed.timeLimitSeconds,
-              0.25,
-              120,
-              5,
-            ),
-            analysisEnabled: false,
-            analysisDepth: 5,
-          };
-        }
-        if (parsed.schemaVersion === 2) {
-          const gameMode = parsed.gameMode;
-          if (
-            gameMode === "computer-alpha" ||
-            gameMode === "computer-beta" ||
-            gameMode === "pass-and-play"
-          ) {
-            return {
-              schemaVersion: 3,
-              timeline,
-              cursor,
-              subply: false,
-              draftStep: null,
-              gameMode,
-              thinkingTimeSeconds: clampNumber(
-                parsed.thinkingTimeSeconds,
-                0.25,
-                120,
-                5,
-              ),
-              analysisEnabled: parsed.analysisEnabled === true,
-              analysisDepth: clampNumber(parsed.analysisDepth, 1, 10, 5),
-            };
-          }
-        }
+        throw new Error("Stored history cursor is invalid.");
       }
+
+      // Let the authoritative engine reject stale or malformed positions before
+      // they can crash the first render.
+      engine.legalMoves(restoredTimeline[cursor].position);
+      const draftStep =
+        parsed.schemaVersion === 3 || parsed.schemaVersion === 4
+          ? parsed.draftStep == null
+            ? null
+            : (parsed.draftStep as MoveStep)
+          : null;
+      const subply =
+        (parsed.schemaVersion === 3 || parsed.schemaVersion === 4) &&
+        parsed.subply === true;
+      const nextMove = restoredTimeline[cursor + 1]?.move;
+      const validSubply =
+        !subply ||
+        nextMove?.steps.length === 2 ||
+        (cursor === restoredTimeline.length - 1 && Boolean(draftStep));
+      if (!validSubply) throw new Error("Stored subply cursor is invalid.");
+      if (draftStep) {
+        engine.previewFirstStep(restoredTimeline[cursor].position, draftStep);
+      }
+
+      return {
+        schemaVersion: 4,
+        timeline,
+        alternativeLine,
+        activeLine,
+        cursor,
+        subply,
+        draftStep,
+        gameMode,
+        thinkingTimeSeconds: clampNumber(
+          parsed.schemaVersion === 1
+            ? parsed.timeLimitSeconds
+            : parsed.thinkingTimeSeconds,
+          0.25,
+          120,
+          5,
+        ),
+        analysisEnabled:
+          parsed.schemaVersion === 1 ? false : parsed.analysisEnabled === true,
+        analysisDepth:
+          parsed.schemaVersion === 1
+            ? 5
+            : clampNumber(parsed.analysisDepth, 1, 10, 5),
+      };
     }
   } catch {
     localStorage.removeItem(STORAGE_KEY);
   }
 
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     timeline: [{ position: engine.createGame(), move: null }],
+    alternativeLine: null,
+    activeLine: "actual",
     cursor: 0,
     subply: false,
     draftStep: null,
@@ -520,10 +567,11 @@ export default function App() {
   const analysisRequestSequence = useRef(0);
   const importInput = useRef<HTMLInputElement>(null);
 
-  const entry = game.timeline[game.cursor];
+  const displayedTimeline = useMemo(() => activeTimeline(game), [game]);
+  const entry = displayedTimeline[game.cursor];
   const position = entry.position;
   const midpointStep = game.subply
-    ? (game.timeline[game.cursor + 1]?.move?.steps[0] ?? game.draftStep)
+    ? (displayedTimeline[game.cursor + 1]?.move?.steps[0] ?? game.draftStep)
     : null;
   const movePrefix = midpointStep ? [midpointStep] : [];
   const boardPosition = useMemo(
@@ -532,13 +580,16 @@ export default function App() {
     [midpointStep, position],
   );
   const boardRef = useCardMovementAnimation(boardPosition);
-  const totalPlyCount = game.timeline.length - 1 + (game.draftStep ? 0.5 : 0);
+  const totalPlyCount =
+    displayedTimeline.length - 1 + (game.draftStep ? 0.5 : 0);
   const currentPlyCount = game.cursor + (game.subply ? 0.5 : 0);
   const atPresent = currentPlyCount === totalPlyCount;
   const canMoveForward = game.subply
-    ? game.cursor < game.timeline.length - 1
-    : game.cursor < game.timeline.length - 1 || Boolean(game.draftStep);
-  const computerTurn = computerControls(game.gameMode, position.turn);
+    ? game.cursor < displayedTimeline.length - 1
+    : game.cursor < displayedTimeline.length - 1 || Boolean(game.draftStep);
+  const computerTurn =
+    game.activeLine === "actual" &&
+    computerControls(game.gameMode, position.turn);
   const legalMoves = useMemo(() => engine.legalMoves(position), [position]);
   const prefixCandidates = legalMoves.filter((move) =>
     movePrefix.every((step, index) => {
@@ -605,14 +656,42 @@ export default function App() {
       return;
     }
     setGame((current) => {
-      if (current.timeline[current.cursor].position !== position) {
+      const currentTimeline = activeTimeline(current);
+      if (currentTimeline[current.cursor].position !== position) {
         return current;
       }
-      const timeline = current.timeline.slice(0, current.cursor + 1);
-      timeline.push({ position: nextPosition, move });
+      if (current.activeLine === "alternative" && current.alternativeLine) {
+        const oldDivergence = current.alternativeLine.divergenceIndex;
+        const divergenceIndex =
+          current.cursor >= oldDivergence ? oldDivergence : current.cursor;
+        const entries =
+          current.cursor >= oldDivergence
+            ? currentTimeline
+                .slice(oldDivergence + 1, current.cursor + 1)
+                .concat({ position: nextPosition, move })
+            : [{ position: nextPosition, move }];
+        return {
+          ...current,
+          alternativeLine: { divergenceIndex, entries },
+          cursor: current.cursor + 1,
+          subply: false,
+          draftStep: null,
+        };
+      }
+
+      const timeline = current.timeline
+        .slice(0, current.cursor + 1)
+        .concat({ position: nextPosition, move });
+      const alternativeLine =
+        current.alternativeLine &&
+        current.cursor >= current.alternativeLine.divergenceIndex
+          ? current.alternativeLine
+          : null;
       return {
         ...current,
         timeline,
+        alternativeLine,
+        activeLine: "actual",
         cursor: timeline.length - 1,
         subply: false,
         draftStep: null,
@@ -641,7 +720,7 @@ export default function App() {
       .chooseMove(
         {
           position,
-          history: game.timeline
+          history: displayedTimeline
             .slice(0, game.cursor)
             .map((timelineEntry) => timelineEntry.position),
           timeLimitMs: Math.round(game.thinkingTimeSeconds * 1_000),
@@ -663,6 +742,7 @@ export default function App() {
         setAnalysis(null);
         setGame((current) => {
           const isStillCurrent =
+            current.activeLine === "actual" &&
             current.cursor === current.timeline.length - 1 &&
             current.timeline[current.cursor].position === position &&
             computerControls(current.gameMode, position.turn);
@@ -725,7 +805,7 @@ export default function App() {
       .analyze(
         {
           position,
-          history: game.timeline
+          history: displayedTimeline
             .slice(0, game.cursor)
             .map((timelineEntry) => timelineEntry.position),
           maxDepth: game.analysisDepth,
@@ -767,7 +847,7 @@ export default function App() {
     game.analysisDepth,
     game.analysisEnabled,
     game.cursor,
-    game.timeline,
+    displayedTimeline,
     legalMoves.length,
     midpointStep,
     position,
@@ -789,27 +869,76 @@ export default function App() {
       commitMove(matching);
     } else {
       setSelectedCardId(null);
-      setGame((current) => ({
-        ...current,
-        timeline: current.timeline.slice(0, current.cursor + 1),
-        subply: true,
-        draftStep: chosenStep,
-      }));
+      setGame((current) => {
+        if (current.activeLine === "alternative" && current.alternativeLine) {
+          const currentTimeline = activeTimeline(current);
+          const oldDivergence = current.alternativeLine.divergenceIndex;
+          return {
+            ...current,
+            alternativeLine: {
+              divergenceIndex:
+                current.cursor >= oldDivergence
+                  ? oldDivergence
+                  : current.cursor,
+              entries:
+                current.cursor >= oldDivergence
+                  ? currentTimeline.slice(
+                      oldDivergence + 1,
+                      current.cursor + 1,
+                    )
+                  : [],
+            },
+            subply: true,
+            draftStep: chosenStep,
+          };
+        }
+        return {
+          ...current,
+          timeline: current.timeline.slice(0, current.cursor + 1),
+          alternativeLine:
+            current.alternativeLine &&
+            current.cursor >= current.alternativeLine.divergenceIndex
+              ? current.alternativeLine
+              : null,
+          activeLine: "actual",
+          subply: true,
+          draftStep: chosenStep,
+        };
+      });
     }
   };
 
-  const moveCursor = (nextCursor: number) => {
+  const moveCursor = (nextCursor: number, activeLine: ActiveLine) => {
     agentRequestSequence.current += 1;
     analysisRequestSequence.current += 1;
     setAgentThinking(false);
     setAnalysisRunning(false);
     setAnalysis(null);
     setSelectedCardId(null);
-    setGame((current) => ({
-      ...current,
-      cursor: Math.max(0, Math.min(current.timeline.length - 1, nextCursor)),
-      subply: false,
-    }));
+    setGame((current) => {
+      const nextActiveLine =
+        activeLine === "alternative" && current.alternativeLine
+          ? "alternative"
+          : "actual";
+      const nextTimeline =
+        nextActiveLine === "alternative" && current.alternativeLine
+          ? [
+              ...current.timeline.slice(
+                0,
+                current.alternativeLine.divergenceIndex + 1,
+              ),
+              ...current.alternativeLine.entries,
+            ]
+          : current.timeline;
+      return {
+        ...current,
+        activeLine: nextActiveLine,
+        cursor: Math.max(0, Math.min(nextTimeline.length - 1, nextCursor)),
+        subply: false,
+        draftStep:
+          current.activeLine === nextActiveLine ? current.draftStep : null,
+      };
+    });
   };
 
   const moveHistoryBackward = () => {
@@ -820,9 +949,10 @@ export default function App() {
     setAnalysis(null);
     setSelectedCardId(null);
     setGame((current) => {
+      const timeline = activeTimeline(current);
       if (current.subply) return { ...current, subply: false };
       if (current.cursor === 0) return current;
-      const move = current.timeline[current.cursor].move;
+      const move = timeline[current.cursor].move;
       return {
         ...current,
         cursor: current.cursor - 1,
@@ -839,12 +969,13 @@ export default function App() {
     setAnalysis(null);
     setSelectedCardId(null);
     setGame((current) => {
+      const timeline = activeTimeline(current);
       if (current.subply) {
-        if (current.cursor >= current.timeline.length - 1) return current;
+        if (current.cursor >= timeline.length - 1) return current;
         return { ...current, cursor: current.cursor + 1, subply: false };
       }
-      if (current.cursor < current.timeline.length - 1) {
-        const move = current.timeline[current.cursor + 1].move;
+      if (current.cursor < timeline.length - 1) {
+        const move = timeline[current.cursor + 1].move;
         return move?.steps.length === 2
           ? { ...current, subply: true }
           : { ...current, cursor: current.cursor + 1 };
@@ -872,6 +1003,8 @@ export default function App() {
     setGame((current) => ({
       ...current,
       timeline: [{ position: next, move: null }],
+      alternativeLine: null,
+      activeLine: "actual",
       cursor: 0,
       subply: false,
       draftStep: null,
@@ -913,7 +1046,7 @@ export default function App() {
     try {
       const timeline = parseHistory(await file.text(), engine);
       if (
-        game.timeline.length > 1 &&
+        (game.timeline.length > 1 || game.alternativeLine) &&
         !window.confirm(
           "Import this history? The current game will be replaced.",
         )
@@ -929,6 +1062,8 @@ export default function App() {
       setGame((current) => ({
         ...current,
         timeline,
+        alternativeLine: null,
+        activeLine: "actual",
         cursor: timeline.length - 1,
         subply: false,
         draftStep: null,
@@ -960,6 +1095,7 @@ export default function App() {
     return moves.map((move, index) => {
       const item = {
         key: `${index}-${move.id}`,
+        move,
         player: move.player,
         prefix: formatDisplayPlyPrefix(
           Math.ceil((game.cursor + index + 1) / 2),
@@ -971,6 +1107,94 @@ export default function App() {
       return item;
     });
   }, [analysis, game.cursor, position]);
+
+  const playSuggestedLine = (targetIndex: number) => {
+    if (!analysis || targetIndex < 0) return;
+    const moves =
+      analysis.principalVariation.length > 0
+        ? analysis.principalVariation
+        : [analysis.bestMove];
+    const selectedMoves = moves.slice(0, targetIndex + 1);
+    if (selectedMoves.length === 0) return;
+
+    let nextPosition = position;
+    const appliedEntries: TimelineEntry[] = [];
+    try {
+      for (const move of selectedMoves) {
+        nextPosition = engine.applyMove(nextPosition, move);
+        appliedEntries.push({ position: nextPosition, move });
+      }
+    } catch (reason) {
+      setHistoryError(
+        reason instanceof Error
+          ? reason.message
+          : `Suggested line could not be played: ${String(reason)}`,
+      );
+      return;
+    }
+
+    agentRequestSequence.current += 1;
+    analysisRequestSequence.current += 1;
+    setAgentThinking(false);
+    setAnalysisRunning(false);
+    setAnalysis(null);
+    setSelectedCardId(null);
+    setHistoryError(null);
+    setGame((current) => {
+      const currentTimeline = activeTimeline(current);
+      if (currentTimeline[current.cursor]?.position !== position) return current;
+
+      let matchingMoves = 0;
+      while (
+        matchingMoves < selectedMoves.length &&
+        sameMove(
+          currentTimeline[current.cursor + matchingMoves + 1]?.move ?? null,
+          selectedMoves[matchingMoves],
+        )
+      ) {
+        matchingMoves += 1;
+      }
+
+      if (matchingMoves === selectedMoves.length) {
+        return {
+          ...current,
+          cursor: current.cursor + matchingMoves,
+          subply: false,
+          draftStep: null,
+        };
+      }
+
+      const branchIndex = current.cursor + matchingMoves;
+      let divergenceIndex = branchIndex;
+      let entriesBeforeSuggestion: TimelineEntry[] = [];
+      if (
+        current.activeLine === "alternative" &&
+        current.alternativeLine &&
+        branchIndex > current.alternativeLine.divergenceIndex
+      ) {
+        divergenceIndex = current.alternativeLine.divergenceIndex;
+        entriesBeforeSuggestion = currentTimeline.slice(
+          divergenceIndex + 1,
+          branchIndex + 1,
+        );
+      }
+
+      return {
+        ...current,
+        alternativeLine: {
+          divergenceIndex,
+          entries: [
+            ...entriesBeforeSuggestion,
+            ...appliedEntries.slice(matchingMoves),
+          ],
+        },
+        activeLine: "alternative",
+        cursor: current.cursor + selectedMoves.length,
+        subply: false,
+        draftStep: null,
+      };
+    });
+  };
   const alphaEvaluation = position.winner
     ? position.winner === "Alpha"
       ? MATE_SCORE
@@ -986,6 +1210,94 @@ export default function App() {
       : alphaEvaluation > 0
         ? " history-analysis__score--positive"
         : " history-analysis__score--negative";
+
+  const pendingSubplyItem =
+    game.subply && midpointStep ? (
+      <li
+        key="pending-subply"
+        className={`move-list__pending move-list__ply--${position.turn.toLowerCase()}`}
+        aria-label="Subply position"
+      >
+        <div className="move-list__active">
+          <small>
+            {`${formatDisplayPlyPrefix(
+              Math.ceil(position.turnNumber / 2),
+              position.turn,
+              true,
+            )} ${formatMove(position, {
+              id: "pending-subply",
+              player: position.turn,
+              label: "",
+              steps: movePrefix,
+              captures: [],
+            })}, …`}
+          </small>
+        </div>
+      </li>
+    ) : null;
+
+  const renderAlternativeBranch = (divergenceIndex: number) => {
+    const alternative = game.alternativeLine;
+    if (!alternative || alternative.divergenceIndex !== divergenceIndex) {
+      return null;
+    }
+    const path = [
+      ...game.timeline.slice(0, divergenceIndex + 1),
+      ...alternative.entries,
+    ];
+    const items = alternative.entries.flatMap((timelineEntry, index) => {
+      const timelineIndex = divergenceIndex + index + 1;
+      const move = timelineEntry.move;
+      if (!move) return [];
+      const completedPly = (
+        <li
+          key={`${move.id}-${timelineIndex}`}
+          className={`move-list__ply--${move.player.toLowerCase()}`}
+        >
+          <button
+            type="button"
+            className={
+              game.activeLine === "alternative" &&
+              game.cursor === timelineIndex &&
+              !game.subply
+                ? "move-list__active"
+                : ""
+            }
+            onClick={() => moveCursor(timelineIndex, "alternative")}
+          >
+            <small>
+              {`${formatDisplayPlyPrefix(
+                Math.ceil(timelineIndex / 2),
+                move.player,
+              )} ${formatMove(path[timelineIndex - 1].position, move)}`}
+            </small>
+          </button>
+        </li>
+      );
+      return game.activeLine === "alternative" &&
+        game.cursor === timelineIndex &&
+        pendingSubplyItem
+        ? [completedPly, pendingSubplyItem]
+        : [completedPly];
+    });
+    if (
+      game.activeLine === "alternative" &&
+      game.cursor === divergenceIndex &&
+      pendingSubplyItem
+    ) {
+      items.unshift(pendingSubplyItem);
+    }
+
+    return (
+      <li
+        key={`alternative-${divergenceIndex}`}
+        className="move-list__alternative"
+      >
+        <span className="move-list__alternative-label">Alternative line</span>
+        <ol aria-label="Alternative line">{items}</ol>
+      </li>
+    );
+  };
 
   return (
     <div className="app-shell">
@@ -1038,11 +1350,15 @@ export default function App() {
             </div>
           </div>
 
-          {!atPresent && (
+          {game.activeLine === "alternative" ? (
+            <div className="past-banner past-banner--alternative" role="status">
+              Exploring an alternative line. Actual history is unchanged.
+            </div>
+          ) : !atPresent ? (
             <div className="past-banner" role="status">
               Viewing an earlier position. Make a move here to begin a new line.
             </div>
-          )}
+          ) : null}
 
           <div className="board" ref={boardRef}>
             {locations.map((location) => (
@@ -1229,12 +1545,19 @@ export default function App() {
                         className="suggested-line"
                         aria-label="Suggested line"
                       >
-                        {suggestedLine.map((ply) => (
+                        {suggestedLine.map((ply, index) => (
                           <li
                             key={ply.key}
                             className={`suggested-line__ply move-list__ply--${ply.player.toLowerCase()}`}
                           >
-                            {`${ply.prefix} ${ply.notation}`}
+                            <button
+                              type="button"
+                              className={`suggested-line__button move-list__ply--${ply.player.toLowerCase()}`}
+                              onClick={() => playSuggestedLine(index)}
+                              aria-label={`Play suggested line through ${ply.prefix} ${ply.notation}`}
+                            >
+                              {`${ply.prefix} ${ply.notation}`}
+                            </button>
                           </li>
                         ))}
                       </ol>
@@ -1252,31 +1575,10 @@ export default function App() {
             <ol className="move-list">
               {game.timeline.flatMap((timelineEntry, timelineIndex) => {
                 const pendingSubply =
+                  game.activeLine === "actual" &&
                   timelineIndex === game.cursor &&
                   game.subply &&
-                  midpointStep ? (
-                    <li
-                      key="pending-subply"
-                      className={`move-list__pending move-list__ply--${position.turn.toLowerCase()}`}
-                      aria-label="Subply position"
-                    >
-                      <div className="move-list__active">
-                        <small>
-                          {`${formatDisplayPlyPrefix(
-                            Math.ceil(position.turnNumber / 2),
-                            position.turn,
-                            true,
-                          )} ${formatMove(position, {
-                            id: "pending-subply",
-                            player: position.turn,
-                            label: "",
-                            steps: movePrefix,
-                            captures: [],
-                          })}, …`}
-                        </small>
-                      </div>
-                    </li>
-                  ) : null;
+                  pendingSubplyItem;
                 if (timelineIndex === 0) {
                   const initialLines = formatInitialLines(
                     timelineEntry.position,
@@ -1290,11 +1592,13 @@ export default function App() {
                         <button
                           type="button"
                           className={
-                            game.cursor === 0 && !game.subply
+                            game.activeLine === "actual" &&
+                            game.cursor === 0 &&
+                            !game.subply
                               ? "move-list__active"
                               : ""
                           }
-                          onClick={() => moveCursor(0)}
+                          onClick={() => moveCursor(0, "actual")}
                         >
                           <small>
                             {`${formatDisplayPlyPrefix(0, player)} ${line.slice(4)}`}
@@ -1303,9 +1607,12 @@ export default function App() {
                       </li>
                     );
                   });
-                  return pendingSubply
-                    ? [...initialLines, pendingSubply]
-                    : initialLines;
+                  const branch = renderAlternativeBranch(0);
+                  return [
+                    ...initialLines,
+                    ...(pendingSubply ? [pendingSubply] : []),
+                    ...(branch ? [branch] : []),
+                  ];
                 }
                 const move = timelineEntry.move;
                 if (!move) return [];
@@ -1317,11 +1624,13 @@ export default function App() {
                     <button
                       type="button"
                       className={
-                        game.cursor === timelineIndex && !game.subply
+                        game.activeLine === "actual" &&
+                        game.cursor === timelineIndex &&
+                        !game.subply
                           ? "move-list__active"
                           : ""
                       }
-                      onClick={() => moveCursor(timelineIndex)}
+                      onClick={() => moveCursor(timelineIndex, "actual")}
                     >
                       <small>
                         {`${formatDisplayPlyPrefix(
@@ -1335,9 +1644,12 @@ export default function App() {
                     </button>
                   </li>
                 );
-                return pendingSubply
-                  ? [completedPly, pendingSubply]
-                  : [completedPly];
+                const branch = renderAlternativeBranch(timelineIndex);
+                return [
+                  completedPly,
+                  ...(pendingSubply ? [pendingSubply] : []),
+                  ...(branch ? [branch] : []),
+                ];
               })}
             </ol>
           </section>

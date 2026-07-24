@@ -283,7 +283,7 @@ describe("game mode and live analysis", () => {
       ),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Game Log settings")).toBeInTheDocument();
-    expect(screen.getByText("Version 0.9.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.12.0")).toBeInTheDocument();
 
     const mode = screen.getByLabelText("Mode");
     expect(mode).toHaveValue("computer-beta");
@@ -294,6 +294,7 @@ describe("game mode and live analysis", () => {
     ]);
     expect(screen.getByLabelText("Thinking Time")).toHaveValue(5);
     expect(screen.getByRole("switch", { name: "Analysis" })).not.toBeChecked();
+    expect(screen.getByText("Analysis disabled")).toBeInTheDocument();
     expect(screen.getByLabelText("Depth limit")).toHaveValue(5);
     expect(screen.queryByText("Idle")).not.toBeInTheDocument();
     expect(
@@ -309,6 +310,7 @@ describe("game mode and live analysis", () => {
     fireEvent.click(screen.getByRole("switch", { name: "Analysis" }));
 
     expect(screen.getByLabelText("Depth limit")).toHaveValue(5);
+    expect(screen.queryByText("Analysis disabled")).not.toBeInTheDocument();
     const score = await screen.findByText("+1.3");
     expect(score).toHaveClass("history-analysis__score--positive");
     expect(score.parentElement).not.toHaveTextContent("Alpha");

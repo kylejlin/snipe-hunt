@@ -757,25 +757,24 @@ export default function App() {
             <div
               className={`history-analysis${game.analysisEnabled ? " history-analysis--enabled" : ""}`}
             >
-              <div className="history-analysis__toolbar">
-                <label className="analysis-switch">
-                  <span>Analysis</span>
-                  <input
-                    type="checkbox"
-                    role="switch"
-                    aria-label="Analysis"
-                    checked={game.analysisEnabled}
-                    onChange={(event) => {
-                      analysisRequestSequence.current += 1;
-                      setGame((current) => ({
-                        ...current,
-                        analysisEnabled: event.target.checked,
-                      }));
-                    }}
-                  />
-                </label>
-                {game.analysisEnabled && (
-                  <div className="history-analysis__summary" aria-live="polite">
+              <div className="history-analysis__toolbar" aria-live="polite">
+                <div className="history-analysis__summary">
+                  <label className="analysis-switch">
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      aria-label="Analysis"
+                      checked={game.analysisEnabled}
+                      onChange={(event) => {
+                        analysisRequestSequence.current += 1;
+                        setGame((current) => ({
+                          ...current,
+                          analysisEnabled: event.target.checked,
+                        }));
+                      }}
+                    />
+                  </label>
+                  {game.analysisEnabled ? (
                     <div className="history-analysis__score">
                       <strong className={evaluationTone}>
                         {analysisError
@@ -785,10 +784,14 @@ export default function App() {
                               : "—"}
                       </strong>
                     </div>
-                    <span className="history-analysis__depth">
-                      Depth {analysis?.depth ?? "—"} / {game.analysisDepth}
-                    </span>
-                  </div>
+                  ) : (
+                    <span className="history-analysis__disabled">Analysis disabled</span>
+                  )}
+                </div>
+                {game.analysisEnabled && (
+                  <span className="history-analysis__depth">
+                    Depth {analysis?.depth ?? "—"} / {game.analysisDepth}
+                  </span>
                 )}
               </div>
               {game.analysisEnabled && (

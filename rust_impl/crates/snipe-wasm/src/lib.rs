@@ -97,7 +97,7 @@ struct PositionDto {
     locations: LocationsDto,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 struct MoveStepDto {
     card_id: String,
@@ -165,6 +165,22 @@ pub fn legal_moves(position_json: &str) -> Result<String, JsValue> {
         .map(|mv| move_to_dto(state, mv))
         .collect::<Result<Vec<_>, _>>()?;
     encode(&moves)
+}
+
+#[wasm_bindgen]
+pub fn preview_first_step(position_json: &str, step_json: &str) -> Result<String, JsValue> {
+    let position: PositionDto = decode(position_json)?;
+    let requested: MoveStepDto = decode(step_json)?;
+    let state = dto_to_state(&position)?;
+    let first = find_first_animal_step(state, &requested)?;
+    let preview = state
+        .apply_atomic(AtomicMove::Animal(first))
+        .map_err(|error| js_error(format!("illegal first animal step: {error}")))?;
+    encode(&position_to_dto(
+        preview,
+        position.seed,
+        position.turn_number,
+    ))
 }
 
 #[wasm_bindgen]
@@ -445,6 +461,24 @@ fn find_move(state: State, id: &str) -> Result<Move, JsValue> {
         .ok_or_else(|| js_error("move is not legal in this position"))
 }
 
+fn find_first_animal_step(
+    state: State,
+    requested: &MoveStepDto,
+) -> Result<snipe_core::AnimalStep, JsValue> {
+    state
+        .legal_moves()
+        .into_iter()
+        .find_map(|mv| {
+            let Move::Animals { first, .. } = mv else {
+                return None;
+            };
+            let from = state.location_of_animal(first.moved)?;
+            let step = step_dto(animal_id(first.moved), from, first.destination.location());
+            (step == *requested).then_some(first)
+        })
+        .ok_or_else(|| js_error("first animal step is not legal in this position"))
+}
+
 fn move_id(mv: Move) -> String {
     match mv {
         Move::Snipe { destination } => format!("s:{}", destination.number()),
@@ -662,6 +696,72 @@ mod tests {
             })
             .expect("initial position has a two-animal move");
         assert!(move_to_dto(state, two_step).unwrap().label.contains(", "));
+    }
+
+    #[test]
+    fn first_step_preview_preserves_turn_and_shows_captures() {
+        let state = State::empty(Player::Alpha)
+            .with_card(
+                CoreLocation::Row1,
+                CoreCard::Snipe(Player::Alpha),
+                Player::Alpha,
+            )
+            .with_card(
+                CoreLocation::Row6,
+                CoreCard::Snipe(Player::Beta),
+                Player::Beta,
+            )
+            .with_card(
+                CoreLocation::Row3,
+                CoreCard::Animal(Animal::Rooster1),
+                Player::Alpha,
+            )
+            .with_card(
+                CoreLocation::Row3,
+                CoreCard::Animal(Animal::Dog1),
+                Player::Alpha,
+            )
+            .with_card(
+                CoreLocation::Row3,
+                CoreCard::Animal(Animal::Horse1),
+                Player::Alpha,
+            )
+            .with_card(
+                CoreLocation::Row4,
+                CoreCard::Animal(Animal::Mouse2),
+                Player::Beta,
+            )
+            .with_card(
+                CoreLocation::Row4,
+                CoreCard::Animal(Animal::Tiger2),
+                Player::Beta,
+            );
+        let requested = MoveStepDto {
+            card_id: animal_id(Animal::Rooster1),
+            from: "row-3".to_owned(),
+            to: "row-4".to_owned(),
+        };
+        let first = find_first_animal_step(state, &requested).unwrap();
+        let preview = state.apply_atomic(AtomicMove::Animal(first)).unwrap();
+        let dto = position_to_dto(preview, 77, 12);
+
+        assert_eq!(dto.turn, PlayerDto::Alpha);
+        assert_eq!(dto.turn_number, 12);
+        assert!(dto
+            .locations
+            .alpha_reserve
+            .iter()
+            .any(|card| card.id == animal_id(Animal::Mouse2)));
+        assert!(dto
+            .locations
+            .alpha_reserve
+            .iter()
+            .any(|card| card.id == animal_id(Animal::Tiger2)));
+        assert!(dto
+            .locations
+            .row_4
+            .iter()
+            .any(|card| card.id == animal_id(Animal::Rooster1)));
     }
 
     #[test]

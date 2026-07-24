@@ -1,6 +1,18 @@
 import type { WorkerResponse } from "./worker-protocol";
-import type { AnalysisRequest, AnalysisResult, EngineAdapter, Position, TurnMove } from "./types";
-import { wasmApplyMove, wasmCreateGame, wasmLegalMoves } from "./wasm-runtime";
+import type {
+  AnalysisRequest,
+  AnalysisResult,
+  EngineAdapter,
+  MoveStep,
+  Position,
+  TurnMove,
+} from "./types";
+import {
+  wasmApplyMove,
+  wasmCreateGame,
+  wasmLegalMoves,
+  wasmPreviewFirstStep,
+} from "./wasm-runtime";
 
 interface PendingAnalysis {
   resolve: (result: AnalysisResult) => void;
@@ -24,6 +36,10 @@ export class WasmEngineAdapter implements EngineAdapter {
 
   legalMoves(position: Position): TurnMove[] {
     return wasmLegalMoves(position);
+  }
+
+  previewFirstStep(position: Position, step: MoveStep): Position {
+    return wasmPreviewFirstStep(position, step);
   }
 
   applyMove(position: Position, move: TurnMove): Position {

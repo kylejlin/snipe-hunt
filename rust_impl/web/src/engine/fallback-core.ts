@@ -2,6 +2,7 @@ import {
   type AnalysisResult,
   type Card,
   type Location,
+  type MoveStep,
   type Player,
   type Position,
   type TurnMove,
@@ -196,6 +197,35 @@ export function applyFallbackMove(position: Position, move: TurnMove): Position 
     winner,
     turn: winner ? position.turn : otherPlayer(position.turn),
     turnNumber: position.turnNumber + 1,
+  };
+}
+
+export function previewFallbackFirstStep(position: Position, step: MoveStep): Position {
+  const legal = fallbackLegalMoves(position).some(
+    (move) =>
+      move.steps[0]?.cardId === step.cardId &&
+      move.steps[0].from === step.from &&
+      move.steps[0].to === step.to,
+  );
+  if (!legal) throw new Error("First animal step is not legal in this position.");
+
+  const found = findCard(position, step.cardId);
+  if (!found || found.card.isSnipe || found.location.includes("reserve")) {
+    throw new Error("First subply must move an animal already on the board.");
+  }
+
+  const previewMove: TurnMove = {
+    id: `${step.cardId}:${step.from}:${step.to}`,
+    player: position.turn,
+    label: "",
+    steps: [step],
+    captures: [],
+  };
+  const preview = applyFallbackMove(position, previewMove);
+  return {
+    ...preview,
+    turn: position.turn,
+    turnNumber: position.turnNumber,
   };
 }
 

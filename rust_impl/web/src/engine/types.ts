@@ -62,6 +62,7 @@ export interface EngineAdapter {
   readonly name: string;
   createGame(seed?: number): Position;
   legalMoves(position: Position): TurnMove[];
+  previewFirstStep(position: Position, step: MoveStep): Position;
   applyMove(position: Position, move: TurnMove): Position;
   analyze(request: AnalysisRequest, signal: AbortSignal): Promise<AnalysisResult>;
   dispose(): void;

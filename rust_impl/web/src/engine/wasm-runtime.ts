@@ -2,8 +2,9 @@ import init, {
   apply_move,
   create_game,
   legal_moves,
+  preview_first_step,
 } from "../wasm/pkg/snipe_wasm.js";
-import type { Position, TurnMove } from "./types";
+import type { MoveStep, Position, TurnMove } from "./types";
 
 export let wasmInitializationError: Error | null = null;
 
@@ -32,6 +33,13 @@ export function wasmCreateGame(seed = 7_071): Position {
 export function wasmLegalMoves(position: Position): TurnMove[] {
   requireWasm();
   return decode<TurnMove[]>(legal_moves(JSON.stringify(position)));
+}
+
+export function wasmPreviewFirstStep(position: Position, step: MoveStep): Position {
+  requireWasm();
+  return decode<Position>(
+    preview_first_step(JSON.stringify(position), JSON.stringify(step)),
+  );
 }
 
 export function wasmApplyMove(position: Position, move: TurnMove): Position {

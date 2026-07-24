@@ -1,6 +1,19 @@
-import { analyzeFallback, applyFallbackMove, createFallbackGame, fallbackLegalMoves } from "./fallback-core";
+import {
+  analyzeFallback,
+  applyFallbackMove,
+  createFallbackGame,
+  fallbackLegalMoves,
+  previewFallbackFirstStep,
+} from "./fallback-core";
 import type { WorkerRequest, WorkerResponse } from "./worker-protocol";
-import type { AnalysisRequest, AnalysisResult, EngineAdapter, Position, TurnMove } from "./types";
+import type {
+  AnalysisRequest,
+  AnalysisResult,
+  EngineAdapter,
+  MoveStep,
+  Position,
+  TurnMove,
+} from "./types";
 import { WasmEngineAdapter } from "./wasm-adapter";
 import { wasmInitializationError, wasmReady } from "./wasm-runtime";
 
@@ -35,6 +48,10 @@ export class FallbackEngineAdapter implements EngineAdapter {
 
   legalMoves(position: Position): TurnMove[] {
     return fallbackLegalMoves(position);
+  }
+
+  previewFirstStep(position: Position, step: MoveStep): Position {
+    return previewFallbackFirstStep(position, step);
   }
 
   applyMove(position: Position, move: TurnMove): Position {

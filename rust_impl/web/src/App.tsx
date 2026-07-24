@@ -197,6 +197,13 @@ export default function App() {
 
   const entry = game.timeline[game.cursor];
   const position = entry.position;
+  const boardPosition = useMemo(
+    () =>
+      movePrefix.length > 0
+        ? engine.previewFirstStep(position, movePrefix[0])
+        : position,
+    [movePrefix, position],
+  );
   const atPresent = game.cursor === game.timeline.length - 1;
   const analysisOn = analysisIsOn(game.mode, game.manualAnalysis, position.turn);
   const legalMoves = useMemo(() => engine.legalMoves(position), [position]);
@@ -244,6 +251,12 @@ export default function App() {
     setMovePrefix([]);
     setError(null);
   }, [game.cursor, position.turnNumber]);
+
+  useEffect(() => {
+    if (!analysisOn) return;
+    setSelectedCardId(null);
+    setMovePrefix([]);
+  }, [analysisOn]);
 
   const commitMove = (move: TurnMove) => {
     setSelectedCardId(null);
@@ -353,6 +366,8 @@ export default function App() {
     setAnalysis(null);
     setThinking(false);
     setHistoryError(null);
+    setSelectedCardId(null);
+    setMovePrefix([]);
     setGame((current) => ({
       ...current,
       timeline: [{ position: next, move: null }],
@@ -477,7 +492,7 @@ export default function App() {
               <BoardLane
                 key={location}
                 location={location}
-                cards={position.locations[location]}
+                cards={boardPosition.locations[location]}
                 selectedCardId={selectedCardId}
                 selectableCardIds={selectableCardIds}
                 legalDestination={legalDestinations.has(location)}
@@ -505,7 +520,7 @@ export default function App() {
                     key={`${step.cardId}:${step.from}`}
                     onClick={() => setSelectedCardId(step.cardId)}
                   >
-                    {cardName(position, step.cardId)} from {locationLabel(step.from)}
+                    {cardName(boardPosition, step.cardId)} from {locationLabel(step.from)}
                   </button>
                 ))}
                 <button
@@ -516,7 +531,7 @@ export default function App() {
                     setSelectedCardId(null);
                   }}
                 >
-                  Cancel turn
+                  Undo first subply
                 </button>
               </div>
             </div>
@@ -527,6 +542,8 @@ export default function App() {
               ? "Analysis is active. The computer will play when its search completes."
               : selectedCardId
                 ? "Choose a highlighted rank to complete the move."
+                : movePrefix.length > 0
+                  ? "Choose the second animal to complete this ply."
                 : "Select one of the current player’s cards to see its legal destinations."}
           </p>
         </section>
@@ -638,6 +655,8 @@ export default function App() {
                 value={game.mode}
                 onChange={(event) => {
                   requestSequence.current += 1;
+                  setSelectedCardId(null);
+                  setMovePrefix([]);
                   setGame((current) => ({ ...current, mode: event.target.value as AnalysisMode }));
                 }}
               >
@@ -656,9 +675,16 @@ export default function App() {
                 <input
                   type="checkbox"
                   checked={game.manualAnalysis}
-                  onChange={(event) =>
-                    setGame((current) => ({ ...current, manualAnalysis: event.target.checked }))
-                  }
+                  onChange={(event) => {
+                    if (event.target.checked) {
+                      setSelectedCardId(null);
+                      setMovePrefix([]);
+                    }
+                    setGame((current) => ({
+                      ...current,
+                      manualAnalysis: event.target.checked,
+                    }));
+                  }}
                 />
               </label>
             )}

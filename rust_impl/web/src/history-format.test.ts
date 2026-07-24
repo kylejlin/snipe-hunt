@@ -134,6 +134,44 @@ describe("compact history notation", () => {
     expect(imported.at(-1)?.position.turn).toBe(position.turn);
   });
 
+  it("exports Beta computer metadata in the documented format", () => {
+    const timeline = [{ position: createFallbackGame(7_071), move: null }];
+    const exported = serializeHistory(timeline, {
+      exportDate: new Date(2026, 6, 24, 23, 59),
+      computer: { player: "Beta", thinkingTimeSeconds: 10 },
+    });
+
+    expect(exported).toMatch(
+      /^\/\/ Beta: Computer \(10 seconds of thinking time per ply\)\n\/\/ Alpha: Human\n\/\/ Export Date: 2026-07-24\n\n0b\./,
+    );
+    expect(parseHistory(exported, fallbackEngine)).toHaveLength(1);
+  });
+
+  it("exports Alpha computer metadata in Beta/Alpha order", () => {
+    const exported = serializeHistory(
+      [{ position: createFallbackGame(7_071), move: null }],
+      {
+        exportDate: new Date(2026, 0, 2),
+        computer: { player: "Alpha", thinkingTimeSeconds: 1.25 },
+      },
+    );
+
+    expect(exported).toMatch(
+      /^\/\/ Beta: Human\n\/\/ Alpha: Computer \(1\.25 seconds of thinking time per ply\)\n\/\/ Export Date: 2026-01-02\n\n0b\./,
+    );
+  });
+
+  it("exports only the date metadata for pass-and-play histories", () => {
+    const exported = serializeHistory(
+      [{ position: createFallbackGame(7_071), move: null }],
+      { exportDate: new Date(2026, 10, 9) },
+    );
+
+    expect(exported).toMatch(/^\/\/ Export Date: 2026-11-09\n\n0b\./);
+    expect(exported).not.toContain(": Human");
+    expect(exported).not.toContain(": Computer");
+  });
+
   it("formats Alpha and Beta snipe captures from the completed position", () => {
     const before = createFallbackGame(7_071);
     const completed = (

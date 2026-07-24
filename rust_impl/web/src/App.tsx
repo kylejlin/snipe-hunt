@@ -1015,11 +1015,28 @@ export default function App() {
   const exportHistory = () => {
     setHistoryError(null);
     try {
-      const contents = serializeHistory(game.timeline);
+      const exportDate = new Date();
+      const computerPlayer =
+        game.gameMode === "computer-alpha"
+          ? "Alpha"
+          : game.gameMode === "computer-beta"
+            ? "Beta"
+            : null;
+      const contents = serializeHistory(game.timeline, {
+        exportDate,
+        ...(computerPlayer
+          ? {
+              computer: {
+                player: computerPlayer,
+                thinkingTimeSeconds: game.thinkingTimeSeconds,
+              },
+            }
+          : {}),
+      });
       const blob = new Blob([contents], { type: "text/plain;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      const timestamp = new Date()
+      const timestamp = exportDate
         .toISOString()
         .slice(0, 16)
         .replace(/[:T]/g, "-");

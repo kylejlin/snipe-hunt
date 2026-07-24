@@ -12,6 +12,14 @@ export interface TimelineEntry {
   move: TurnMove | null;
 }
 
+export interface HistoryExportMetadata {
+  exportDate: Date;
+  computer?: {
+    player: Player;
+    thinkingTimeSeconds: number;
+  };
+}
+
 const ANIMAL_NAMES = [
   "Rat",
   "Ox",
@@ -140,9 +148,37 @@ export function formatInitialLines(position: Position): [string, string] {
   ];
 }
 
-export function serializeHistory(timeline: TimelineEntry[]): string {
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatMetadata(metadata: HistoryExportMetadata): string[] {
+  const lines: string[] = [];
+  if (metadata.computer) {
+    for (const player of ["Beta", "Alpha"] as const) {
+      lines.push(
+        player === metadata.computer.player
+          ? `// ${player}: Computer (${metadata.computer.thinkingTimeSeconds} seconds of thinking time per ply)`
+          : `// ${player}: Human`,
+      );
+    }
+  }
+  lines.push(`// Export Date: ${formatLocalDate(metadata.exportDate)}`, "");
+  return lines;
+}
+
+export function serializeHistory(
+  timeline: TimelineEntry[],
+  metadata?: HistoryExportMetadata,
+): string {
   if (timeline.length === 0) throw new Error("A history must contain an initial position.");
-  const lines = [...formatInitialLines(timeline[0].position)];
+  const lines = [
+    ...(metadata ? formatMetadata(metadata) : []),
+    ...formatInitialLines(timeline[0].position),
+  ];
   for (let index = 1; index < timeline.length; index += 1) {
     const entry = timeline[index];
     if (!entry.move) throw new Error(`Timeline entry ${index} has no move.`);

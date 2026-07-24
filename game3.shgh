@@ -3,104 +3,104 @@
 0b. =Rabbit; Boar Fish Beta; Ox Rabbit Snake Rooster Elephant Ox Tiger Dragon Monkey Rooster Boar Frog; Dog
 0a. =Frog; Tiger Ram Alpha; Rat Dragon Horse Ram Monkey Dog Squid Snake Horse Fish Elephant Squid; Rat
 1b. Tiger 4, Boar 4
-1a. Ram 3, Dragon 3
-2b. Elephant 4, Monkey 4
-2a. Dragon 4, Ram 4
-3b. Rooster 4, Dragon 4
-3a. Monkey 3, Rat 3
-4b. Ram 3!
-4a. Elephant 3, Ram 2
-5b. Elephant 5!
-5a. Ram 3, Squid 3
-6b. Dog 3!
-6a. Fish 3, Snake 3
-7b. Rabbit 4, Rooster 4
-7a. Snake 2*, Dog 3
-8b. Rabbit 5*, Frog 4
-8a. Squid 3, Tiger 2
-9b. Dragon 5!
-9a. Ram 2!
-10b. Boar 6!
-10a. Dog 1!
-11b. Tiger 2!
-11a. Ram 3, Squid 2*
-12b. Ox 4, Dragon 4
-12a. Fish 2!
-13b. Beta 5
-13a. Rat 2!
-14b. Rabbit 3!
-14a. Fish 3, Squid 3
-15b. Rooster 6!
-15a. Rabbit 2!
-16b. Ox 3, Rooster 5
-16a. Tiger 2!
-17b. Beta 4
-17a. Squid 2!
-18b. Beta 5*
-18a. Tiger 3, Rat 3
-19b. Snake 4, Ox 4
-19a. Tiger 2!
-20b. Beta 4
-20a. Tiger 1!
-21b. Ox 3, Elephant 4
-21a. Tiger 3, Squid 3
-22b. Boar 5, Boar 5
-22a. Squid 2!
-23b. Frog 3, Rooster 4
-23a. Squid 2*, Rabbit 1*
-24b. Rooster 3, Rabbit 4
-24a. Ram 4!
-25b. Snake 3, Boar 4
-25a. Snake 4!
-26b. Beta 5*
-26a. Snake 5, Ram 5
-27b. Rooster 2, Dragon 3
-27a. Tiger 2, Dog 2
-28b. Elephant 3, Boar 4
-28a. Rooster 1!
-29b. Dragon 2, Rabbit 3
-29a. Tiger 1!
-30b. Frog 2, Rabbit 2
-30a. Ram 4!
-31b. Elephant 2, Rabbit 3*
-31a. Horse 2!
-32b. Dragon 4!
-32a. Tiger 2, Rooster 2
-33b. Frog 4!
-33a. Dog 1!
-34b. Rooster 5!
-34a. Ram 5, Ram 6
-35b. Boar 3, Fish 5
-35a. Tiger 1!
-36b. Boar 2, Fish 4
-36a. Tiger 2, Dog 2
-37b. Snake 2, Fish 3
-37a. Squid 1!
-38b. Fish 2, Boar 3
-38a. Rabbit 2, Squid 2
-39b. Snake 3!
-39a. Rabbit 2!
-40b. Snake 2, Boar 2
-40a. Horse 2!
-41b. Snake 3*, Rabbit 2
-41a. Rat 1!
-42b. Beta 4
-42a. Rooster 4!
-43b. Beta 3
-43a. Ram 4*, Snake 4*
-44b. Beta 4*
-44a. Boar 4!
-45b. Dog 5!
-45a. Ram 3*, Boar 5
-46b. Rabbit 1, Boar 3*
-46a. Tiger 1!
-47b. Boar 2, Rooster 4
-47a. Tiger 2, Rat 2
-48b. Beta 5*
-48a. Elephant 4!
-49b. Beta 6*
-49a. Monkey 6!
-50b. Rabbit 2*, Snake 4*
-50a. Elephant 6!
-51b. Beta 5
-51a. Snake 5, Elephant 5
+2a. Ram 3, Dragon 3
+3b. Elephant 4, Monkey 4
+4a. Dragon 4, Ram 4
+5b. Rooster 4, Dragon 4
+6a. Monkey 3, Rat 3
+7b. Ram 3!
+8a. Elephant 3, Ram 2
+9b. Elephant 5!
+10a. Ram 3, Squid 3
+11b. Dog 3!
+12a. Fish 3, Snake 3
+13b. Rabbit 4, Rooster 4
+14a. Snake 2*, Dog 3
+15b. Rabbit 5*, Frog 4
+16a. Squid 3, Tiger 2
+17b. Dragon 5!
+18a. Ram 2!
+19b. Boar 6!
+20a. Dog 1!
+21b. Tiger 2!
+22a. Ram 3, Squid 2*
+23b. Ox 4, Dragon 4
+24a. Fish 2!
+25b. Beta 5
+26a. Rat 2!
+27b. Rabbit 3!
+28a. Fish 3, Squid 3
+29b. Rooster 6!
+30a. Rabbit 2!
+31b. Ox 3, Rooster 5
+32a. Tiger 2!
+33b. Beta 4
+34a. Squid 2!
+35b. Beta 5*
+36a. Tiger 3, Rat 3
+37b. Snake 4, Ox 4
+38a. Tiger 2!
+39b. Beta 4
+40a. Tiger 1!
+41b. Ox 3, Elephant 4
+42a. Tiger 3, Squid 3
+43b. Boar 5, Boar 5
+44a. Squid 2!
+45b. Frog 3, Rooster 4
+46a. Squid 2*, Rabbit 1*
+47b. Rooster 3, Rabbit 4
+48a. Ram 4!
+49b. Snake 3, Boar 4
+50a. Snake 4!
+51b. Beta 5*
+52a. Snake 5, Ram 5
+53b. Rooster 2, Dragon 3
+54a. Tiger 2, Dog 2
+55b. Elephant 3, Boar 4
+56a. Rooster 1!
+57b. Dragon 2, Rabbit 3
+58a. Tiger 1!
+59b. Frog 2, Rabbit 2
+60a. Ram 4!
+61b. Elephant 2, Rabbit 3*
+62a. Horse 2!
+63b. Dragon 4!
+64a. Tiger 2, Rooster 2
+65b. Frog 4!
+66a. Dog 1!
+67b. Rooster 5!
+68a. Ram 5, Ram 6
+69b. Boar 3, Fish 5
+70a. Tiger 1!
+71b. Boar 2, Fish 4
+72a. Tiger 2, Dog 2
+73b. Snake 2, Fish 3
+74a. Squid 1!
+75b. Fish 2, Boar 3
+76a. Rabbit 2, Squid 2
+77b. Snake 3!
+78a. Rabbit 2!
+79b. Snake 2, Boar 2
+80a. Horse 2!
+81b. Snake 3*, Rabbit 2
+82a. Rat 1!
+83b. Beta 4
+84a. Rooster 4!
+85b. Beta 3
+86a. Ram 4*, Snake 4*
+87b. Beta 4*
+88a. Boar 4!
+89b. Dog 5!
+90a. Ram 3*, Boar 5
+91b. Rabbit 1, Boar 3*
+92a. Tiger 1!
+93b. Boar 2, Rooster 4
+94a. Tiger 2, Rat 2
+95b. Beta 5*
+96a. Elephant 4!
+97b. Beta 6*
+98a. Monkey 6!
+99b. Rabbit 2*, Snake 4*
+100a. Elephant 6!
+101b. Beta 5
+102a. Snake 5, Elephant 5

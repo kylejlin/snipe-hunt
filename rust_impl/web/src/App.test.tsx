@@ -252,9 +252,9 @@ describe("subply history navigation", () => {
       screen.getByRole("button", { name: "Undo first subply" }),
     ).toBeInTheDocument();
     const pendingPly = screen.getByLabelText("Subply position");
-    expect(pendingPly).toHaveTextContent("1.5α.");
+    expect(pendingPly).toHaveTextContent("2.5α.");
     expect(pendingPly).toHaveTextContent("Rat 2, …");
-    expect(screen.getByText("Ply 1.5α")).toBeInTheDocument();
+    expect(screen.getByText("Ply 2.5α")).toBeInTheDocument();
     expect(screen.getByText("1.5 / 1.5")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "← Back" }));
@@ -267,7 +267,7 @@ describe("subply history navigation", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Forward →" }));
 
-    expect(screen.getByLabelText("Subply position")).toHaveTextContent("1.5α.");
+    expect(screen.getByLabelText("Subply position")).toHaveTextContent("2.5α.");
     expect(screen.getByText("1.5 / 1.5")).toBeInTheDocument();
   });
 
@@ -580,7 +580,7 @@ describe("subply history navigation", () => {
 
     view.unmount();
     render(<App />);
-    expect(screen.getByText("Ply 1.5α")).toBeInTheDocument();
+    expect(screen.getByText("Ply 2.5α")).toBeInTheDocument();
     expect(screen.getByText("1.5 / 1.5")).toBeInTheDocument();
   });
 
@@ -656,7 +656,7 @@ describe("game mode and live analysis", () => {
       ),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Game Log settings")).toBeInTheDocument();
-    expect(screen.getByText("Version 0.25.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.26.0")).toBeInTheDocument();
 
     const mode = screen.getByLabelText("Mode");
     expect(mode).toHaveValue("computer-beta");
@@ -692,12 +692,12 @@ describe("game mode and live analysis", () => {
     expect(suggestedLine).toHaveClass("suggested-line");
     expect(suggestedLine).toHaveTextContent("1α.");
     expect(suggestedLine).toHaveTextContent("Rat 2, Ox 3");
-    expect(suggestedLine).toHaveTextContent("1β.");
+    expect(suggestedLine).toHaveTextContent("2β.");
     expect(suggestedLine).toHaveTextContent("Ox 1, Rat 2*");
     expect(screen.getByText("1α. Rat 2, Ox 3")).toHaveClass(
       "move-list__ply--alpha",
     );
-    expect(screen.getByText("1β. Ox 1, Rat 2*")).toHaveClass(
+    expect(screen.getByText("2β. Ox 1, Rat 2*")).toHaveClass(
       "move-list__ply--beta",
     );
     expect(suggestedLine.querySelector(".move-number")).not.toBeInTheDocument();
@@ -723,7 +723,7 @@ describe("game mode and live analysis", () => {
     });
     expect(await screen.findByText("1α. Rat 2, Ox 3")).toBeInTheDocument();
     expect(screen.getByLabelText("Suggested line")).toHaveTextContent("1α.");
-    expect(screen.getByLabelText("Suggested line")).toHaveTextContent("1β.");
+    expect(screen.getByLabelText("Suggested line")).toHaveTextContent("2β.");
   });
 
   it("plays through a clicked suggestion as a persistent alternative", async () => {
@@ -732,7 +732,7 @@ describe("game mode and live analysis", () => {
 
     fireEvent.click(
       await screen.findByRole("button", {
-        name: "Play suggested line through 1β. Ox 1, Rat 2*",
+        name: "Play suggested line through 2β. Ox 1, Rat 2*",
       }),
     );
 
@@ -740,7 +740,7 @@ describe("game mode and live analysis", () => {
       "1α. Rat 2, Ox 3",
     );
     expect(screen.getByLabelText("Alternative line")).toHaveTextContent(
-      "1β. Ox 1, Rat 2*",
+      "2β. Ox 1, Rat 2*",
     );
     expect(
       screen.getByText("Exploring an alternative line. Actual history is unchanged."),
@@ -785,7 +785,7 @@ describe("game mode and live analysis", () => {
     view.unmount();
     render(<App />);
     expect(screen.getByLabelText("Alternative line")).toHaveTextContent(
-      "1β. Ox 1, Rat 2*",
+      "2β. Ox 1, Rat 2*",
     );
     expect(screen.getByText("2 / 2")).toBeInTheDocument();
   });
@@ -846,7 +846,7 @@ describe("game mode and live analysis", () => {
     fireEvent.click(screen.getByRole("switch", { name: "Analysis" }));
     fireEvent.click(
       await screen.findByRole("button", {
-        name: "Play suggested line through 1β. Ox 1, Rat 2*",
+        name: "Play suggested line through 2β. Ox 1, Rat 2*",
       }),
     );
     expect(screen.getByLabelText("Alternative line").children).toHaveLength(2);
@@ -866,7 +866,7 @@ describe("game mode and live analysis", () => {
       "1α. Rat 2, Ox 3",
     );
     expect(screen.getByLabelText("Alternative line")).not.toHaveTextContent(
-      "1β. Ox 1, Rat 2*",
+      "2β. Ox 1, Rat 2*",
     );
   });
 

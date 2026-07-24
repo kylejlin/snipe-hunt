@@ -1100,7 +1100,7 @@ export default function App() {
         move,
         player: move.player,
         prefix: formatDisplayPlyPrefix(
-          Math.ceil((game.cursor + index + 1) / 2),
+          game.cursor + index + 1,
           move.player,
         ),
         notation: formatCompletedMove(
@@ -1227,7 +1227,7 @@ export default function App() {
         <div className="move-list__active">
           <small>
             {`${formatDisplayPlyPrefix(
-              Math.ceil(position.turnNumber / 2),
+              position.turnNumber,
               position.turn,
               true,
             )} ${formatMove(position, {
@@ -1273,7 +1273,7 @@ export default function App() {
           >
             <small>
               {`${formatDisplayPlyPrefix(
-                Math.ceil(timelineIndex / 2),
+                timelineIndex,
                 move.player,
               )} ${formatCompletedMove(
                 path[timelineIndex - 1].position,
@@ -1331,7 +1331,7 @@ export default function App() {
               <strong>
                 Ply{" "}
                 {formatDisplayPlyPrefix(
-                  Math.ceil(position.turnNumber / 2),
+                  position.turnNumber,
                   position.turn,
                   game.subply,
                 ).slice(0, -1)}
@@ -1644,7 +1644,7 @@ export default function App() {
                     >
                       <small>
                         {`${formatDisplayPlyPrefix(
-                          Math.ceil(timelineIndex / 2),
+                          timelineIndex,
                           move.player,
                         )} ${formatCompletedMove(
                           game.timeline[timelineIndex - 1].position,

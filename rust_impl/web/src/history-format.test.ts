@@ -56,9 +56,9 @@ describe("compact history notation", () => {
       "0b. =Monkey; Squid Frog Beta; Ox Tiger Rabbit Dragon Horse Elephant Rat Ox Snake Dog Boar Frog; Dragon",
       "0a. =Fish; Rabbit Fish Alpha; Rat Snake Ram Monkey Rooster Dog Boar Tiger Ram Rooster Elephant Squid; Horse",
       "1b. Beta 5",
-      "1a. Alpha 2",
-      "2b. Beta 6*",
-      "2a. Alpha 1*",
+      "2a. Alpha 2",
+      "3b. Beta 6*",
+      "4a. Alpha 1*",
       "",
     ].join("\n");
 
@@ -213,6 +213,21 @@ describe("compact history notation", () => {
     ]);
 
     expect(() => parseHistory(mutate(history), fallbackEngine)).toThrow();
+  });
+
+  it("rejects histories using paired ply numbering", () => {
+    let position = createFallbackGame(7_071);
+    const timeline: TimelineEntry[] = [{ position, move: null }];
+    for (let index = 0; index < 2; index += 1) {
+      const selected = fallbackLegalMoves(position)[0];
+      position = applyFallbackMove(position, selected);
+      timeline.push({ position, move: selected });
+    }
+    const paired = serializeHistory(timeline).replace("\n2a.", "\n1a.");
+
+    expect(() => parseHistory(paired, fallbackEngine)).toThrow(
+      'expected prefix "2a."',
+    );
   });
 
   it("uses Greek player letters only in display prefixes", () => {

@@ -107,7 +107,7 @@ export function formatCompletedMove(
 
 export function formatPlyPrefix(timelineIndex: number, player: Player): string {
   if (timelineIndex < 1) throw new Error("Move plies begin at timeline index 1.");
-  return `${Math.ceil(timelineIndex / 2)}${player === "Alpha" ? "a" : "b"}.`;
+  return `${timelineIndex}${player === "Alpha" ? "a" : "b"}.`;
 }
 
 export function formatDisplayPlyPrefix(

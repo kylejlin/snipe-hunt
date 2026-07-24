@@ -2,6 +2,7 @@ import type {
   Card,
   EngineAdapter,
   Location,
+  MoveStep,
   Player,
   Position,
   TurnMove,
@@ -19,6 +20,8 @@ export interface HistoryExportMetadata {
     thinkingTimeSeconds: number;
   };
 }
+
+type PreviewFirstStep = (position: Position, step: MoveStep) => Position;
 
 const ANIMAL_NAMES = [
   "Rat",
@@ -103,12 +106,51 @@ export function snipeCaptureSuffix(
   return "";
 }
 
+function captureAnnotation(
+  before: Position,
+  after: Position,
+  player: Player,
+): "" | " &" {
+  const reserve = player === "Alpha" ? "alpha-reserve" : "beta-reserve";
+  const beforeIds = new Set(before.locations[reserve].map((card) => card.id));
+  const captured = after.locations[reserve].filter(
+    (card) => !beforeIds.has(card.id),
+  );
+  return captured.length > 0 && !captured.some((card) => card.isSnipe)
+    ? " &"
+    : "";
+}
+
+function movePositions(
+  before: Position,
+  move: TurnMove,
+  after: Position,
+  previewFirstStep?: PreviewFirstStep,
+): Position[] {
+  if (move.steps.length <= 1) return [before, after];
+  if (move.steps.length !== 2 || !previewFirstStep) {
+    throw new Error("Two-step capture notation requires a first-step preview.");
+  }
+  return [before, previewFirstStep(before, move.steps[0]), after];
+}
+
 export function formatCompletedMove(
   before: Position,
   move: TurnMove,
   after: Position,
+  previewFirstStep?: PreviewFirstStep,
 ): string {
-  const notation = formatMove(before, move);
+  const positions = movePositions(before, move, after, previewFirstStep);
+  const notation = move.steps
+    .map(
+      (_, stepIndex) =>
+        `${stepNotation(before, move, stepIndex)}${captureAnnotation(
+          positions[stepIndex],
+          positions[stepIndex + 1],
+          move.player,
+        )}`,
+    )
+    .join(", ");
   const suffix = snipeCaptureSuffix(before, after);
   return suffix ? `${notation} ${suffix}` : notation;
 }
@@ -173,6 +215,7 @@ function formatMetadata(metadata: HistoryExportMetadata): string[] {
 export function serializeHistory(
   timeline: TimelineEntry[],
   metadata?: HistoryExportMetadata,
+  previewFirstStep?: PreviewFirstStep,
 ): string {
   if (timeline.length === 0) throw new Error("A history must contain an initial position.");
   const lines = [
@@ -187,6 +230,7 @@ export function serializeHistory(
         timeline[index - 1].position,
         entry.move,
         entry.position,
+        previewFirstStep,
       )}`,
     );
   }
@@ -301,7 +345,7 @@ function parseInitialPosition(
 
 export function parseHistory(
   source: string,
-  engine: Pick<EngineAdapter, "legalMoves" | "applyMove">,
+  engine: Pick<EngineAdapter, "legalMoves" | "previewFirstStep" | "applyMove">,
 ): TimelineEntry[] {
   const lines = source
     .replace(/\r\n?/g, "\n")
@@ -335,7 +379,16 @@ export function parseHistory(
     const body = text.slice(expectedPrefix.length + 1);
     const suffixMatch = body.match(/ ([+-]#0)$/);
     const assertedSuffix = suffixMatch?.[1] ?? "";
-    const moveBody = suffixMatch ? body.slice(0, -suffixMatch[0].length) : body;
+    const annotatedMoveBody = suffixMatch
+      ? body.slice(0, -suffixMatch[0].length)
+      : body;
+    const annotatedSteps = annotatedMoveBody.split(", ");
+    const assertedCaptures = annotatedSteps.map((step) => step.endsWith(" &"));
+    const moveBody = annotatedSteps
+      .map((step, index) =>
+        assertedCaptures[index] ? step.slice(0, -" &".length) : step,
+      )
+      .join(", ");
     const legalMoves = engine
       .legalMoves(position)
       .filter((move) => formatMove(position, move) === moveBody)
@@ -353,6 +406,26 @@ export function parseHistory(
       );
     }
     const actualSuffix = snipeCaptureSuffix(previousPosition, position);
+    const positions = movePositions(
+      previousPosition,
+      move,
+      position,
+      engine.previewFirstStep,
+    );
+    for (let stepIndex = 0; stepIndex < assertedCaptures.length; stepIndex += 1) {
+      if (
+        assertedCaptures[stepIndex] &&
+        captureAnnotation(
+          positions[stepIndex],
+          positions[stepIndex + 1],
+          move.player,
+        ) !== " &"
+      ) {
+        throw new Error(
+          `Line ${lineNumber}: asserted capture on subply ${stepIndex + 1} does not match the actual result.`,
+        );
+      }
+    }
     if (assertedSuffix && assertedSuffix !== actualSuffix) {
       throw new Error(
         `Line ${lineNumber}: asserted result "${assertedSuffix}" does not match the actual snipe capture.`,

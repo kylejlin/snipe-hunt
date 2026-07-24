@@ -143,23 +143,20 @@ const {
     legalMoves: (position: Position) =>
       position.seed === 2 ? [move] : [earlierMove],
     previewFirstStep: (position: Position, step: TurnMove["steps"][number]) => {
-      const expectedCard = position.seed === 2 ? "animal-0" : "animal-1";
-      if (step.cardId !== expectedCard) {
+      const card = position.locations[step.from].find(
+        (candidate) => candidate.id === step.cardId,
+      );
+      if (!card) {
         throw new Error("first animal step is not legal in this position");
-      }
-      if (position.seed === 2) {
-        return { ...position, locations: locations("row-2") };
       }
       return {
         ...position,
         locations: {
           ...position.locations,
-          "row-2": position.locations["row-2"].filter(
-            (card) => card.id !== "animal-1",
+          [step.from]: position.locations[step.from].filter(
+            (candidate) => candidate.id !== step.cardId,
           ),
-          "row-3": [position.locations["row-2"].find(
-            (card) => card.id === "animal-1",
-          )!],
+          [step.to]: [...position.locations[step.to], card],
         },
       };
     },
@@ -468,6 +465,47 @@ describe("subply history navigation", () => {
     expect(screen.getByText("1α. Ox 3, Rat 2 +#0")).toBeInTheDocument();
   });
 
+  it("shows an animal-capture suffix on the capturing subply", () => {
+    const capturedAnimal = {
+      id: "animal-9",
+      animal: "Rooster",
+      owner: "Beta" as const,
+      isSnipe: false,
+      canRetreat: false,
+    };
+    const before: Position = {
+      ...earlier,
+      locations: {
+        ...earlier.locations,
+        "row-4": [capturedAnimal],
+      },
+    };
+    const after: Position = {
+      ...current,
+      locations: {
+        ...current.locations,
+        "alpha-reserve": [capturedAnimal],
+      },
+    };
+    localStorage.setItem(
+      "snipe-hunt.mission-7.game",
+      JSON.stringify({
+        schemaVersion: 1,
+        timeline: [
+          { position: before, move: null },
+          { position: after, move: earlierMove },
+        ],
+        cursor: 1,
+        mode: "manual",
+        timeLimitSeconds: 5,
+      }),
+    );
+
+    render(<App />);
+
+    expect(screen.getByText("1α. Ox 3, Rat 2 &")).toBeInTheDocument();
+  });
+
   it("starts a new line as soon as a different first subply is played", () => {
     localStorage.setItem(
       "snipe-hunt.mission-7.game",
@@ -656,7 +694,7 @@ describe("game mode and live analysis", () => {
       ),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Game Log settings")).toBeInTheDocument();
-    expect(screen.getByText("Version 0.27.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.28.0")).toBeInTheDocument();
 
     const mode = screen.getByLabelText("Mode");
     expect(mode).toHaveValue("computer-beta");

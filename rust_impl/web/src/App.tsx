@@ -15,7 +15,6 @@ import {
   formatCompletedMove,
   formatDisplayPlyPrefix,
   formatInitialLines,
-  formatMove,
   parseHistory,
   serializeHistory,
   type TimelineEntry,
@@ -1022,17 +1021,21 @@ export default function App() {
           : game.gameMode === "computer-beta"
             ? "Beta"
             : null;
-      const contents = serializeHistory(game.timeline, {
-        exportDate,
-        ...(computerPlayer
-          ? {
-              computer: {
-                player: computerPlayer,
-                thinkingTimeSeconds: game.thinkingTimeSeconds,
-              },
-            }
-          : {}),
-      });
+      const contents = serializeHistory(
+        game.timeline,
+        {
+          exportDate,
+          ...(computerPlayer
+            ? {
+                computer: {
+                  player: computerPlayer,
+                  thinkingTimeSeconds: game.thinkingTimeSeconds,
+                },
+              }
+            : {}),
+        },
+        engine.previewFirstStep,
+      );
       const blob = new Blob([contents], { type: "text/plain;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -1124,6 +1127,7 @@ export default function App() {
           variationPosition,
           move,
           nextVariationPosition,
+          engine.previewFirstStep,
         ),
       };
       variationPosition = nextVariationPosition;
@@ -1247,13 +1251,17 @@ export default function App() {
               position.turnNumber,
               position.turn,
               true,
-            )} ${formatMove(position, {
-              id: "pending-subply",
-              player: position.turn,
-              label: "",
-              steps: movePrefix,
-              captures: [],
-            })}, …`}
+            )} ${formatCompletedMove(
+              position,
+              {
+                id: "pending-subply",
+                player: position.turn,
+                label: "",
+                steps: movePrefix,
+                captures: [],
+              },
+              boardPosition,
+            )}, …`}
           </small>
         </div>
       </li>
@@ -1296,6 +1304,7 @@ export default function App() {
                 path[timelineIndex - 1].position,
                 move,
                 timelineEntry.position,
+                engine.previewFirstStep,
               )}`}
             </small>
           </button>
@@ -1667,6 +1676,7 @@ export default function App() {
                           game.timeline[timelineIndex - 1].position,
                           move,
                           timelineEntry.position,
+                          engine.previewFirstStep,
                         )}`}
                       </small>
                     </button>

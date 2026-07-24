@@ -3,6 +3,7 @@ import {
   applyFallbackMove,
   createFallbackGame,
   fallbackLegalMoves,
+  previewFallbackFirstStep,
 } from "./engine/fallback-core";
 import type { TurnMove } from "./engine/types";
 import {
@@ -17,6 +18,7 @@ import {
 
 const fallbackEngine = {
   legalMoves: fallbackLegalMoves,
+  previewFirstStep: previewFallbackFirstStep,
   applyMove: applyFallbackMove,
 };
 
@@ -210,6 +212,63 @@ describe("compact history notation", () => {
     ).toBe(formatMove(before, betaMove));
   });
 
+  it("annotates each animal-capturing subply independently", () => {
+    const before = createFallbackGame(7_071);
+    const movers = before.locations["row-2"].slice(0, 2);
+    const victims = before.locations["row-5"].slice(0, 2);
+    expect(movers).toHaveLength(2);
+    expect(victims).toHaveLength(2);
+    const withCaptured = (
+      position: typeof before,
+      victim: (typeof victims)[number],
+    ) => ({
+      ...position,
+      locations: {
+        ...position.locations,
+        "row-5": position.locations["row-5"].filter(
+          (card) => card.id !== victim.id,
+        ),
+        "alpha-reserve": [...position.locations["alpha-reserve"], victim],
+      },
+    });
+    const afterFirst = withCaptured(before, victims[0]);
+    const after = withCaptured(afterFirst, victims[1]);
+    const twoStepMove = move("Alpha", [
+      { cardId: movers[0].id, from: "row-2", to: "row-3" },
+      { cardId: movers[1].id, from: "row-2", to: "row-3" },
+    ]);
+
+    expect(
+      formatCompletedMove(before, twoStepMove, after, () => afterFirst),
+    ).toBe(`${movers[0].animal} 3 &, ${movers[1].animal} 3 &`);
+
+    const betaSnipe = before.locations["row-6"].find(
+      (card) => card.id === "beta-snipe",
+    )!;
+    const winningAfter = {
+      ...afterFirst,
+      winner: "Alpha" as const,
+      locations: {
+        ...afterFirst.locations,
+        "row-6": afterFirst.locations["row-6"].filter(
+          (card) => card.id !== betaSnipe.id,
+        ),
+        "alpha-reserve": [
+          ...afterFirst.locations["alpha-reserve"],
+          betaSnipe,
+        ],
+      },
+    };
+    expect(
+      formatCompletedMove(
+        before,
+        twoStepMove,
+        winningAfter,
+        () => afterFirst,
+      ),
+    ).toBe(`${movers[0].animal} 3 &, ${movers[1].animal} 3 +#0`);
+  });
+
   it("exports terminal captures and accepts legacy histories without the annotation", () => {
     const timeline = betaCaptureTimeline();
     const annotated = serializeHistory(timeline);
@@ -231,6 +290,85 @@ describe("compact history notation", () => {
     expect(() =>
       parseHistory(nonWinning.replace(/\n$/, " -#0\n"), fallbackEngine),
     ).toThrow(/asserted result.*does not match/);
+
+    expect(() =>
+      parseHistory(annotated.replace(" -#0", " & -#0"), fallbackEngine),
+    ).toThrow(/asserted capture on subply 1 does not match/);
+    expect(() =>
+      parseHistory(annotated.replace(" -#0", " &"), fallbackEngine),
+    ).toThrow(/asserted capture on subply 1 does not match/);
+  });
+
+  it("rejects a capture annotation when that subply captures nothing", () => {
+    const sample = [
+      "0b. =Monkey; Squid Frog Beta; Ox Tiger Rabbit Dragon Horse Elephant Rat Ox Snake Dog Boar Frog; Dragon",
+      "0a. =Fish; Rabbit Fish Alpha; Rat Snake Ram Monkey Rooster Dog Boar Tiger Ram Rooster Elephant Squid; Horse",
+      "1b. Beta 5 &",
+      "",
+    ].join("\n");
+
+    expect(() => parseHistory(sample, fallbackEngine)).toThrow(
+      /asserted capture on subply 1 does not match/,
+    );
+  });
+
+  it("accepts omitted capture annotations and serializes them canonically", () => {
+    const layout = [
+      "0b. =Monkey; Squid Frog Beta; Ox Tiger Rabbit Dragon Horse Elephant Rat Ox Snake Dog Boar Frog; Dragon",
+      "0a. =Fish; Rabbit Fish Alpha; Rat Snake Ram Monkey Rooster Dog Boar Tiger Ram Rooster Elephant Squid; Horse",
+    ];
+    const captureEngine = {
+      legalMoves: (position: ReturnType<typeof createFallbackGame>) => {
+        const ox = position.locations["row-5"].find(
+          (card) => card.animal === "Ox",
+        );
+        return ox
+          ? [
+              move("Beta", [
+                { cardId: ox.id, from: "row-5", to: "row-4" },
+              ]),
+            ]
+          : [];
+      },
+      previewFirstStep: previewFallbackFirstStep,
+      applyMove: (
+        position: ReturnType<typeof createFallbackGame>,
+        selected: TurnMove,
+      ) => {
+        const mover = position.locations["row-5"].find(
+          (card) => card.id === selected.steps[0].cardId,
+        )!;
+        const captured = position.locations["row-4"][0];
+        return {
+          ...position,
+          turn: "Alpha" as const,
+          turnNumber: position.turnNumber + 1,
+          locations: {
+            ...position.locations,
+            "row-5": position.locations["row-5"].filter(
+              (card) => card.id !== mover.id,
+            ),
+            "row-4": [
+              ...position.locations["row-4"].slice(1),
+              mover,
+            ],
+            "beta-reserve": [
+              ...position.locations["beta-reserve"],
+              captured,
+            ],
+          },
+        };
+      },
+    };
+    const unannotated = [...layout, "1b. Ox 4", ""].join("\n");
+    const annotated = [...layout, "1b. Ox 4 &", ""].join("\n");
+
+    expect(
+      serializeHistory(parseHistory(unannotated, captureEngine)),
+    ).toBe(annotated);
+    expect(
+      serializeHistory(parseHistory(annotated, captureEngine)),
+    ).toBe(annotated);
   });
 
   it.each([

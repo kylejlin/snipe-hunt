@@ -12,9 +12,9 @@ import {
   locationLabel,
 } from "./engine/types";
 import {
+  formatDisplayPlyPrefix,
   formatInitialLines,
   formatMove,
-  formatPlyPrefix,
   parseHistory,
   serializeHistory,
   type TimelineEntry,
@@ -119,7 +119,6 @@ function CardTile({
     >
       <img aria-hidden="true" className="card__layer" src={cardBackground(card)} alt="" />
       <img aria-hidden="true" className="card__layer" src={cardImage(card)} alt="" />
-      <span className="card__label">{card.isSnipe ? `${card.owner[0]} Snipe` : card.animal}</span>
     </button>
   );
 }
@@ -157,7 +156,7 @@ function BoardLane({
         disabled={!legalDestination}
         aria-label={legalDestination ? `Move selected card to ${locationLabel(location)}` : locationLabel(location)}
       >
-        <span className="lane__rank">{rank ?? (location === "alpha-reserve" ? "A" : "B")}</span>
+        <span className="lane__rank">{rank ?? (location === "alpha-reserve" ? "α" : "β")}</span>
         <span>{isReserve ? "Reserve" : `Rank ${rank}`}</span>
         {legalDestination && <span className="lane__move-hint">Move here</span>}
       </button>
@@ -347,7 +346,7 @@ export default function App() {
   };
 
   const resetGame = () => {
-    if (!window.confirm("Start a fresh hunt? The current history will be replaced.")) return;
+    if (!window.confirm("Start a fresh game? The current history will be replaced.")) return;
     requestSequence.current += 1;
     const next = engine.createGame(Date.now() & 0x7fffffff);
     localStorage.removeItem(STORAGE_KEY);
@@ -412,9 +411,9 @@ export default function App() {
   };
 
   const status = position.winner
-    ? `${position.winner} wins the hunt`
+    ? `${position.winner} wins`
     : thinking
-      ? `${position.turn} is hunting…`
+      ? `${position.turn} is thinking…`
       : analysisOn
         ? `${position.turn} computer turn`
         : `${position.turn} to move`;
@@ -423,7 +422,6 @@ export default function App() {
     <div className="app-shell">
       <header className="masthead">
         <div>
-          <p className="eyebrow">MISSION 7 · FIELD TABLE</p>
           <h1>Snipe Hunt</h1>
         </div>
         <div className={`turn-chip turn-chip--${position.turn.toLowerCase()}`} aria-live="polite">
@@ -437,7 +435,13 @@ export default function App() {
           <div className="table-panel__topline">
             <div>
               <span className="meta-label">Position</span>
-              <strong>Turn {position.turnNumber}</strong>
+              <strong>
+                Ply{" "}
+                {formatDisplayPlyPrefix(
+                  Math.ceil(position.turnNumber / 2),
+                  position.turn,
+                ).slice(0, -1)}
+              </strong>
             </div>
             <div className="history-controls" aria-label="History navigation">
               <button
@@ -528,6 +532,95 @@ export default function App() {
         </section>
 
         <aside className="sidebar">
+          <section className="control-card history-card">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">GAME LOG</p>
+                <h2>Ply history</h2>
+              </div>
+              <div className="history-heading-actions">
+                <span className="move-count">{game.timeline.length - 1} plies</span>
+                <details className="history-menu">
+                  <summary aria-label="Ply history settings" title="Ply history settings">
+                    <span aria-hidden="true">⚙</span>
+                  </summary>
+                  <div className="history-menu__items">
+                    <button type="button" onClick={exportHistory}>
+                      Export
+                    </button>
+                    <button type="button" onClick={() => importInput.current?.click()}>
+                      Import
+                    </button>
+                  </div>
+                </details>
+              </div>
+            </div>
+            <input
+              ref={importInput}
+              className="visually-hidden"
+              type="file"
+              accept=".shgh"
+              aria-label="Choose a Snipe Hunt history file"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) void importHistory(file);
+              }}
+            />
+            {historyError && (
+              <p className="error-message history-error" role="alert">
+                {historyError}
+              </p>
+            )}
+            <ol className="move-list">
+              {game.timeline.flatMap((timelineEntry, timelineIndex) => {
+                if (timelineIndex === 0) {
+                  return formatInitialLines(timelineEntry.position).map((line, index) => {
+                    const player: Player = index === 0 ? "Beta" : "Alpha";
+                    return (
+                      <li
+                        key={`initial-layout-${player.toLowerCase()}`}
+                        className={`move-list__layout move-list__ply--${player.toLowerCase()}`}
+                      >
+                        <button
+                          type="button"
+                          className={game.cursor === 0 ? "move-list__active" : ""}
+                          onClick={() => moveCursor(0)}
+                        >
+                          <span className="move-number">
+                            {formatDisplayPlyPrefix(0, player)}
+                          </span>
+                          <small>{line.slice(4)}</small>
+                        </button>
+                      </li>
+                    );
+                  });
+                }
+                const move = timelineEntry.move;
+                if (!move) return [];
+                return [
+                  <li
+                    key={`${move.id}-${timelineIndex}`}
+                    className={`move-list__ply--${move.player.toLowerCase()}`}
+                  >
+                    <button
+                      type="button"
+                      className={game.cursor === timelineIndex ? "move-list__active" : ""}
+                      onClick={() => moveCursor(timelineIndex)}
+                    >
+                      <span className="move-number">
+                        {formatDisplayPlyPrefix(Math.ceil(timelineIndex / 2), move.player)}
+                      </span>
+                      <small>
+                        {formatMove(game.timeline[timelineIndex - 1].position, move)}
+                      </small>
+                    </button>
+                  </li>,
+                ];
+              })}
+            </ol>
+          </section>
+
           <section className="control-card">
             <div className="section-heading">
               <div>
@@ -635,92 +728,11 @@ export default function App() {
             )}
           </section>
 
-          <section className="control-card history-card">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">GAME LOG</p>
-                <h2>Ply history</h2>
-              </div>
-              <span className="move-count">{game.timeline.length - 1} plies</span>
-            </div>
-            <div className="history-actions">
-              <button className="button button--quiet" type="button" onClick={exportHistory}>
-                Export History
-              </button>
-              <button
-                className="button button--quiet"
-                type="button"
-                onClick={() => importInput.current?.click()}
-              >
-                Import History
-              </button>
-              <input
-                ref={importInput}
-                className="visually-hidden"
-                type="file"
-                accept=".shgh"
-                aria-label="Choose a Snipe Hunt history file"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = "";
-                  if (file) void importHistory(file);
-                }}
-              />
-            </div>
-            {historyError && (
-              <p className="error-message history-error" role="alert">
-                {historyError}
-              </p>
-            )}
-            <ol className="move-list">
-              {game.timeline.map((timelineEntry, timelineIndex) => {
-                if (timelineIndex === 0) {
-                  const initialLines = formatInitialLines(timelineEntry.position);
-                  return (
-                    <li key="initial-layout" className="move-list__layout">
-                      <button
-                        type="button"
-                        className={game.cursor === 0 ? "move-list__active" : ""}
-                        onClick={() => moveCursor(0)}
-                      >
-                        <span className="move-number">0</span>
-                        <span>
-                          <strong>Initial layout</strong>
-                          <small>{initialLines[0]}</small>
-                          <small>{initialLines[1]}</small>
-                        </span>
-                      </button>
-                    </li>
-                  );
-                }
-                const move = timelineEntry.move;
-                if (!move) return null;
-                return (
-                  <li key={`${move.id}-${timelineIndex}`}>
-                    <button
-                      type="button"
-                      className={game.cursor === timelineIndex ? "move-list__active" : ""}
-                      onClick={() => moveCursor(timelineIndex)}
-                    >
-                      <span className="move-number">
-                        {formatPlyPrefix(timelineIndex, move.player)}
-                      </span>
-                      <span>
-                        <strong>{move.player}</strong>
-                        <small>{formatMove(game.timeline[timelineIndex - 1].position, move)}</small>
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ol>
-          </section>
         </aside>
       </main>
 
       <footer>
-        <span>Field position autosaved on this device</span>
-        <span>Version {version} · Rust/WASM search engine · timed analysis</span>
+        <span>Version {version}</span>
       </footer>
     </div>
   );

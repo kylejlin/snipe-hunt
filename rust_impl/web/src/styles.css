@@ -280,6 +280,7 @@ button {
 .lane__rank {
   color: #d9e7dd;
   font: 600 1.05rem "DM Mono", monospace;
+  text-transform: none;
 }
 
 .lane__move-hint {
@@ -349,20 +350,6 @@ button {
   height: 100%;
   object-fit: contain;
   pointer-events: none;
-}
-
-.card__label {
-  position: absolute;
-  right: 5%;
-  bottom: 5%;
-  left: 5%;
-  overflow: hidden;
-  color: #1d2b24;
-  font-size: clamp(0.42rem, 0.62vw, 0.62rem);
-  font-weight: 800;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .board-help {
@@ -570,10 +557,65 @@ input[type="number"] {
   min-height: 180px;
 }
 
-.history-actions {
+.history-heading-actions {
   display: flex;
+  align-items: center;
   gap: 7px;
-  margin-bottom: 10px;
+}
+
+.history-menu {
+  position: relative;
+}
+
+.history-menu summary {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  list-style: none;
+}
+
+.history-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.history-menu[open] summary,
+.history-menu summary:hover {
+  color: var(--acid);
+  border-color: rgba(200, 235, 115, 0.4);
+}
+
+.history-menu__items {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 112px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0a1c18;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38);
+}
+
+.history-menu__items button {
+  width: 100%;
+  padding: 8px 9px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.history-menu__items button:hover {
+  background: rgba(200, 235, 115, 0.1);
 }
 
 .history-error {
@@ -623,17 +665,8 @@ input[type="number"] {
   font: 500 0.58rem "DM Mono", monospace;
 }
 
-.move-list button > span:last-child {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.move-list strong {
-  font-size: 0.68rem;
-}
-
 .move-list small {
+  min-width: 0;
   overflow: hidden;
   color: var(--muted);
   font-size: 0.61rem;
@@ -649,6 +682,16 @@ input[type="number"] {
   white-space: normal;
 }
 
+.move-list__ply--alpha .move-number {
+  color: var(--alpha);
+  background: rgba(78, 182, 255, 0.1);
+}
+
+.move-list__ply--beta .move-number {
+  color: var(--beta);
+  background: rgba(239, 107, 88, 0.1);
+}
+
 .move-list__empty {
   color: var(--muted);
   font: 400 0.65rem "DM Mono", monospace;
@@ -656,7 +699,7 @@ input[type="number"] {
 
 footer {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   gap: 20px;
   padding: 17px 3px 0;
   color: #64766e;
@@ -743,10 +786,6 @@ footer {
     justify-content: flex-start;
   }
 
-  footer {
-    flex-direction: column;
-    gap: 5px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

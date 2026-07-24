@@ -6,6 +6,7 @@ import {
 } from "./engine/fallback-core";
 import type { TurnMove } from "./engine/types";
 import {
+  formatDisplayPlyPrefix,
   formatMove,
   parseHistory,
   serializeHistory,
@@ -31,8 +32,8 @@ describe("compact history notation", () => {
       "0a. =Fish; Rabbit Fish Alpha; Rat Snake Ram Monkey Rooster Dog Boar Tiger Ram Rooster Elephant Squid; Horse",
       "1b. Beta 5",
       "1a. Alpha 2",
-      "2b. Beta 6R",
-      "2a. Alpha 1R",
+      "2b. Beta 6*",
+      "2a. Alpha 1*",
       "",
     ].join("\n");
 
@@ -62,7 +63,7 @@ describe("compact history notation", () => {
         position,
         move("Beta", [{ cardId: betaRetreater!.id, from: "row-5", to: "row-6" }]),
       ),
-    ).toBe(`${betaRetreater!.animal} 6R`);
+    ).toBe(`${betaRetreater!.animal} 6*`);
     expect(
       formatMove(
         position,
@@ -85,7 +86,7 @@ describe("compact history notation", () => {
           { cardId: betaRetreater!.id, from: "row-5", to: "row-6" },
         ]),
       ),
-    ).toBe(`${betaOther!.animal} 4, ${betaRetreater!.animal} 6R`);
+    ).toBe(`${betaOther!.animal} 4, ${betaRetreater!.animal} 6*`);
   });
 
   it("round-trips a complete active timeline", () => {
@@ -111,7 +112,7 @@ describe("compact history notation", () => {
   it.each([
     ["uppercase player prefix", (history: string) => history.replace("1b.", "1B.")],
     ["Greek player prefix", (history: string) => history.replace("1b.", "1β.")],
-    ["legacy backward suffix", (history: string) => history.replace(/(\d)R/, "$1B")],
+    ["legacy retreat suffix", (history: string) => history.replace(/(\d)\*/, "$1R")],
   ])("rejects %s", (_name, mutate) => {
     let position = createFallbackGame(7_071);
     const first = fallbackLegalMoves(position).find(
@@ -126,6 +127,14 @@ describe("compact history notation", () => {
     ]);
 
     expect(() => parseHistory(mutate(history), fallbackEngine)).toThrow();
+  });
+
+  it("uses Greek player letters only in display prefixes", () => {
+    expect(formatDisplayPlyPrefix(0, "Beta")).toBe("0β.");
+    expect(formatDisplayPlyPrefix(3, "Alpha")).toBe("3α.");
+    expect(serializeHistory([{ position: createFallbackGame(7_071), move: null }])).toMatch(
+      /^0b\.[^\n]*\n0a\./,
+    );
   });
 
   it("rejects embedded blank lines without changing parser state", () => {

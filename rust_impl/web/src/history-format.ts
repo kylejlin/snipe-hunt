@@ -69,7 +69,7 @@ function stepNotation(position: Position, move: TurnMove, stepIndex: number): st
     move.player === "Alpha"
       ? destinationRank > sourceRank
       : destinationRank < sourceRank;
-  return `${cardNotation(card)} ${destinationRank}${isAdvance ? "" : "R"}`;
+  return `${cardNotation(card)} ${destinationRank}${isAdvance ? "" : "*"}`;
 }
 
 export function formatMove(position: Position, move: TurnMove): string {
@@ -81,6 +81,11 @@ export function formatMove(position: Position, move: TurnMove): string {
 export function formatPlyPrefix(timelineIndex: number, player: Player): string {
   if (timelineIndex < 1) throw new Error("Move plies begin at timeline index 1.");
   return `${Math.ceil(timelineIndex / 2)}${player === "Alpha" ? "a" : "b"}.`;
+}
+
+export function formatDisplayPlyPrefix(plyNumber: number, player: Player): string {
+  if (plyNumber < 0) throw new Error("Ply numbers cannot be negative.");
+  return `${plyNumber}${player === "Alpha" ? "α" : "β"}.`;
 }
 
 function formatLocation(position: Position, location: Location): string {

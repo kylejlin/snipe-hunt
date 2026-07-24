@@ -16,6 +16,7 @@ const {
   earlierMove,
   analyzerAnalyze,
   agentChoose,
+  applyMove,
 } = vi.hoisted(() => {
   const locations = (ratLocation: Location): Position["locations"] => ({
     "alpha-reserve": [],
@@ -107,15 +108,16 @@ const {
   };
   const analyzerAnalyze = vi.fn(
     (
-      request: { requestId: number },
+      request: { requestId: number; position?: Position },
       onProgress: (update: unknown) => void,
     ) => {
+      const bestMove = request.position?.turn === "Beta" ? reply : move;
       const update = {
         requestId: request.requestId,
-        bestMove: move,
+        bestMove,
         score: 125,
         depth: 3,
-        principalVariation: [move, reply],
+        principalVariation: request.position?.turn === "Beta" ? [reply] : [move, reply],
       };
       onProgress(update);
       return Promise.resolve(update);
@@ -134,6 +136,7 @@ const {
       engineName: "test",
     }),
   );
+  const applyMove = vi.fn((_position: Position, _move: TurnMove) => applied);
   const rules = {
     name: "test engine",
     createGame: () => current,
@@ -160,7 +163,7 @@ const {
         },
       };
     },
-    applyMove: () => applied,
+    applyMove,
   };
   const services = {
     rules,
@@ -182,6 +185,7 @@ const {
     earlierMove,
     analyzerAnalyze,
     agentChoose,
+    applyMove,
   };
 });
 
@@ -213,6 +217,12 @@ describe("pending subply history navigation", () => {
 
   beforeEach(() => {
     localStorage.clear();
+    applyMove.mockClear();
+    applyMove.mockImplementation((_position: Position, _move: TurnMove) => ({
+      ...earlier,
+      turn: "Beta",
+      turnNumber: 3,
+    }));
     localStorage.setItem(
       "snipe-hunt.mission-7.game",
       JSON.stringify({
@@ -284,6 +294,67 @@ describe("pending subply history navigation", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByText("2 / 2")).toBeInTheDocument();
   });
+
+  it("keeps the app running and reports an engine rejection", () => {
+    applyMove.mockImplementationOnce(() => {
+      throw "move is not legal in this position";
+    });
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Alpha Rat, retreater" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Move selected card to Rank 2" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Alpha Ox" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Move selected card to Rank 3" }),
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Move could not be played: move is not legal in this position",
+    );
+    expect(screen.getByRole("heading", { name: "Snipe Hunt" })).toBeInTheDocument();
+    expect(screen.getByText("2 / 2")).toBeInTheDocument();
+  });
+
+  it("clears stale analysis before rendering the position after a move", async () => {
+    localStorage.setItem(
+      "snipe-hunt.mission-7.game",
+      JSON.stringify({
+        schemaVersion: 2,
+        timeline: [{ position: current, move: null }],
+        cursor: 0,
+        gameMode: "pass-and-play",
+        thinkingTimeSeconds: 5,
+        analysisEnabled: true,
+        analysisDepth: 5,
+      }),
+    );
+    applyMove.mockImplementation((position: Position, candidate: TurnMove) => {
+      if (position.turn === "Beta" && candidate.player === "Alpha") {
+        throw "move is not legal in this position";
+      }
+      return {
+        ...earlier,
+        turn: "Beta",
+        turnNumber: 3,
+      };
+    });
+    render(<App />);
+    expect(await screen.findByText("+1.3")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Alpha Rat, retreater" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Move selected card to Rank 2" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Alpha Ox" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Move selected card to Rank 3" }),
+    );
+
+    expect(screen.getByText("Beta to move")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Snipe Hunt" })).toBeInTheDocument();
+  });
 });
 
 describe("game mode and live analysis", () => {
@@ -312,7 +383,7 @@ describe("game mode and live analysis", () => {
       ),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Game Log settings")).toBeInTheDocument();
-    expect(screen.getByText("Version 0.15.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.17.0")).toBeInTheDocument();
 
     const mode = screen.getByLabelText("Mode");
     expect(mode).toHaveValue("computer-beta");
@@ -513,5 +584,28 @@ describe("game mode and live analysis", () => {
     });
     expect(screen.getByRole("button", { name: "Alpha Rat, retreater" })).toBeDisabled();
     expect(await screen.findByText("+1.3")).toBeInTheDocument();
+  });
+
+  it("reports an invalid computer response without crashing the app", async () => {
+    applyMove.mockImplementationOnce(() => {
+      throw "move is not legal in this position";
+    });
+    localStorage.setItem(
+      "snipe-hunt.mission-7.game",
+      JSON.stringify({
+        schemaVersion: 2,
+        timeline: [{ position: current, move: null }],
+        cursor: 0,
+        gameMode: "computer-alpha",
+        thinkingTimeSeconds: 5,
+        analysisEnabled: false,
+        analysisDepth: 5,
+      }),
+    );
+
+    render(<App />);
+
+    expect(await screen.findByText("move is not legal in this position")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Snipe Hunt" })).toBeInTheDocument();
   });
 });

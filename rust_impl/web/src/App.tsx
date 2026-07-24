@@ -382,9 +382,27 @@ export default function App() {
   const commitMove = (move: TurnMove) => {
     setSelectedCardId(null);
     setMovePrefix([]);
+    setHistoryError(null);
+    analysisRequestSequence.current += 1;
+    setAnalysis(null);
+    let nextPosition: Position;
+    try {
+      // Apply against the same rendered position that produced `legalMoves`.
+      // React may defer or replay state updaters, so calling into WASM from the
+      // updater can otherwise pair a stale move with a newer position.
+      nextPosition = engine.applyMove(position, move);
+    } catch (reason) {
+      setHistoryError(
+        reason instanceof Error
+          ? reason.message
+          : `Move could not be played: ${String(reason)}`,
+      );
+      return;
+    }
     setGame((current) => {
-      const active = current.timeline[current.cursor].position;
-      const nextPosition = engine.applyMove(active, move);
+      if (current.timeline[current.cursor].position !== position) {
+        return current;
+      }
       const timeline = current.timeline.slice(0, current.cursor + 1);
       timeline.push({ position: nextPosition, move });
       return { ...current, timeline, cursor: timeline.length - 1 };
@@ -416,14 +434,18 @@ export default function App() {
       )
       .then((result) => {
         if (requestId !== agentRequestSequence.current || controller.signal.aborted) return;
+        // Keep rule execution out of React's updater for the same reason as
+        // human moves: an updater may be replayed after the position changes.
+        const nextPosition = engine.applyMove(position, result.bestMove);
         setAgentThinking(false);
+        analysisRequestSequence.current += 1;
+        setAnalysis(null);
         setGame((current) => {
           const isStillCurrent =
             current.cursor === current.timeline.length - 1 &&
             current.timeline[current.cursor].position === position &&
             computerControls(current.gameMode, position.turn);
           if (!isStillCurrent) return current;
-          const nextPosition = engine.applyMove(position, result.bestMove);
           const timeline = [
             ...current.timeline,
             { position: nextPosition, move: result.bestMove },
@@ -435,7 +457,13 @@ export default function App() {
         if (reason instanceof DOMException && reason.name === "AbortError") return;
         if (requestId === agentRequestSequence.current) {
           setAgentThinking(false);
-          setAgentError(reason instanceof Error ? reason.message : "Computer move failed.");
+          setAgentError(
+            reason instanceof Error
+              ? reason.message
+              : typeof reason === "string"
+                ? reason
+                : "Computer move failed.",
+          );
         }
       });
 

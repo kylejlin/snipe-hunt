@@ -349,6 +349,7 @@ impl<P: GamePosition> SearchEngine<P> {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn search_internal<F>(
         &mut self,
         root: &P,

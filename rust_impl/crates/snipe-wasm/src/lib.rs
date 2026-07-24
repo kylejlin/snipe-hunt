@@ -4,13 +4,14 @@
 //! serializable data, while every rules/search operation is authoritative Rust.
 
 use serde::{Deserialize, Serialize};
-use snipe_ai::{evaluate_state, SearchConfig, SearchEngine, MATE_SCORE};
+use snipe_ai::{SearchConfig, SearchEngine};
+use snipe_banana::{evaluate as evaluate_state, BananaConfig, BananaEngine, MATE_SCORE};
 use snipe_core::{Animal, AtomicMove, Card as CoreCard, Location as CoreLocation};
 use snipe_core::{Move, Player, State};
 use std::time::Duration;
 use wasm_bindgen::prelude::*;
 
-const ENGINE_NAME: &str = "Snipe Hunt Rust alpha-beta";
+const ENGINE_NAME: &str = "Banana";
 const MIN_ANALYSIS_TIME_MS: u64 = 1;
 const MAX_ANALYSIS_TIME_MS: u64 = 60_000;
 const BROWSER_MAX_DEPTH: u8 = 64;
@@ -226,10 +227,10 @@ pub fn apply_move(position_json: &str, move_json: &str) -> Result<String, JsValu
 pub fn analyze(request_json: &str) -> Result<String, JsValue> {
     let request: AnalysisRequestDto = decode(request_json)?;
     let state = dto_to_state(&request.position)?;
-    let (repetition_hashes, convergence_hashes) = history_context(&request.history)?;
+    let (repetition_hashes, _) = history_context(&request.history)?;
     let config = browser_search_config(request.time_limit_ms);
-    let mut engine = SearchEngine::<State>::new(config);
-    let result = engine.search_with_context(&state, &repetition_hashes, &convergence_hashes);
+    let mut engine = BananaEngine::new(config);
+    let result = engine.search_with_history(&state, &repetition_hashes);
     let best = result
         .best_move
         .ok_or_else(|| js_error("no legal moves are available"))?;
@@ -283,7 +284,7 @@ pub fn analyze(request_json: &str) -> Result<String, JsValue> {
         best_move: move_to_dto(state, best)?,
         score: result.score,
         depth: result.depth,
-        nodes: result.stats.nodes.saturating_add(result.stats.qnodes),
+        nodes: result.stats.nodes,
         elapsed_ms: result.stats.elapsed.as_millis().min(u64::MAX as u128) as u64,
         principal_variation: pv,
         candidates: candidate_dtos,
@@ -392,8 +393,8 @@ fn history_context(history: &[PositionDto]) -> Result<(Vec<u64>, Vec<u64>), JsVa
     Ok((repetition_hashes, convergence_hashes))
 }
 
-fn browser_search_config(requested_time_ms: u64) -> SearchConfig {
-    SearchConfig {
+fn browser_search_config(requested_time_ms: u64) -> BananaConfig {
+    BananaConfig {
         time_limit: Duration::from_millis(
             requested_time_ms.clamp(MIN_ANALYSIS_TIME_MS, MAX_ANALYSIS_TIME_MS),
         ),
@@ -403,7 +404,7 @@ fn browser_search_config(requested_time_ms: u64) -> SearchConfig {
         // Check more frequently in WASM so a completed iteration cannot run
         // materially beyond the UI's deadline.
         deadline_check_interval: BROWSER_DEADLINE_CHECK_INTERVAL,
-        ..SearchConfig::default()
+        ..BananaConfig::default()
     }
 }
 

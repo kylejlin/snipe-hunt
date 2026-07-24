@@ -156,6 +156,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "snipe-banana"
+version = "0.1.0"
+dependencies = [
+ "snipe-ai",
+ "snipe-core",
+ "web-time",
+]
+
+[[package]]
 name = "snipe-core"
 version = "0.1.0"
 
@@ -167,6 +176,7 @@ dependencies = [
  "serde",
  "serde_json",
  "snipe-ai",
+ "snipe-banana",
  "snipe-core",
  "wasm-bindgen",
 ]

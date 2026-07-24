@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/snipe-core",
     "crates/snipe-ai",
+    "crates/snipe-banana",
     "crates/snipe-wasm",
 ]
 

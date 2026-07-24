@@ -6,7 +6,8 @@ WebAssembly bridge, and a browser UI.
 The implementation is split into:
 
 - `crates/snipe-core`: authoritative game rules and state transitions
-- `crates/snipe-ai`: timed search engine and match tooling
+- `crates/snipe-ai`: the original generic search engine ("Almond") and match tooling
+- `crates/snipe-banana`: the fast game-specific production player ("Banana")
 - `crates/snipe-wasm`: browser-facing WebAssembly API
 - `web`: React UI and analysis worker
 
@@ -58,6 +59,20 @@ npm run build
 ```
 
 ## Measure playing strength
+
+Banana-versus-Almond paired deals can be run with:
+
+```sh
+cargo run --release -p snipe-banana --bin banana_arena -- 10 100 160 0 48
+```
+
+The arguments are deal pairs, Banana milliseconds per move, maximum turns,
+first seed, Banana beam width, and optional Almond milliseconds per move. The
+major-iteration smoke gate gives Banana 5 seconds and Almond 30 seconds:
+
+```sh
+cargo run --release -p snipe-banana --bin banana_arena -- 1 5000 100 0 48 30000
+```
 
 The native arena plays paired deals so both engines receive each side of the
 same initial position:

@@ -352,6 +352,8 @@ export default function App() {
     requestSequence.current += 1;
     setThinking(false);
     setAnalysis(null);
+    setSelectedCardId(null);
+    setMovePrefix([]);
     setGame((current) => ({
       ...current,
       cursor: Math.max(0, Math.min(current.timeline.length - 1, nextCursor)),

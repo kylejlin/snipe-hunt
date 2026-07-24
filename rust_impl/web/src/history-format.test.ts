@@ -6,10 +6,12 @@ import {
 } from "./engine/fallback-core";
 import type { TurnMove } from "./engine/types";
 import {
+  formatCompletedMove,
   formatDisplayPlyPrefix,
   formatMove,
   parseHistory,
   serializeHistory,
+  snipeCaptureSuffix,
   type TimelineEntry,
 } from "./history-format";
 
@@ -23,6 +25,29 @@ function move(
   steps: TurnMove["steps"],
 ): TurnMove {
   return { id: "test", player, label: "", steps, captures: [] };
+}
+
+function betaCaptureTimeline(): TimelineEntry[] {
+  let position = createFallbackGame(7_071);
+  const timeline: TimelineEntry[] = [{ position, move: null }];
+  const attacker = position.locations["row-5"].find((card) => !card.isSnipe);
+  expect(attacker).toBeTruthy();
+
+  const play = (predicate: (candidate: TurnMove) => boolean) => {
+    const selected = fallbackLegalMoves(position).find(predicate);
+    expect(selected).toBeTruthy();
+    position = applyFallbackMove(position, selected!);
+    timeline.push({ position, move: selected! });
+  };
+
+  play((candidate) => candidate.steps[0].cardId === attacker!.id && candidate.steps[0].to === "row-4");
+  play((candidate) => candidate.steps[0].cardId === "alpha-snipe" && candidate.steps[0].to === "row-2");
+  play((candidate) => candidate.steps[0].cardId === attacker!.id && candidate.steps[0].to === "row-3");
+  play((candidate) => !candidate.steps[0].cardId.endsWith("-snipe"));
+  play((candidate) => candidate.steps[0].cardId === attacker!.id && candidate.steps[0].to === "row-2");
+
+  expect(position.winner).toBe("Beta");
+  return timeline;
 }
 
 describe("compact history notation", () => {
@@ -107,6 +132,67 @@ describe("compact history notation", () => {
     expect(serializeHistory(imported)).toBe(exported);
     expect(imported).toHaveLength(timeline.length);
     expect(imported.at(-1)?.position.turn).toBe(position.turn);
+  });
+
+  it("formats Alpha and Beta snipe captures from the completed position", () => {
+    const before = createFallbackGame(7_071);
+    const completed = (
+      winner: "Alpha" | "Beta",
+      capturedOwner: "Alpha" | "Beta",
+    ) => {
+      const reserve = winner === "Alpha" ? "alpha-reserve" : "beta-reserve";
+      const capturedId = `${capturedOwner.toLowerCase()}-snipe`;
+      const locations = Object.fromEntries(
+        Object.entries(before.locations).map(([location, cards]) => [
+          location,
+          cards.filter((card) => card.id !== capturedId),
+        ]),
+      ) as typeof before.locations;
+      const captured = Object.values(before.locations)
+        .flat()
+        .find((card) => card.id === capturedId);
+      expect(captured).toBeTruthy();
+      locations[reserve] = [...locations[reserve], captured!];
+      return { ...before, winner, locations };
+    };
+    const betaMove = fallbackLegalMoves(before)[0];
+
+    const alphaWin = completed("Alpha", "Beta");
+    const betaWin = completed("Beta", "Alpha");
+    expect(snipeCaptureSuffix(before, alphaWin)).toBe("+#0");
+    expect(snipeCaptureSuffix(before, betaWin)).toBe("-#0");
+    expect(formatCompletedMove(before, betaMove, alphaWin)).toBe(
+      `${formatMove(before, betaMove)} +#0`,
+    );
+    expect(formatCompletedMove(before, betaMove, betaWin)).toBe(
+      `${formatMove(before, betaMove)} -#0`,
+    );
+    expect(
+      formatCompletedMove(before, betaMove, { ...before, winner: "Beta" }),
+    ).toBe(formatMove(before, betaMove));
+  });
+
+  it("exports terminal captures and accepts legacy histories without the annotation", () => {
+    const timeline = betaCaptureTimeline();
+    const annotated = serializeHistory(timeline);
+    expect(annotated.trimEnd()).toMatch(/ -#0$/);
+    expect(serializeHistory(parseHistory(annotated, fallbackEngine))).toBe(annotated);
+
+    const legacy = annotated.replace(" -#0", "");
+    expect(serializeHistory(parseHistory(legacy, fallbackEngine))).toBe(annotated);
+  });
+
+  it("rejects lying terminal annotations", () => {
+    const timeline = betaCaptureTimeline();
+    const annotated = serializeHistory(timeline);
+    expect(() =>
+      parseHistory(annotated.replace(" -#0", " +#0"), fallbackEngine),
+    ).toThrow(/asserted result.*does not match/);
+
+    const nonWinning = serializeHistory(timeline.slice(0, 2));
+    expect(() =>
+      parseHistory(nonWinning.replace(/\n$/, " -#0\n"), fallbackEngine),
+    ).toThrow(/asserted result.*does not match/);
   });
 
   it.each([

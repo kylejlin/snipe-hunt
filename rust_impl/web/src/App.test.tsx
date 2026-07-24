@@ -426,6 +426,48 @@ describe("subply history navigation", () => {
     expect(screen.getByText("1 / 1")).toBeInTheDocument();
   });
 
+  it("shows the snipe-capture suffix on a completed winning ply", () => {
+    const betaSnipe = {
+      id: "beta-snipe",
+      animal: "Snipe",
+      owner: "Beta" as const,
+      isSnipe: true,
+      canRetreat: true,
+    };
+    const before: Position = {
+      ...earlier,
+      locations: {
+        ...earlier.locations,
+        "row-3": [betaSnipe],
+      },
+    };
+    const after: Position = {
+      ...current,
+      winner: "Alpha",
+      locations: {
+        ...current.locations,
+        "alpha-reserve": [betaSnipe],
+      },
+    };
+    localStorage.setItem(
+      "snipe-hunt.mission-7.game",
+      JSON.stringify({
+        schemaVersion: 1,
+        timeline: [
+          { position: before, move: null },
+          { position: after, move: earlierMove },
+        ],
+        cursor: 1,
+        mode: "manual",
+        timeLimitSeconds: 5,
+      }),
+    );
+
+    render(<App />);
+
+    expect(screen.getByText("1α. Ox 3, Rat 2 +#0")).toBeInTheDocument();
+  });
+
   it("starts a new line as soon as a different first subply is played", () => {
     localStorage.setItem(
       "snipe-hunt.mission-7.game",
@@ -614,7 +656,7 @@ describe("game mode and live analysis", () => {
       ),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Game Log settings")).toBeInTheDocument();
-    expect(screen.getByText("Version 0.23.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.24.0")).toBeInTheDocument();
 
     const mode = screen.getByLabelText("Mode");
     expect(mode).toHaveValue("computer-beta");

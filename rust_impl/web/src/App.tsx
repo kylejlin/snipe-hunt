@@ -12,6 +12,7 @@ import {
   locationLabel,
 } from "./engine/types";
 import {
+  formatCompletedMove,
   formatDisplayPlyPrefix,
   formatInitialLines,
   formatMove,
@@ -1093,6 +1094,7 @@ export default function App() {
         : [analysis.bestMove];
     let variationPosition = position;
     return moves.map((move, index) => {
+      const nextVariationPosition = engine.applyMove(variationPosition, move);
       const item = {
         key: `${index}-${move.id}`,
         move,
@@ -1101,9 +1103,13 @@ export default function App() {
           Math.ceil((game.cursor + index + 1) / 2),
           move.player,
         ),
-        notation: formatMove(variationPosition, move),
+        notation: formatCompletedMove(
+          variationPosition,
+          move,
+          nextVariationPosition,
+        ),
       };
-      variationPosition = engine.applyMove(variationPosition, move);
+      variationPosition = nextVariationPosition;
       return item;
     });
   }, [analysis, game.cursor, position]);
@@ -1269,7 +1275,11 @@ export default function App() {
               {`${formatDisplayPlyPrefix(
                 Math.ceil(timelineIndex / 2),
                 move.player,
-              )} ${formatMove(path[timelineIndex - 1].position, move)}`}
+              )} ${formatCompletedMove(
+                path[timelineIndex - 1].position,
+                move,
+                timelineEntry.position,
+              )}`}
             </small>
           </button>
         </li>
@@ -1636,9 +1646,10 @@ export default function App() {
                         {`${formatDisplayPlyPrefix(
                           Math.ceil(timelineIndex / 2),
                           move.player,
-                        )} ${formatMove(
+                        )} ${formatCompletedMove(
                           game.timeline[timelineIndex - 1].position,
                           move,
+                          timelineEntry.position,
                         )}`}
                       </small>
                     </button>

@@ -78,6 +78,33 @@ export function formatMove(position: Position, move: TurnMove): string {
     .join(", ");
 }
 
+export function snipeCaptureSuffix(
+  before: Position,
+  after: Position,
+): "" | "+#0" | "-#0" {
+  const capturedInto = (reserve: "alpha-reserve" | "beta-reserve", owner: Player) => {
+    const containsSnipe = (position: Position) =>
+      position.locations[reserve].some(
+        (card) => card.isSnipe && card.owner === owner,
+      );
+    return !containsSnipe(before) && containsSnipe(after);
+  };
+
+  if (capturedInto("alpha-reserve", "Beta")) return "+#0";
+  if (capturedInto("beta-reserve", "Alpha")) return "-#0";
+  return "";
+}
+
+export function formatCompletedMove(
+  before: Position,
+  move: TurnMove,
+  after: Position,
+): string {
+  const notation = formatMove(before, move);
+  const suffix = snipeCaptureSuffix(before, after);
+  return suffix ? `${notation} ${suffix}` : notation;
+}
+
 export function formatPlyPrefix(timelineIndex: number, player: Player): string {
   if (timelineIndex < 1) throw new Error("Move plies begin at timeline index 1.");
   return `${Math.ceil(timelineIndex / 2)}${player === "Alpha" ? "a" : "b"}.`;
@@ -120,9 +147,10 @@ export function serializeHistory(timeline: TimelineEntry[]): string {
     const entry = timeline[index];
     if (!entry.move) throw new Error(`Timeline entry ${index} has no move.`);
     lines.push(
-      `${formatPlyPrefix(index, entry.move.player)} ${formatMove(
+      `${formatPlyPrefix(index, entry.move.player)} ${formatCompletedMove(
         timeline[index - 1].position,
         entry.move,
+        entry.position,
       )}`,
     );
   }
@@ -269,19 +297,29 @@ export function parseHistory(
       throw new Error(`Line ${lineNumber}: expected prefix "${expectedPrefix}".`);
     }
     const body = text.slice(expectedPrefix.length + 1);
+    const suffixMatch = body.match(/ ([+-]#0)$/);
+    const assertedSuffix = suffixMatch?.[1] ?? "";
+    const moveBody = suffixMatch ? body.slice(0, -suffixMatch[0].length) : body;
     const legalMoves = engine
       .legalMoves(position)
-      .filter((move) => formatMove(position, move) === body)
+      .filter((move) => formatMove(position, move) === moveBody)
       .sort((left, right) => left.id.localeCompare(right.id));
     const move = legalMoves[0];
     if (!move) {
       throw new Error(`Line ${lineNumber}: "${body}" is not a legal move.`);
     }
+    const previousPosition = position;
     try {
       position = engine.applyMove(position, move);
     } catch (reason) {
       throw new Error(
         `Line ${lineNumber}: move could not be applied${reason instanceof Error ? ` (${reason.message})` : ""}.`,
+      );
+    }
+    const actualSuffix = snipeCaptureSuffix(previousPosition, position);
+    if (assertedSuffix && assertedSuffix !== actualSuffix) {
+      throw new Error(
+        `Line ${lineNumber}: asserted result "${assertedSuffix}" does not match the actual snipe capture.`,
       );
     }
     timeline.push({ position, move });

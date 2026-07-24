@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { version } from "../package.json";
-import { createEngineAdapter } from "./engine/fallback-adapter";
+import { createEngineServices } from "./engine/fallback-adapter";
 import {
-  type AnalysisResult,
   type Card,
+  type LiveAnalysisUpdate,
   type Location,
   type MoveStep,
   type Player,
@@ -20,19 +20,21 @@ import {
   type TimelineEntry,
 } from "./history-format";
 
-type AnalysisMode = "alpha" | "beta" | "manual";
+type GameMode = "computer-alpha" | "computer-beta" | "pass-and-play";
 
 interface StoredGame {
-  schemaVersion: 1;
+  schemaVersion: 2;
   timeline: TimelineEntry[];
   cursor: number;
-  mode: AnalysisMode;
-  manualAnalysis: boolean;
-  timeLimitSeconds: number;
+  gameMode: GameMode;
+  thinkingTimeSeconds: number;
+  analysisEnabled: boolean;
+  analysisDepth: number;
 }
 
 const STORAGE_KEY = "snipe-hunt.mission-7.game";
-const engine = createEngineAdapter();
+const services = createEngineServices();
+const engine = services.rules;
 const locations: Location[] = [
   "alpha-reserve",
   "row-1",
@@ -48,18 +50,54 @@ function initialState(): StoredGame {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
-      const parsed = JSON.parse(stored) as StoredGame;
+      const parsed = JSON.parse(stored) as Record<string, unknown>;
+      const timeline = parsed.timeline as TimelineEntry[];
+      const cursor = Number(parsed.cursor);
       if (
-        parsed.schemaVersion === 1 &&
-        Array.isArray(parsed.timeline) &&
-        parsed.timeline.length > 0 &&
-        parsed.cursor >= 0 &&
-        parsed.cursor < parsed.timeline.length
+        Array.isArray(timeline) &&
+        timeline.length > 0 &&
+        Number.isInteger(cursor) &&
+        cursor >= 0 &&
+        cursor < timeline.length
       ) {
         // Let the authoritative engine reject stale or malformed schemas
         // before they can crash the first render.
-        engine.legalMoves(parsed.timeline[parsed.cursor].position);
-        return parsed;
+        engine.legalMoves(timeline[cursor].position);
+        if (parsed.schemaVersion === 2) {
+          const gameMode = parsed.gameMode;
+          if (
+            gameMode === "computer-alpha" ||
+            gameMode === "computer-beta" ||
+            gameMode === "pass-and-play"
+          ) {
+            return {
+              schemaVersion: 2,
+              timeline,
+              cursor,
+              gameMode,
+              thinkingTimeSeconds: clampNumber(parsed.thinkingTimeSeconds, 0.25, 120, 5),
+              analysisEnabled: parsed.analysisEnabled === true,
+              analysisDepth: clampNumber(parsed.analysisDepth, 1, 10, 5),
+            };
+          }
+        }
+        if (parsed.schemaVersion === 1) {
+          const oldMode = parsed.mode;
+          return {
+            schemaVersion: 2,
+            timeline,
+            cursor,
+            gameMode:
+              oldMode === "alpha"
+                ? "computer-alpha"
+                : oldMode === "beta"
+                  ? "computer-beta"
+                  : "pass-and-play",
+            thinkingTimeSeconds: clampNumber(parsed.timeLimitSeconds, 0.25, 120, 5),
+            analysisEnabled: false,
+            analysisDepth: 5,
+          };
+        }
       }
     }
   } catch {
@@ -67,18 +105,33 @@ function initialState(): StoredGame {
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     timeline: [{ position: engine.createGame(), move: null }],
     cursor: 0,
-    mode: "beta",
-    manualAnalysis: false,
-    timeLimitSeconds: 5,
+    gameMode: "computer-beta",
+    thinkingTimeSeconds: 5,
+    analysisEnabled: false,
+    analysisDepth: 5,
   };
 }
 
-function analysisIsOn(mode: AnalysisMode, manual: boolean, turn: Player): boolean {
-  if (mode === "manual") return manual;
-  return (mode === "alpha" && turn === "Alpha") || (mode === "beta" && turn === "Beta");
+function clampNumber(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+  fallback: number,
+): number {
+  const numeric = Number(value);
+  return Number.isFinite(numeric)
+    ? Math.max(minimum, Math.min(maximum, numeric))
+    : fallback;
+}
+
+function computerControls(mode: GameMode, turn: Player): boolean {
+  return (
+    (mode === "computer-alpha" && turn === "Alpha") ||
+    (mode === "computer-beta" && turn === "Beta")
+  );
 }
 
 function cardImage(card: Card): string {
@@ -179,20 +232,26 @@ function BoardLane({
   );
 }
 
-function formatScore(score: number, turn: Player): string {
-  if (score >= 100_000) return `${turn} has a forced capture`;
-  return `${score >= 0 ? "+" : ""}${(score / 100).toFixed(2)} for ${turn}`;
+function formatAlphaScore(score: number, turn: Player): string {
+  const alphaScore = turn === "Alpha" ? score : -score;
+  if (Math.abs(alphaScore) >= 100_000) {
+    return `${alphaScore > 0 ? "Alpha" : "Beta"} has a forced capture`;
+  }
+  return `${alphaScore >= 0 ? "+" : ""}${(alphaScore / 100).toFixed(2)}`;
 }
 
 export default function App() {
   const [game, setGame] = useState<StoredGame>(initialState);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [movePrefix, setMovePrefix] = useState<MoveStep[]>([]);
-  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
-  const [thinking, setThinking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<LiveAnalysisUpdate | null>(null);
+  const [analysisRunning, setAnalysisRunning] = useState(false);
+  const [agentThinking, setAgentThinking] = useState(false);
+  const [agentError, setAgentError] = useState<string | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
-  const requestSequence = useRef(0);
+  const agentRequestSequence = useRef(0);
+  const analysisRequestSequence = useRef(0);
   const importInput = useRef<HTMLInputElement>(null);
 
   const entry = game.timeline[game.cursor];
@@ -205,7 +264,7 @@ export default function App() {
     [movePrefix, position],
   );
   const atPresent = game.cursor === game.timeline.length - 1;
-  const analysisOn = analysisIsOn(game.mode, game.manualAnalysis, position.turn);
+  const computerTurn = computerControls(game.gameMode, position.turn);
   const legalMoves = useMemo(() => engine.legalMoves(position), [position]);
   const prefixCandidates = legalMoves.filter((move) =>
     movePrefix.every((step, index) => {
@@ -249,14 +308,9 @@ export default function App() {
   useEffect(() => {
     setSelectedCardId(null);
     setMovePrefix([]);
-    setError(null);
+    setAgentError(null);
+    setAnalysisError(null);
   }, [game.cursor, position.turnNumber]);
-
-  useEffect(() => {
-    if (!analysisOn) return;
-    setSelectedCardId(null);
-    setMovePrefix([]);
-  }, [analysisOn]);
 
   const commitMove = (move: TurnMove) => {
     setSelectedCardId(null);
@@ -271,36 +325,36 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!analysisOn || !atPresent || position.winner || legalMoves.length === 0) {
-      setThinking(false);
+    if (!computerTurn || !atPresent || position.winner || legalMoves.length === 0) {
+      setAgentThinking(false);
       return;
     }
 
-    const requestId = ++requestSequence.current;
+    const requestId = ++agentRequestSequence.current;
     const controller = new AbortController();
-    setThinking(true);
-    setError(null);
+    setAgentThinking(true);
+    setAgentError(null);
 
-    engine
-      .analyze(
+    services.computerAgent
+      .chooseMove(
         {
           position,
           history: game.timeline
             .slice(0, game.cursor)
             .map((timelineEntry) => timelineEntry.position),
-          timeLimitMs: Math.round(game.timeLimitSeconds * 1_000),
+          timeLimitMs: Math.round(game.thinkingTimeSeconds * 1_000),
           requestId,
         },
         controller.signal,
       )
       .then((result) => {
-        if (requestId !== requestSequence.current || controller.signal.aborted) return;
-        setAnalysis(result);
-        setThinking(false);
+        if (requestId !== agentRequestSequence.current || controller.signal.aborted) return;
+        setAgentThinking(false);
         setGame((current) => {
           const isStillCurrent =
             current.cursor === current.timeline.length - 1 &&
-            current.timeline[current.cursor].position.turnNumber === position.turnNumber;
+            current.timeline[current.cursor].position === position &&
+            computerControls(current.gameMode, position.turn);
           if (!isStillCurrent) return current;
           const nextPosition = engine.applyMove(position, result.bestMove);
           const timeline = [
@@ -312,23 +366,84 @@ export default function App() {
       })
       .catch((reason: unknown) => {
         if (reason instanceof DOMException && reason.name === "AbortError") return;
-        if (requestId === requestSequence.current) {
-          setThinking(false);
-          setError(reason instanceof Error ? reason.message : "Analysis failed.");
+        if (requestId === agentRequestSequence.current) {
+          setAgentThinking(false);
+          setAgentError(reason instanceof Error ? reason.message : "Computer move failed.");
         }
       });
 
     return () => controller.abort();
   }, [
-    analysisOn,
+    computerTurn,
     atPresent,
-    game.timeLimitSeconds,
+    game.thinkingTimeSeconds,
     legalMoves.length,
     position,
   ]);
 
+  useEffect(() => {
+    if (!game.analysisEnabled || position.winner || legalMoves.length === 0) {
+      setAnalysisRunning(false);
+      if (!game.analysisEnabled) {
+        setAnalysis(null);
+        setAnalysisError(null);
+      }
+      return;
+    }
+
+    const requestId = ++analysisRequestSequence.current;
+    const controller = new AbortController();
+    setAnalysis(null);
+    setAnalysisRunning(true);
+    setAnalysisError(null);
+
+    services.analyzer
+      .analyze(
+        {
+          position,
+          history: game.timeline
+            .slice(0, game.cursor)
+            .map((timelineEntry) => timelineEntry.position),
+          maxDepth: game.analysisDepth,
+          requestId,
+          firstStep: movePrefix[0],
+        },
+        (update) => {
+          if (
+            requestId === analysisRequestSequence.current &&
+            !controller.signal.aborted
+          ) {
+            setAnalysis(update);
+          }
+        },
+        controller.signal,
+      )
+      .then((result) => {
+        if (requestId !== analysisRequestSequence.current || controller.signal.aborted) return;
+        setAnalysis(result);
+        setAnalysisRunning(false);
+      })
+      .catch((reason: unknown) => {
+        if (reason instanceof DOMException && reason.name === "AbortError") return;
+        if (requestId === analysisRequestSequence.current) {
+          setAnalysisRunning(false);
+          setAnalysisError(reason instanceof Error ? reason.message : "Analysis failed.");
+        }
+      });
+
+    return () => controller.abort();
+  }, [
+    game.analysisDepth,
+    game.analysisEnabled,
+    game.cursor,
+    game.timeline,
+    legalMoves.length,
+    movePrefix,
+    position,
+  ]);
+
   const chooseCard = (cardId: string) => {
-    if (thinking || analysisOn || position.winner) return;
+    if (computerTurn || position.winner) return;
     if (!selectableCardIds.has(cardId)) return;
     setSelectedCardId((current) => (current === cardId ? null : cardId));
   };
@@ -338,7 +453,6 @@ export default function App() {
       (move) => move.steps[nextStepIndex]?.to === destination,
     );
     if (!matching) return;
-    setAnalysis(null);
     const chosenStep = matching.steps[nextStepIndex];
     if (matching.steps.length === nextStepIndex + 1) {
       commitMove(matching);
@@ -349,8 +463,10 @@ export default function App() {
   };
 
   const moveCursor = (nextCursor: number) => {
-    requestSequence.current += 1;
-    setThinking(false);
+    agentRequestSequence.current += 1;
+    analysisRequestSequence.current += 1;
+    setAgentThinking(false);
+    setAnalysisRunning(false);
     setAnalysis(null);
     setSelectedCardId(null);
     setMovePrefix([]);
@@ -362,11 +478,13 @@ export default function App() {
 
   const resetGame = () => {
     if (!window.confirm("Start a fresh game? The current history will be replaced.")) return;
-    requestSequence.current += 1;
+    agentRequestSequence.current += 1;
+    analysisRequestSequence.current += 1;
     const next = engine.createGame(Date.now() & 0x7fffffff);
     localStorage.removeItem(STORAGE_KEY);
     setAnalysis(null);
-    setThinking(false);
+    setAgentThinking(false);
+    setAnalysisRunning(false);
     setHistoryError(null);
     setSelectedCardId(null);
     setMovePrefix([]);
@@ -410,17 +528,18 @@ export default function App() {
       ) {
         return;
       }
-      requestSequence.current += 1;
+      agentRequestSequence.current += 1;
+      analysisRequestSequence.current += 1;
       setAnalysis(null);
-      setThinking(false);
+      setAgentThinking(false);
+      setAnalysisRunning(false);
       setSelectedCardId(null);
       setMovePrefix([]);
       setGame((current) => ({
         ...current,
         timeline,
         cursor: timeline.length - 1,
-        mode: "manual",
-        manualAnalysis: false,
+        gameMode: "pass-and-play",
       }));
     } catch (reason) {
       setHistoryError(reason instanceof Error ? reason.message : "History could not be imported.");
@@ -429,11 +548,18 @@ export default function App() {
 
   const status = position.winner
     ? `${position.winner} wins`
-    : thinking
+    : agentThinking
       ? `${position.turn} is thinking…`
-      : analysisOn
+      : computerTurn
         ? `${position.turn} computer turn`
         : `${position.turn} to move`;
+  const suggestedStep =
+    analysis && movePrefix.length > 0 ? analysis.bestMove.steps[1] : undefined;
+  const suggestion = analysis
+    ? suggestedStep
+      ? `${cardName(boardPosition, suggestedStep.cardId)} to ${locationLabel(suggestedStep.to)}`
+      : analysis.bestMove.label
+    : null;
 
   return (
     <div className="app-shell">
@@ -498,7 +624,7 @@ export default function App() {
                 selectedCardId={selectedCardId}
                 selectableCardIds={selectableCardIds}
                 legalDestination={legalDestinations.has(location)}
-                interactionDisabled={thinking || analysisOn || Boolean(position.winner)}
+                interactionDisabled={computerTurn || Boolean(position.winner)}
                 onCardSelect={chooseCard}
                 onDestination={chooseDestination}
               />
@@ -540,8 +666,8 @@ export default function App() {
           )}
 
           <p className="board-help">
-            {analysisOn
-              ? "Analysis is active. The computer will play when its search completes."
+            {computerTurn
+              ? `${position.turn} is controlled by the computer.`
               : selectedCardId
                 ? "Choose a highlighted rank to complete the move."
                 : movePrefix.length > 0
@@ -672,76 +798,59 @@ export default function App() {
           <section className="control-card">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">OPPONENT</p>
-                <h2>Analysis control</h2>
+                <p className="eyebrow">PLAY</p>
+                <h2>Game Mode</h2>
               </div>
-              <span className={`status-light ${analysisOn ? "status-light--on" : ""}`}>
-                {analysisOn ? "On" : "Off"}
-              </span>
+              {agentThinking && <span className="thinking-spinner" aria-hidden="true" />}
             </div>
 
             <label className="field">
-              <span>Play mode</span>
+              <span>Mode</span>
               <select
-                value={game.mode}
+                value={game.gameMode}
                 onChange={(event) => {
-                  requestSequence.current += 1;
+                  agentRequestSequence.current += 1;
                   setSelectedCardId(null);
                   setMovePrefix([]);
-                  setGame((current) => ({ ...current, mode: event.target.value as AnalysisMode }));
+                  setGame((current) => ({
+                    ...current,
+                    gameMode: event.target.value as GameMode,
+                  }));
                 }}
               >
-                <option value="alpha">Computer plays as Alpha</option>
-                <option value="beta">Computer plays as Beta</option>
-                <option value="manual">Manual</option>
+                <option value="computer-alpha">Computer plays as Alpha</option>
+                <option value="computer-beta">Computer plays as Beta</option>
+                <option value="pass-and-play">Pass-and-play</option>
               </select>
             </label>
 
-            {game.mode === "manual" && (
-              <label className="toggle-row">
-                <span>
-                  <strong>AI analysis</strong>
-                  <small>Keep on for computer vs. computer</small>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={game.manualAnalysis}
-                  onChange={(event) => {
-                    if (event.target.checked) {
-                      setSelectedCardId(null);
-                      setMovePrefix([]);
-                    }
-                    setGame((current) => ({
-                      ...current,
-                      manualAnalysis: event.target.checked,
-                    }));
-                  }}
-                />
+            {game.gameMode !== "pass-and-play" && (
+              <label className="field">
+                <span>Thinking Time</span>
+                <div className="time-input">
+                  <input
+                    type="number"
+                    aria-label="Thinking Time"
+                    min="0.25"
+                    max="120"
+                    step="0.25"
+                    value={game.thinkingTimeSeconds}
+                    onChange={(event) => {
+                      const value = Number(event.target.value);
+                      if (Number.isFinite(value)) {
+                        setGame((current) => ({
+                          ...current,
+                          thinkingTimeSeconds: Math.max(0.25, Math.min(120, value)),
+                        }));
+                      }
+                    }}
+                  />
+                  <span>seconds</span>
+                </div>
               </label>
             )}
 
-            <label className="field">
-              <span>Thinking time</span>
-              <div className="time-input">
-                <input
-                  type="number"
-                  min="0.25"
-                  max="120"
-                  step="0.25"
-                  value={game.timeLimitSeconds}
-                  onChange={(event) => {
-                    const value = Number(event.target.value);
-                    if (Number.isFinite(value)) {
-                      setGame((current) => ({
-                        ...current,
-                        timeLimitSeconds: Math.max(0.25, Math.min(120, value)),
-                      }));
-                    }
-                  }}
-                />
-                <span>seconds</span>
-              </div>
-            </label>
+            {agentError && <p className="error-message">{agentError}</p>}
 
             <button className="button button--danger" type="button" onClick={resetGame}>
               Reset game
@@ -751,36 +860,79 @@ export default function App() {
           <section className="control-card analysis-card" aria-live="polite">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">ENGINE ROOM</p>
-                <h2>{thinking ? "Thinking…" : "Latest analysis"}</h2>
+                <p className="eyebrow">ENGINE</p>
+                <h2>Analysis</h2>
               </div>
-              {thinking && <span className="thinking-spinner" aria-hidden="true" />}
+              <label className="analysis-switch">
+                <span>{game.analysisEnabled ? "On" : "Off"}</span>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  aria-label="Analysis"
+                  checked={game.analysisEnabled}
+                  onChange={(event) => {
+                    analysisRequestSequence.current += 1;
+                    setGame((current) => ({
+                      ...current,
+                      analysisEnabled: event.target.checked,
+                    }));
+                  }}
+                />
+              </label>
             </div>
 
-            {error ? (
-              <p className="error-message">{error}</p>
-            ) : analysis ? (
-              <>
-                <div className="evaluation">
-                  <strong>{formatScore(analysis.score, analysis.bestMove.player)}</strong>
-                  <span>
-                    Depth {analysis.depth} · {analysis.nodes.toLocaleString()} nodes ·{" "}
-                    {(analysis.elapsedMs / 1_000).toFixed(2)}s
-                  </span>
-                </div>
-                <div className="best-line">
-                  <span className="meta-label">Best line</span>
-                  <ol>
-                    {analysis.principalVariation.map((move, index) => (
-                      <li key={`${move}-${index}`}>{move}</li>
-                    ))}
-                  </ol>
-                </div>
-                <p className="engine-note">{analysis.engineName}</p>
-              </>
+            {game.analysisEnabled ? (
+              <div className="analysis-content">
+                <label className="field">
+                  <span>Depth limit</span>
+                  <input
+                    type="number"
+                    aria-label="Depth limit"
+                    min="1"
+                    max="10"
+                    step="1"
+                    value={game.analysisDepth}
+                    onChange={(event) => {
+                      const value = Number(event.target.value);
+                      if (Number.isFinite(value)) {
+                        setGame((current) => ({
+                          ...current,
+                          analysisDepth: Math.max(1, Math.min(10, Math.round(value))),
+                        }));
+                      }
+                    }}
+                  />
+                </label>
+                {analysisError ? (
+                  <p className="error-message">{analysisError}</p>
+                ) : analysis ? (
+                  <>
+                    <div className="analysis-progress">
+                      <span className={`status-light ${analysisRunning ? "status-light--on" : ""}`}>
+                        {analysisRunning ? "Analyzing" : "Complete"}
+                      </span>
+                      <span>Depth {analysis.depth} / {game.analysisDepth}</span>
+                    </div>
+                    <div className="evaluation">
+                      <span className="meta-label">Alpha evaluation</span>
+                      <strong>{formatAlphaScore(analysis.score, position.turn)}</strong>
+                    </div>
+                    <div className="suggestion">
+                      <span className="meta-label">
+                        Suggested next {movePrefix.length > 0 ? "subply" : "ply"}
+                      </span>
+                      <strong>{suggestion}</strong>
+                    </div>
+                  </>
+                ) : (
+                  <p className="empty-copy">
+                    {analysisRunning ? "Searching for the first completed depth…" : "No legal analysis is available."}
+                  </p>
+                )}
+              </div>
             ) : (
               <p className="empty-copy">
-                Turn analysis on to see the engine’s evaluation, best move, and principal variation.
+                Turn on impartial, live evaluation of the displayed position.
               </p>
             )}
           </section>

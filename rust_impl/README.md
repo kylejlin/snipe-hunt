@@ -174,9 +174,12 @@ stronger playing-strength gate.
 - The Rust/WASM engine is authoritative for dealing, legality, state
   transitions, and analysis.
 - The timeline is supplied to analysis so repeated-position cycles are avoided.
-- Search runs synchronously inside a dedicated worker. Cancelling analysis
-  terminates and replaces the worker, keeping the UI responsive.
-- The complete game timeline and analysis settings are versioned and stored in
-  `localStorage`.
+- Computer play uses a timed, one-shot worker. Impartial analysis uses a
+  separate depth-limited worker and publishes every completed iterative-
+  deepening result, so both searches can run independently.
+- Analysis can constrain its root to a committed first animal step and then
+  suggest the best legal second subply without changing the game.
+- The complete game timeline, game mode, agent time, and analysis settings are
+  versioned and stored in `localStorage`.
 - Back and Forward navigate the timeline; moving from a prior position creates
   a new continuation.

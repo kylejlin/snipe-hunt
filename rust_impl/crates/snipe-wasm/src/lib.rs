@@ -14,6 +14,7 @@ const ENGINE_NAME: &str = "Snipe Hunt Rust alpha-beta";
 const MIN_ANALYSIS_TIME_MS: u64 = 1;
 const MAX_ANALYSIS_TIME_MS: u64 = 60_000;
 const BROWSER_MAX_DEPTH: u8 = 64;
+const MAX_LIVE_ANALYSIS_DEPTH: u8 = 10;
 const BROWSER_DEADLINE_CHECK_INTERVAL: u64 = 256;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,6 +126,18 @@ struct AnalysisRequestDto {
     history: Vec<PositionDto>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LiveAnalysisRequestDto {
+    position: PositionDto,
+    max_depth: u8,
+    request_id: u64,
+    #[serde(default)]
+    history: Vec<PositionDto>,
+    #[serde(default)]
+    first_step: Option<MoveStepDto>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CandidateLineDto {
@@ -144,6 +157,15 @@ struct AnalysisResultDto {
     principal_variation: Vec<String>,
     candidates: Vec<CandidateLineDto>,
     engine_name: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LiveAnalysisUpdateDto {
+    request_id: u64,
+    best_move: TurnMoveDto,
+    score: i32,
+    depth: u8,
 }
 
 #[wasm_bindgen]
@@ -267,6 +289,71 @@ pub fn analyze(request_json: &str) -> Result<String, JsValue> {
         engine_name: ENGINE_NAME,
     };
     encode(&response)
+}
+
+#[wasm_bindgen]
+pub fn analyze_live(request_json: &str, on_progress: &js_sys::Function) -> Result<String, JsValue> {
+    let request: LiveAnalysisRequestDto = decode(request_json)?;
+    let state = dto_to_state(&request.position)?;
+    let (repetition_hashes, convergence_hashes) = history_context(&request.history)?;
+    let constrained_moves = request
+        .first_step
+        .as_ref()
+        .map(|step| constrained_root_moves(state, step))
+        .transpose()?;
+    let config = SearchConfig {
+        max_depth: request.max_depth.clamp(1, MAX_LIVE_ANALYSIS_DEPTH),
+        deadline_check_interval: BROWSER_DEADLINE_CHECK_INTERVAL,
+        ..SearchConfig::default()
+    };
+    let mut engine = SearchEngine::<State>::new(config);
+    let result = engine.search_to_depth_with_context_and_progress(
+        &state,
+        &repetition_hashes,
+        &convergence_hashes,
+        constrained_moves.as_deref(),
+        request.max_depth.clamp(1, MAX_LIVE_ANALYSIS_DEPTH),
+        |progress| {
+            let Some(best) = progress.best_move else {
+                return;
+            };
+            let Ok(best_move) = move_to_dto(state, best) else {
+                return;
+            };
+            let update = LiveAnalysisUpdateDto {
+                request_id: request.request_id,
+                best_move,
+                score: progress.score,
+                depth: progress.depth,
+            };
+            if let Ok(json) = serde_json::to_string(&update) {
+                let _ = on_progress.call1(&JsValue::NULL, &JsValue::from_str(&json));
+            }
+        },
+    );
+    let best = result
+        .best_move
+        .ok_or_else(|| js_error("no legal moves are available"))?;
+    encode(&LiveAnalysisUpdateDto {
+        request_id: request.request_id,
+        best_move: move_to_dto(state, best)?,
+        score: result.score,
+        depth: result.depth,
+    })
+}
+
+fn constrained_root_moves(state: State, requested: &MoveStepDto) -> Result<Vec<Move>, JsValue> {
+    let first = find_first_animal_step(state, requested)?;
+    let moves = state
+        .legal_moves()
+        .into_iter()
+        .filter(|mv| matches!(mv, Move::Animals { first: candidate, .. } if *candidate == first))
+        .collect::<Vec<_>>();
+    if moves.is_empty() {
+        Err(js_error("no legal continuation matches the first subply"))
+    } else {
+        Ok(moves)
+    }
 }
 
 fn history_context(history: &[PositionDto]) -> Result<(Vec<u64>, Vec<u64>), JsValue> {
@@ -696,6 +783,38 @@ mod tests {
             })
             .expect("initial position has a two-animal move");
         assert!(move_to_dto(state, two_step).unwrap().label.contains(", "));
+    }
+
+    #[test]
+    fn live_analysis_root_constraint_keeps_only_matching_first_steps() {
+        let state = State::initial(7_071);
+        let selected_move = state
+            .legal_moves()
+            .into_iter()
+            .find(|mv| {
+                matches!(
+                    mv,
+                    Move::Animals {
+                        second: Some(_),
+                        ..
+                    }
+                )
+            })
+            .expect("initial position has a two-animal move");
+        let Move::Animals {
+            first: selected, ..
+        } = selected_move
+        else {
+            unreachable!()
+        };
+        let requested = move_to_dto(state, selected_move).unwrap().steps.remove(0);
+
+        let constrained = constrained_root_moves(state, &requested).unwrap();
+
+        assert!(!constrained.is_empty());
+        assert!(constrained
+            .into_iter()
+            .all(|mv| matches!(mv, Move::Animals { first, .. } if first == selected)));
     }
 
     #[test]

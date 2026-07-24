@@ -252,6 +252,7 @@ pub struct SearchEngine<P: GamePosition> {
     killers: Vec<[Option<P::Move>; 2]>,
     stats: SearchStats,
     deadline: Instant,
+    deadline_enabled: bool,
     path: Vec<u64>,
     convergence_path: Vec<u64>,
     prior_hashes: Vec<u64>,
@@ -273,6 +274,7 @@ impl<P: GamePosition> SearchEngine<P> {
             killers: vec![[None, None]; MAX_PLY],
             stats: SearchStats::default(),
             deadline: Instant::now(),
+            deadline_enabled: true,
             path: Vec::with_capacity(MAX_PLY),
             convergence_path: Vec::with_capacity(MAX_PLY),
             prior_hashes: Vec::new(),
@@ -310,8 +312,59 @@ impl<P: GamePosition> SearchEngine<P> {
         prior_hashes: &[u64],
         prior_convergence: &[u64],
     ) -> SearchResult<P::Move> {
+        self.search_internal(
+            root,
+            prior_hashes,
+            prior_convergence,
+            None,
+            self.config.max_depth,
+            true,
+            |_| {},
+        )
+    }
+
+    /// Iterative-deepening search that stops after `max_depth` completed plies
+    /// and reports each newly completed result. `root_moves`, when supplied,
+    /// constrains only the first ply; all descendant plies remain unrestricted.
+    pub fn search_to_depth_with_context_and_progress<F>(
+        &mut self,
+        root: &P,
+        prior_hashes: &[u64],
+        prior_convergence: &[u64],
+        root_moves: Option<&[P::Move]>,
+        max_depth: u8,
+        on_progress: F,
+    ) -> SearchResult<P::Move>
+    where
+        F: FnMut(&SearchResult<P::Move>),
+    {
+        self.search_internal(
+            root,
+            prior_hashes,
+            prior_convergence,
+            root_moves,
+            max_depth.max(1),
+            false,
+            on_progress,
+        )
+    }
+
+    fn search_internal<F>(
+        &mut self,
+        root: &P,
+        prior_hashes: &[u64],
+        prior_convergence: &[u64],
+        root_moves: Option<&[P::Move]>,
+        max_depth: u8,
+        deadline_enabled: bool,
+        mut on_progress: F,
+    ) -> SearchResult<P::Move>
+    where
+        F: FnMut(&SearchResult<P::Move>),
+    {
         let started = Instant::now();
         self.deadline = started + self.config.time_limit;
+        self.deadline_enabled = deadline_enabled;
         self.stats = SearchStats::default();
         self.path.clear();
         self.convergence_path.clear();
@@ -348,6 +401,9 @@ impl<P: GamePosition> SearchEngine<P> {
 
         let mut legal = Vec::new();
         root.legal_moves(&mut legal);
+        if let Some(allowed) = root_moves {
+            legal.retain(|mv| allowed.contains(mv));
+        }
         legal.sort_unstable();
         let fallback = legal.first().copied();
         if fallback.is_none() {
@@ -369,8 +425,8 @@ impl<P: GamePosition> SearchEngine<P> {
         let mut completed = false;
         let mut previous_score: i32 = 0;
 
-        for depth in 1..=self.config.max_depth {
-            if Instant::now() >= self.deadline {
+        for depth in 1..=max_depth {
+            if self.deadline_enabled && Instant::now() >= self.deadline {
                 break;
             }
             self.path.clear();
@@ -388,7 +444,7 @@ impl<P: GamePosition> SearchEngine<P> {
                 (-INF, INF)
             };
 
-            let mut iteration = self.search_root(root, depth, alpha, beta);
+            let mut iteration = self.search_root(root, root_moves, depth, alpha, beta);
             let mut accepted_aspiration_bound = false;
             if let Ok((score, mv)) = iteration {
                 if score <= alpha || score >= beta {
@@ -396,7 +452,7 @@ impl<P: GamePosition> SearchEngine<P> {
                     let completed_bound = (score, mv);
                     alpha = -INF;
                     beta = INF;
-                    iteration = self.search_root(root, depth, alpha, beta);
+                    iteration = self.search_root(root, root_moves, depth, alpha, beta);
                     if iteration.is_err() && self.policy.retain_completed_aspiration_on_timeout {
                         iteration = Ok(completed_bound);
                         accepted_aspiration_bound = true;
@@ -411,6 +467,16 @@ impl<P: GamePosition> SearchEngine<P> {
                     previous_score = score;
                     completed = true;
                     self.stats.completed_depth = depth;
+                    self.stats.elapsed = started.elapsed();
+                    let progress = SearchResult {
+                        best_move,
+                        score: best_score,
+                        depth,
+                        principal_variation: self.extract_pv(root, depth, best_move),
+                        stats: self.stats.clone(),
+                        completed_iteration: true,
+                    };
+                    on_progress(&progress);
                     if score.abs() >= MATE_THRESHOLD {
                         break;
                     }
@@ -441,6 +507,7 @@ impl<P: GamePosition> SearchEngine<P> {
     fn search_root(
         &mut self,
         root: &P,
+        root_moves: Option<&[P::Move]>,
         depth: u8,
         mut alpha: i32,
         beta: i32,
@@ -450,6 +517,9 @@ impl<P: GamePosition> SearchEngine<P> {
         let tt_move = self.tt.get(key).and_then(|entry| entry.best_move);
         let mut moves = Vec::new();
         root.legal_moves(&mut moves);
+        if let Some(allowed) = root_moves {
+            moves.retain(|mv| allowed.contains(mv));
+        }
         self.order_moves(root, &mut moves, tt_move, 0);
         self.limit_moves(root, &mut moves);
         let first = moves[0];
@@ -885,7 +955,7 @@ impl<P: GamePosition> SearchEngine<P> {
 
     #[inline]
     fn check_deadline_force(&self) -> Result<(), Timeout> {
-        if Instant::now() >= self.deadline {
+        if self.deadline_enabled && Instant::now() >= self.deadline {
             Err(Timeout)
         } else {
             Ok(())
@@ -1010,6 +1080,39 @@ mod tests {
         assert_eq!(result.best_move, Some(2));
         assert!(result.score >= MATE_THRESHOLD);
         assert!(result.stats.nodes > 0);
+    }
+
+    #[test]
+    fn depth_search_reports_each_completed_iteration() {
+        let mut depths = Vec::new();
+        let result = engine(Duration::ZERO).search_to_depth_with_context_and_progress(
+            &TakeAway { stones: 20 },
+            &[],
+            &[],
+            None,
+            3,
+            |progress| depths.push(progress.depth),
+        );
+
+        assert_eq!(depths, vec![1, 2, 3]);
+        assert_eq!(result.depth, 3);
+    }
+
+    #[test]
+    fn depth_search_can_constrain_only_the_root_move() {
+        let allowed = [1];
+        let result = engine(Duration::ZERO).search_to_depth_with_context_and_progress(
+            &TakeAway { stones: 20 },
+            &[],
+            &[],
+            Some(&allowed),
+            3,
+            |_| {},
+        );
+
+        assert_eq!(result.best_move, Some(1));
+        assert_eq!(result.depth, 3);
+        assert!(result.principal_variation.len() > 1);
     }
 
     #[test]

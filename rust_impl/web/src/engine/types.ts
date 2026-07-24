@@ -41,6 +41,15 @@ export interface AnalysisRequest {
   requestId: number;
 }
 
+export interface LiveAnalysisRequest {
+  position: Position;
+  /** Earlier positions on the active timeline, oldest first. */
+  history?: Position[];
+  maxDepth: number;
+  requestId: number;
+  firstStep?: MoveStep;
+}
+
 export interface CandidateLine {
   move: TurnMove;
   score: number;
@@ -58,12 +67,43 @@ export interface AnalysisResult {
   engineName: string;
 }
 
-export interface EngineAdapter {
+export interface LiveAnalysisUpdate {
+  requestId: number;
+  bestMove: TurnMove;
+  score: number;
+  depth: number;
+}
+
+export interface RulesEngine {
   readonly name: string;
   createGame(seed?: number): Position;
   legalMoves(position: Position): TurnMove[];
   previewFirstStep(position: Position, step: MoveStep): Position;
   applyMove(position: Position, move: TurnMove): Position;
+}
+
+export interface ComputerAgent {
+  chooseMove(request: AnalysisRequest, signal: AbortSignal): Promise<AnalysisResult>;
+  dispose(): void;
+}
+
+export interface LiveAnalyzer {
+  analyze(
+    request: LiveAnalysisRequest,
+    onProgress: (update: LiveAnalysisUpdate) => void,
+    signal: AbortSignal,
+  ): Promise<LiveAnalysisUpdate>;
+  dispose(): void;
+}
+
+export interface EngineServices {
+  rules: RulesEngine;
+  computerAgent: ComputerAgent;
+  analyzer: LiveAnalyzer;
+}
+
+/** @deprecated Kept for compatibility with history-format test adapters. */
+export interface EngineAdapter extends RulesEngine {
   analyze(request: AnalysisRequest, signal: AbortSignal): Promise<AnalysisResult>;
   dispose(): void;
 }

@@ -162,6 +162,7 @@ version = "0.1.0"
 name = "snipe-wasm"
 version = "0.1.0"
 dependencies = [
+ "js-sys",
  "serde",
  "serde_json",
  "snipe-ai",

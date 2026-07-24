@@ -1,13 +1,13 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
-  EngineAdapter,
+  EngineServices,
   Location,
   Position,
   TurnMove,
 } from "./engine/types";
 
-const { engine, earlier, current, move, earlierMove } = vi.hoisted(() => {
+const { engine, earlier, current, move, earlierMove, analyzerAnalyze, agentChoose } = vi.hoisted(() => {
   const locations = (ratLocation: Location): Position["locations"] => ({
     "alpha-reserve": [],
     "beta-reserve": [],
@@ -81,7 +81,40 @@ const { engine, earlier, current, move, earlierMove } = vi.hoisted(() => {
     ],
     captures: [],
   };
-  const adapter = {
+  const applied: Position = {
+    ...earlier,
+    turn: "Beta",
+    turnNumber: 3,
+  };
+  const analyzerAnalyze = vi.fn(
+    (
+      request: { requestId: number },
+      onProgress: (update: unknown) => void,
+    ) => {
+      const update = {
+        requestId: request.requestId,
+        bestMove: move,
+        score: 125,
+        depth: 3,
+      };
+      onProgress(update);
+      return Promise.resolve(update);
+    },
+  );
+  const agentChoose = vi.fn((request: { requestId: number }) =>
+    Promise.resolve({
+      requestId: request.requestId,
+      bestMove: move,
+      score: 100,
+      depth: 2,
+      nodes: 100,
+      elapsedMs: 5,
+      principalVariation: [move.label],
+      candidates: [],
+      engineName: "test",
+    }),
+  );
+  const rules = {
     name: "test engine",
     createGame: () => current,
     legalMoves: (position: Position) =>
@@ -107,15 +140,24 @@ const { engine, earlier, current, move, earlierMove } = vi.hoisted(() => {
         },
       };
     },
-    applyMove: () => earlier,
-    analyze: () => Promise.reject(new Error("analysis should remain off")),
-    dispose: () => undefined,
-  } satisfies EngineAdapter;
-  return { engine: adapter, earlier, current, move, earlierMove };
+    applyMove: () => applied,
+  };
+  const services = {
+    rules,
+    computerAgent: {
+      chooseMove: agentChoose,
+      dispose: () => undefined,
+    },
+    analyzer: {
+      analyze: analyzerAnalyze,
+      dispose: () => undefined,
+    },
+  } satisfies EngineServices;
+  return { engine: services, earlier, current, move, earlierMove, analyzerAnalyze, agentChoose };
 });
 
 vi.mock("./engine/fallback-adapter", () => ({
-  createEngineAdapter: () => engine,
+  createEngineServices: () => engine,
 }));
 
 import App from "./App";
@@ -195,5 +237,107 @@ describe("pending subply history navigation", () => {
       screen.queryByRole("button", { name: "Undo first subply" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("2 / 2")).toBeInTheDocument();
+  });
+});
+
+describe("game mode and live analysis", () => {
+  afterEach(cleanup);
+
+  beforeEach(() => {
+    localStorage.clear();
+    analyzerAnalyze.mockClear();
+    agentChoose.mockClear();
+  });
+
+  it("uses the new independent defaults and conditional fields", () => {
+    render(<App />);
+
+    const mode = screen.getByLabelText("Mode");
+    expect(mode).toHaveValue("computer-beta");
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "Computer plays as Alpha",
+      "Computer plays as Beta",
+      "Pass-and-play",
+    ]);
+    expect(screen.getByLabelText("Thinking Time")).toHaveValue(5);
+    expect(screen.getByRole("switch", { name: "Analysis" })).not.toBeChecked();
+    expect(screen.queryByLabelText("Depth limit")).not.toBeInTheDocument();
+
+    fireEvent.change(mode, { target: { value: "pass-and-play" } });
+    expect(screen.queryByLabelText("Thinking Time")).not.toBeInTheDocument();
+  });
+
+  it("keeps analysis informational and constrains it after the first subply", async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("switch", { name: "Analysis" }));
+
+    expect(screen.getByLabelText("Depth limit")).toHaveValue(5);
+    expect(await screen.findByText("+1.25")).toBeInTheDocument();
+    expect(screen.getByText("Rat 2, Ox 3")).toBeInTheDocument();
+    const rat = screen.getByRole("button", { name: "Alpha Rat, retreater" });
+    expect(rat).toBeEnabled();
+
+    fireEvent.click(rat);
+    fireEvent.click(screen.getByRole("button", { name: "Move selected card to Rank 2" }));
+
+    await waitFor(() => {
+      expect(analyzerAnalyze).toHaveBeenCalled();
+      const request = analyzerAnalyze.mock.calls.at(-1)![0] as {
+        firstStep?: TurnMove["steps"][number];
+      };
+      expect(request.firstStep).toEqual({
+        cardId: "animal-0",
+        from: "row-1",
+        to: "row-2",
+      });
+    });
+    expect(await screen.findByText("Ox to Rank 3")).toBeInTheDocument();
+    expect(screen.getByText("Suggested next subply")).toBeInTheDocument();
+  });
+
+  it("migrates old manual automation to pass-and-play with analysis off", () => {
+    localStorage.setItem(
+      "snipe-hunt.mission-7.game",
+      JSON.stringify({
+        schemaVersion: 1,
+        timeline: [{ position: current, move: null }],
+        cursor: 0,
+        mode: "manual",
+        manualAnalysis: true,
+        timeLimitSeconds: 7,
+      }),
+    );
+
+    render(<App />);
+
+    expect(screen.getByLabelText("Mode")).toHaveValue("pass-and-play");
+    expect(screen.getByRole("switch", { name: "Analysis" })).not.toBeChecked();
+    expect(analyzerAnalyze).not.toHaveBeenCalled();
+    expect(agentChoose).not.toHaveBeenCalled();
+  });
+
+  it("runs the computer agent and analyzer independently on a computer turn", async () => {
+    agentChoose.mockImplementationOnce(() => new Promise(() => undefined));
+    localStorage.setItem(
+      "snipe-hunt.mission-7.game",
+      JSON.stringify({
+        schemaVersion: 2,
+        timeline: [{ position: current, move: null }],
+        cursor: 0,
+        gameMode: "computer-alpha",
+        thinkingTimeSeconds: 5,
+        analysisEnabled: true,
+        analysisDepth: 5,
+      }),
+    );
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(agentChoose).toHaveBeenCalledTimes(1);
+      expect(analyzerAnalyze).toHaveBeenCalled();
+    });
+    expect(screen.getByRole("button", { name: "Alpha Rat, retreater" })).toBeDisabled();
+    expect(await screen.findByText("+1.25")).toBeInTheDocument();
   });
 });

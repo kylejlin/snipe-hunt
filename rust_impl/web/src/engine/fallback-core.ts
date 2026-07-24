@@ -1,5 +1,6 @@
 import {
   type AnalysisResult,
+  type LiveAnalysisUpdate,
   type Card,
   type Location,
   type MoveStep,
@@ -248,8 +249,16 @@ export function analyzeFallback(
   position: Position,
   requestId: number,
   elapsedMs: number,
+  firstStep?: MoveStep,
 ): AnalysisResult {
   const candidates = fallbackLegalMoves(position)
+    .filter((move) =>
+      firstStep
+        ? move.steps[0]?.cardId === firstStep.cardId &&
+          move.steps[0]?.from === firstStep.from &&
+          move.steps[0]?.to === firstStep.to
+        : true,
+    )
     .map((move) => ({ move, score: scoreMove(position, move) }))
     .sort((left, right) => right.score - left.score || left.move.id.localeCompare(right.move.id));
   const best = candidates[0];
@@ -265,5 +274,20 @@ export function analyzeFallback(
     principalVariation: candidates.slice(0, 3).map((candidate) => candidate.move.label),
     candidates: candidates.slice(0, 4),
     engineName: "Deterministic preview engine",
+  };
+}
+
+export function analyzeFallbackAtDepth(
+  position: Position,
+  requestId: number,
+  depth: number,
+  firstStep?: MoveStep,
+): LiveAnalysisUpdate {
+  const result = analyzeFallback(position, requestId, depth * 65, firstStep);
+  return {
+    requestId,
+    bestMove: result.bestMove,
+    score: result.score,
+    depth,
   };
 }

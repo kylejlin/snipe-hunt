@@ -232,12 +232,17 @@ function BoardLane({
   );
 }
 
-function formatAlphaScore(score: number, turn: Player): string {
+// These mirror snipe-ai's public mate score and reserved mate-score range.
+const MATE_SCORE = 1_000_000;
+const MATE_THRESHOLD = MATE_SCORE - 10_000;
+
+export function formatAlphaScore(score: number, turn: Player): string {
   const alphaScore = turn === "Alpha" ? score : -score;
-  if (Math.abs(alphaScore) >= 100_000) {
-    return `${alphaScore > 0 ? "Alpha" : "Beta"} has a forced capture`;
+  if (Math.abs(alphaScore) >= MATE_THRESHOLD) {
+    const movesUntilMate = MATE_SCORE - Math.abs(alphaScore);
+    return `${alphaScore >= 0 ? "+" : "-"}#${movesUntilMate}`;
   }
-  return `${alphaScore >= 0 ? "+" : ""}${(alphaScore / 100).toFixed(2)}`;
+  return `${alphaScore >= 0 ? "+" : ""}${(alphaScore / 100).toFixed(1)}`;
 }
 
 export default function App() {

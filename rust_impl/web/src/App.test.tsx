@@ -160,7 +160,24 @@ vi.mock("./engine/fallback-adapter", () => ({
   createEngineServices: () => engine,
 }));
 
-import App from "./App";
+import App, { formatAlphaScore } from "./App";
+
+describe("Alpha evaluation formatting", () => {
+  it("rounds ordinary evaluations to one decimal from Alpha's perspective", () => {
+    expect(formatAlphaScore(125, "Alpha")).toBe("+1.3");
+    expect(formatAlphaScore(-66, "Alpha")).toBe("-0.7");
+    expect(formatAlphaScore(66, "Beta")).toBe("-0.7");
+    expect(formatAlphaScore(0, "Beta")).toBe("+0.0");
+    expect(formatAlphaScore(100_000, "Alpha")).toBe("+1000.0");
+  });
+
+  it("shows forced captures as signed moves until mate", () => {
+    expect(formatAlphaScore(1_000_000, "Alpha")).toBe("+#0");
+    expect(formatAlphaScore(999_997, "Alpha")).toBe("+#3");
+    expect(formatAlphaScore(999_998, "Beta")).toBe("-#2");
+    expect(formatAlphaScore(-999_996, "Beta")).toBe("+#4");
+  });
+});
 
 describe("pending subply history navigation", () => {
   afterEach(cleanup);
@@ -266,6 +283,7 @@ describe("game mode and live analysis", () => {
       ),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Game Log settings")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.6.0")).toBeInTheDocument();
 
     const mode = screen.getByLabelText("Mode");
     expect(mode).toHaveValue("computer-beta");
@@ -287,10 +305,10 @@ describe("game mode and live analysis", () => {
     fireEvent.click(screen.getByRole("switch", { name: "Analysis" }));
 
     expect(screen.getByLabelText("Depth limit")).toHaveValue(5);
-    expect(await screen.findByText("+1.25")).toBeInTheDocument();
+    expect(await screen.findByText("+1.3")).toBeInTheDocument();
     expect(screen.getByText("Rat 2, Ox 3")).toBeInTheDocument();
     expect(
-      screen.getByText("+1.25").compareDocumentPosition(screen.getByText("Rat 2, Ox 3")),
+      screen.getByText("+1.3").compareDocumentPosition(screen.getByText("Rat 2, Ox 3")),
     ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(
       screen.getByText("Rat 2, Ox 3").compareDocumentPosition(screen.getByText("Depth 3 / 5")),
@@ -362,6 +380,6 @@ describe("game mode and live analysis", () => {
       expect(analyzerAnalyze).toHaveBeenCalled();
     });
     expect(screen.getByRole("button", { name: "Alpha Rat, retreater" })).toBeDisabled();
-    expect(await screen.findByText("+1.25")).toBeInTheDocument();
+    expect(await screen.findByText("+1.3")).toBeInTheDocument();
   });
 });

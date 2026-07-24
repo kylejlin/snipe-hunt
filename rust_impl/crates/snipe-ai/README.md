@@ -13,7 +13,8 @@ The searcher includes:
 - capture/threat quiescence;
 - repetition detection;
 - search statistics and a legal principal variation;
-- a tunable Snipe Hunt feature evaluation.
+- a tunable Snipe Hunt feature evaluation with explicit major-animal value
+  and allegiance-aware capture pressure;
 - a seat-swapping native match harness for engine and weight tournaments.
 
 ## `snipe-core` adapter contract

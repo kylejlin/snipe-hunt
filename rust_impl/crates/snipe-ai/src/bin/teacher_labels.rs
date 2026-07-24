@@ -277,6 +277,7 @@ fn root_perspective_features(child: State) -> SnipeFeatures {
 fn negate_features(features: SnipeFeatures) -> SnipeFeatures {
     SnipeFeatures {
         material: -features.material,
+        major_material: -features.major_material,
         reserve: -features.reserve,
         mobility: -features.mobility,
         progress: -features.progress,
@@ -337,6 +338,7 @@ delta_fast={:?} delta_teacher={:?}",
 fn feature_delta(after: SnipeFeatures, before: SnipeFeatures) -> SnipeFeatures {
     SnipeFeatures {
         material: after.material - before.material,
+        major_material: after.major_material - before.major_material,
         reserve: after.reserve - before.reserve,
         mobility: after.mobility - before.mobility,
         progress: after.progress - before.progress,

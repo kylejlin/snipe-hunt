@@ -428,6 +428,7 @@ fn weights(
 ) -> SnipeWeights {
     SnipeWeights {
         material,
+        major_material: 160,
         reserve,
         mobility,
         progress,
@@ -527,6 +528,24 @@ fn main() {
         first_seed + seeds,
         seeds * 2
     );
+    if mode == "major_holdout" {
+        let legacy = SnipeWeights {
+            major_material: 0,
+            ..SnipeWeights::default()
+        };
+        let result = play_weight_match(
+            baseline,
+            NovelWeights::default(),
+            legacy,
+            NovelWeights::default(),
+            first_seed,
+            seeds,
+            depth,
+            max_turns,
+        );
+        print_result("major_material_160", &result);
+        return;
+    }
     if matches!(mode.as_str(), "features" | "feature_best" | "features2") {
         let feature_candidates = [
             (

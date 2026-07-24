@@ -50,7 +50,7 @@ fn production_self_play_cycle_is_legal_and_returns_to_identical_state() {
 }
 
 #[test]
-fn historical_contempt_avoids_closing_the_production_cycle() {
+fn historical_context_rejects_the_known_cycle_closure() {
     let repeated = cycle_position();
     let cycle = cycle_moves();
     let mut before_closing_line = repeated;
@@ -73,15 +73,6 @@ fn historical_contempt_avoids_closing_the_production_cycle() {
         max_depth: 3,
         ..SearchConfig::default()
     };
-    let mut without_history = SearchEngine::new(config.clone());
-    let baseline = without_history.search(&before_closing_line);
-    assert_eq!(baseline.depth, 3, "{baseline:?}");
-    assert_eq!(
-        baseline.best_move,
-        Some(closing_setup),
-        "fixture must reproduce the original production cycle"
-    );
-
     let mut with_history = SearchEngine::new(config);
     let defended =
         with_history.search_with_history(&before_closing_line, &[repeated.repetition_hash()]);

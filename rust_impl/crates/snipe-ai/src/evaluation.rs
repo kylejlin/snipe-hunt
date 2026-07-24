@@ -8,6 +8,12 @@
 pub struct SnipeFeatures {
     /// Friendly animals not captured, minus enemy animals not captured.
     pub material: i32,
+    /// Friendly pure-element major animals minus enemy major animals.
+    ///
+    /// Tigers, dragons, fish, and elephants are strategically scarcer than
+    /// minor animals: they supply all three pips of one element and cannot
+    /// retreat. Losing one should not be scored like losing a flexible minor.
+    pub major_material: i32,
     /// Friendly reserve count minus enemy reserve count.
     pub reserve: i32,
     /// Friendly legal full turns minus enemy legal full turns.
@@ -31,6 +37,7 @@ pub struct SnipeFeatures {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SnipeWeights {
     pub material: i32,
+    pub major_material: i32,
     pub reserve: i32,
     pub mobility: i32,
     pub progress: i32,
@@ -47,6 +54,7 @@ impl Default for SnipeWeights {
         Self {
             // A snipe capture is handled as mate, never as material.
             material: 120,
+            major_material: 160,
             reserve: 18,
             mobility: 3,
             progress: 8,
@@ -64,6 +72,7 @@ impl SnipeWeights {
     #[inline]
     pub fn evaluate(self, f: SnipeFeatures) -> i32 {
         let score = self.material * f.material
+            + self.major_material * f.major_material
             + self.reserve * f.reserve
             + self.mobility * f.mobility
             + self.progress * f.progress
@@ -97,10 +106,27 @@ mod tests {
     }
 
     #[test]
+    fn major_animals_are_worth_more_than_minor_animals() {
+        let weights = SnipeWeights::default();
+        let minor = weights.evaluate(SnipeFeatures {
+            material: 1,
+            ..SnipeFeatures::default()
+        });
+        let major = weights.evaluate(SnipeFeatures {
+            material: 1,
+            major_material: 1,
+            ..SnipeFeatures::default()
+        });
+        assert_eq!(major - minor, weights.major_material);
+        assert!(major > minor);
+    }
+
+    #[test]
     fn evaluation_is_antisymmetric_when_features_are_negated() {
         let weights = SnipeWeights::default();
         let f = SnipeFeatures {
             material: 2,
+            major_material: -1,
             reserve: -1,
             mobility: 7,
             progress: 3,
@@ -113,6 +139,7 @@ mod tests {
         };
         let n = SnipeFeatures {
             material: -f.material,
+            major_material: -f.major_material,
             reserve: -f.reserve,
             mobility: -f.mobility,
             progress: -f.progress,

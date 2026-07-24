@@ -99,6 +99,7 @@ pub fn extract_features(state: State) -> SnipeFeatures {
     let their_opportunities = triplet_opportunities(state, them);
     SnipeFeatures {
         material: owned_animals(state, me) - owned_animals(state, them),
+        major_material: major_animals(state, me) - major_animals(state, them),
         reserve: state.reserve_count(me) as i32 - state.reserve_count(them) as i32,
         mobility: pseudo_mobility(state, me) - pseudo_mobility(state, them),
         progress: progress(state, me) - progress(state, them),
@@ -120,8 +121,11 @@ pub fn tactical_move_score(parent: State, mv: Move, child: State) -> i32 {
     }
 
     let reserve = Location::reserve_of(player);
-    let captured = (child.animal_bits(reserve, player) & !parent.animal_bits(reserve, player))
-        .count_ones() as i32;
+    let swept = child.animal_bits(reserve, player) & !parent.animal_bits(reserve, player);
+    let converted = owned_animal_bits(child, player) & !owned_animal_bits(parent, player);
+    let converted_majors = (converted & MAJOR_MASK).count_ones() as i32;
+    let converted_count = converted.count_ones() as i32;
+    let relocated_own = (swept & !converted).count_ones() as i32;
     let positional = match mv {
         Move::Snipe { destination } => {
             // Prefer central escape squares until tactics say otherwise.
@@ -137,7 +141,17 @@ pub fn tactical_move_score(parent: State, mv: Move, child: State) -> i32 {
     };
     // The child is evaluated for the opponent. This breaks the many quiet-move
     // ties before selective search discards low-promise alternatives.
-    captured * 12_000 + positional - evaluate_state(child) / 4
+    converted_count * 12_000 + converted_majors * 8_000 + relocated_own * 1_000 + positional
+        - evaluate_state(child) / 4
+}
+
+const MAJOR_MASK: u32 =
+    (1 << 2) | (1 << 4) | (1 << 12) | (1 << 13) | (1 << 18) | (1 << 20) | (1 << 28) | (1 << 29);
+
+fn owned_animal_bits(state: State, player: Player) -> u32 {
+    Location::ALL.into_iter().fold(0, |bits, location| {
+        bits | state.animal_bits(location, player)
+    })
 }
 
 fn owned_animals(state: State, player: Player) -> i32 {
@@ -145,6 +159,16 @@ fn owned_animals(state: State, player: Player) -> i32 {
         .into_iter()
         .map(|location| state.animal_count(location, player) as i32)
         .sum()
+}
+
+fn major_animals(state: State, player: Player) -> i32 {
+    Animal::ALL
+        .into_iter()
+        .filter(|&animal| {
+            matches!(animal.index() & 15, 2 | 4 | 12 | 13)
+                && state.owner_of_animal(animal) == Some(player)
+        })
+        .count() as i32
 }
 
 fn progress(state: State, player: Player) -> i32 {
@@ -223,7 +247,10 @@ fn snipe_liberties(state: State, player: Player) -> i32 {
     i32::from(row.forward(player).is_some()) + i32::from(row.backward(player).is_some())
 }
 
-/// Returns `(activating_steps, capturable_cards)`.
+/// Returns `(activating_steps, convertible_enemy_animals)`.
+///
+/// A triplet also sweeps friendly cards into the mover's reserve, but those
+/// cards do not change allegiance and therefore are not material pressure.
 fn triplet_opportunities(state: State, player: Player) -> (i32, i32) {
     let mut activations = 0;
     let mut capturable = 0;
@@ -251,7 +278,7 @@ fn triplet_opportunities(state: State, player: Player) -> (i32, i32) {
                 && (source_cell.card_count() > 1 || destination_cell.has_snipe(player.opponent()))
             {
                 activations += 1;
-                capturable += destination_cell.card_count() as i32;
+                capturable += destination_cell.animals(player.opponent()).count_ones() as i32;
             }
         }
     }
@@ -289,6 +316,7 @@ fn snipe_threats(state: State, attacker: Player) -> i32 {
 mod tests {
     use super::*;
     use crate::{SearchConfig, SearchEngine, SearchPolicy};
+    use snipe_core::Card;
     use std::time::Duration;
 
     #[test]
@@ -312,6 +340,24 @@ mod tests {
     }
 
     #[test]
+    fn capture_pressure_counts_only_animals_that_change_allegiance() {
+        let state = State::empty(Player::Alpha)
+            .with_card(Location::Row1, Card::Snipe(Player::Alpha), Player::Alpha)
+            .with_card(Location::Row6, Card::Snipe(Player::Beta), Player::Beta)
+            .with_card(
+                Location::Row3,
+                Card::Animal(Animal::Rooster1),
+                Player::Alpha,
+            )
+            .with_card(Location::Row3, Card::Animal(Animal::Dog1), Player::Alpha)
+            .with_card(Location::Row4, Card::Animal(Animal::Mouse2), Player::Beta)
+            .with_card(Location::Row4, Card::Animal(Animal::Tiger2), Player::Beta)
+            .with_card(Location::Row4, Card::Animal(Animal::Ox1), Player::Alpha);
+
+        assert_eq!(triplet_opportunities(state, Player::Alpha), (1, 2));
+    }
+
+    #[test]
     fn completed_aspiration_move_survives_a_timed_out_research() {
         let config = SearchConfig {
             time_limit: Duration::from_secs(60),
@@ -323,7 +369,7 @@ mod tests {
             config.clone(),
             SearchPolicy {
                 retain_completed_aspiration_on_timeout: false,
-                node_limit: Some(20_000),
+                node_limit: Some(40_000),
                 ..SearchPolicy::production()
             },
         );
@@ -338,7 +384,7 @@ mod tests {
             config,
             SearchPolicy {
                 retain_completed_aspiration_on_timeout: true,
-                node_limit: Some(20_000),
+                node_limit: Some(40_000),
                 ..SearchPolicy::production()
             },
         );
@@ -362,6 +408,9 @@ mod tests {
             candidate_child, aspiration_child,
             "baseline={result:?} candidate={candidate_result:?}"
         );
-        assert!(candidate_result.depth > result.depth);
+        assert!(
+            candidate_result.depth > result.depth,
+            "baseline={result:?} candidate={candidate_result:?}"
+        );
     }
 }

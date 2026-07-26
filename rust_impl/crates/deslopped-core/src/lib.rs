@@ -118,6 +118,11 @@ impl CardMultiset {
     pub const fn checked_add(self, other: Self) -> Option<Self> {
         todo!()
     }
+
+    /// Returns `None` if the card (of that allegiance) is not present
+    pub const fn remove_one(self, card: Card, allegiance: Player) -> Option<Self> {
+        todo!()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

@@ -86,8 +86,9 @@ pub struct InitialStateBuilder {
     pub beta_reserve: [Animal; 1],
 }
 impl InitialStateBuilder {
-    /// This does not validate the animal counts.
-    pub const fn build(self) -> State {
+    /// This validates the animal counts.
+    /// There must be exactly 2 of each animal, or else this returns `None`.
+    pub const fn build(self) -> Option<State> {
         todo!()
     }
 }

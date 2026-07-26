@@ -20,6 +20,23 @@ impl State {
     }
 }
 
+impl CardMultiset {
+    pub(crate) const fn count_(self, card: Card, allegiance: Player) -> u8 {
+        todo!()
+    }
+
+    /// Returns `None` if the sum would have an illegal number of any of the card types.
+    /// There can be at most 2 of any animal (regardless of allegiance), at most 1 Alpha Snipe, and at most 1 Beta Snipe.
+    pub(crate) const fn checked_add_(self, other: Self) -> Option<Self> {
+        todo!()
+    }
+
+    /// Returns `None` if the card (of that allegiance) is not present
+    pub(crate) const fn remove_one_(self, card: Card, allegiance: Player) -> Option<Self> {
+        todo!()
+    }
+}
+
 impl Animal {
     pub(crate) const fn is_retreater_(self) -> bool {
         todo!()

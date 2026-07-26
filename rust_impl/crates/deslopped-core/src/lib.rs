@@ -110,18 +110,18 @@ impl CardMultiset {
     };
 
     pub const fn count(self, card: Card, allegiance: Player) -> u8 {
-        todo!()
+        self.count_(card, allegiance)
     }
 
     /// Returns `None` if the sum would have an illegal number of any of the card types.
     /// There can be at most 2 of any animal (regardless of allegiance), at most 1 Alpha Snipe, and at most 1 Beta Snipe.
     pub const fn checked_add(self, other: Self) -> Option<Self> {
-        todo!()
+        self.checked_add_(other)
     }
 
     /// Returns `None` if the card (of that allegiance) is not present
     pub const fn remove_one(self, card: Card, allegiance: Player) -> Option<Self> {
-        todo!()
+        self.remove_one_(card, allegiance)
     }
 }
 

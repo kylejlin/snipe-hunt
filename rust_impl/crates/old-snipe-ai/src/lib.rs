@@ -1,6 +1,6 @@
 //! A deterministic, deadline-safe game-tree searcher for Snipe Hunt.
 //!
-//! The search is deliberately separated from `snipe-core` by [`GamePosition`].
+//! The search is deliberately separated from `old-snipe-core` by [`GamePosition`].
 //! This makes the difficult search code independently testable and leaves one
 //! small integration point for the rules engine.
 

@@ -541,7 +541,7 @@ function BoardLane({
   );
 }
 
-// These mirror snipe-ai's public mate score and reserved mate-score range.
+// These mirror old-snipe-ai's public mate score and reserved mate-score range.
 const MATE_SCORE = 1_000_000;
 const MATE_THRESHOLD = MATE_SCORE - 10_000;
 

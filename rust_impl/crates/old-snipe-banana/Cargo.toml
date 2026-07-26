@@ -1,0 +1,15 @@
+[package]
+name = "old-snipe-banana"
+version = "0.2.0"
+edition = "2021"
+description = "Fast, game-specific Snipe Hunt engine"
+
+[lib]
+name = "snipe_banana"
+
+[dependencies]
+snipe-core = { package = "old-snipe-core", path = "../old-snipe-core" }
+snipe-ai = { package = "old-snipe-ai", path = "../old-snipe-ai" }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-time = "1"

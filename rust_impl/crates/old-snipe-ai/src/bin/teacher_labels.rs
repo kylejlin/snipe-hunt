@@ -353,7 +353,7 @@ fn feature_delta(after: SnipeFeatures, before: SnipeFeatures) -> SnipeFeatures {
 
 fn usage() {
     println!(
-        "usage: cargo run -p snipe-ai --release --bin teacher_labels -- \
+        "usage: cargo run -p old-snipe-ai --release --bin teacher_labels -- \
 <seeds=2> <first_seed=0> <max_plies=24> <sample_stride=6> \
 <fast_nodes=20000> <teacher_nodes=200000> <records=12> <holdout_modulus=5>\n\
 \n\

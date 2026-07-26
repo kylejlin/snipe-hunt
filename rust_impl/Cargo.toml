@@ -2,10 +2,10 @@
 resolver = "2"
 members = [
     "crates/snipe-core",
-    "crates/snipe-ai",
-    "crates/snipe-banana",
-    "crates/snipe-wasm",
-    "crates/deslopped-core",
+    "crates/old-snipe-core",
+    "crates/old-snipe-ai",
+    "crates/old-snipe-banana",
+    "crates/old-snipe-wasm",
 ]
 
 [workspace.package]
@@ -21,5 +21,5 @@ opt-level = 3
 panic = "abort"
 strip = true
 
-[profile.release.package.snipe-ai]
+[profile.release.package.old-snipe-ai]
 debug = 1

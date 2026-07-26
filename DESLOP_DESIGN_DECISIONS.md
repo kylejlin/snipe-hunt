@@ -4,7 +4,8 @@
 
 ## Purpose and scope
 
-- `deslopped-core` is a new authoritative reference implementation built from the ground up.
+- The `old-foo-bar` crates are full of AI slop. We are doing a from-zero rewrite (a.k.a. "deslopping"). Eventually, we will delete the `old-foo-bar` crates, and rewrite the web UI/WASM-glue to use the new, deslopped version.
+- `snipe-core` is a new authoritative reference implementation built from the ground up.
 - It prioritizes a clean public interface, developer ergonomics, and correctness over time or space efficiency.
 - The existing core and AI implementations are references for current behavior, not architectural constraints on the replacement.
 - The WASM glue and frontend may be changed as needed to fit the new core. Preserving their current internal DTOs and adapter interfaces is not required.
@@ -32,7 +33,7 @@
 
 - The current AI implementations will be discarded rather than migrated.
 - The replacement analyzer will be written from scratch and based on alpha-beta pruning.
-- Efficient analyzers should use their own internal state representation and convert to or from `deslopped-core::State` only at public interface boundaries.
+- Efficient analyzers should use their own internal state representation and convert to or from `snipe-core::State` only at public interface boundaries.
 - The analyzer does not need game-history input merely to preserve the current AIs' repetition or convergence policies. Those policies are not requirements for the new implementation.
 - Runtime analyzer selection does not require an object-safe trait. An enum will provide dispatch.
 - The UI will display thinking ticks rather than completed search depth, so the analyzer API does not need to report depth.

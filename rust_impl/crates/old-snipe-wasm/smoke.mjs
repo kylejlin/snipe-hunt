@@ -5,10 +5,10 @@ import init, {
   apply_move,
   create_game,
   legal_moves,
-} from "../../web/src/wasm/pkg/snipe_wasm.js";
+} from "../../web/src/wasm/pkg/old_snipe_wasm.js";
 
 const packageDirectory = new URL("../../web/src/wasm/pkg/", import.meta.url);
-const wasmBytes = await readFile(new URL("snipe_wasm_bg.wasm", packageDirectory));
+const wasmBytes = await readFile(new URL("old_snipe_wasm_bg.wasm", packageDirectory));
 await init({ module_or_path: wasmBytes });
 
 const budgets = process.argv.slice(2).map(Number);

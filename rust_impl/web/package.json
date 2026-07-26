@@ -1,10 +1,10 @@
 {
   "name": "snipe-hunt-web",
   "private": true,
-  "version": "0.30.0",
+  "version": "0.31.0",
   "type": "module",
   "scripts": {
-    "build:wasm": "wasm-pack build ../crates/snipe-wasm --target web --out-dir ../../web/src/wasm/pkg --release",
+    "build:wasm": "wasm-pack build ../crates/old-snipe-wasm --target web --out-dir ../../web/src/wasm/pkg --release",
     "dev": "npm run build:wasm && vite",
     "build": "npm run build:wasm && tsc -b && vite build",
     "build:github-pages": "npm run build:wasm && tsc -b && vite build --base=/snipe-hunt/",

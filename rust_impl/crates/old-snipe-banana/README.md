@@ -1,7 +1,8 @@
 # Banana
 
 Banana is the production Snipe Hunt player. It is independent of the generic
-Almond (`snipe-ai`) search and specializes its hot path for `snipe_core::State`.
+Almond (`old-snipe-ai`) search and specializes its hot path for the legacy
+core's `snipe_core::State` dependency alias.
 
 The design priorities are:
 
@@ -19,7 +20,7 @@ The design priorities are:
 Run an equal-time paired arena:
 
 ```sh
-cargo run --release -p snipe-banana --bin banana_arena -- 10 100 160 0 48
+cargo run --release -p old-snipe-banana --bin banana_arena -- 10 100 160 0 48
 ```
 
 The sixth optional argument gives Almond a different budget and the seventh
@@ -27,14 +28,14 @@ optionally caps Banana's depth. Major iterations first run a 5-second equal-
 time presmoke:
 
 ```sh
-cargo run --release -p snipe-banana --bin banana_arena -- 1 5000 100 0 48 5000
+cargo run --release -p old-snipe-banana --bin banana_arena -- 1 5000 100 0 48 5000
 ```
 
 Only iterations that consistently win that gate advance to the required
 asymmetric strength smoke test:
 
 ```sh
-cargo run --release -p snipe-banana --bin banana_arena -- 1 5000 100 0 48 30000
+cargo run --release -p old-snipe-banana --bin banana_arena -- 1 5000 100 0 48 30000
 ```
 
 This plays the same deal twice with seats swapped. It is intentionally slow:

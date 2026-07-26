@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-import init, { analyze, analyze_live } from "../wasm/pkg/snipe_wasm.js";
+import init, { analyze, analyze_live } from "../wasm/pkg/old_snipe_wasm.js";
 import type { WorkerRequest, WorkerResponse } from "./worker-protocol";
 import type { AnalysisResult, LiveAnalysisUpdate } from "./types";
 

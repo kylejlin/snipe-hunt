@@ -3,7 +3,7 @@ import init, {
   create_game,
   legal_moves,
   preview_first_step,
-} from "../wasm/pkg/snipe_wasm.js";
+} from "../wasm/pkg/old_snipe_wasm.js";
 import type { MoveStep, Position, TurnMove } from "./types";
 
 export let wasmInitializationError: Error | null = null;

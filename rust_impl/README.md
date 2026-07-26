@@ -5,10 +5,15 @@ WebAssembly bridge, and a browser UI.
 
 The implementation is split into:
 
-- `crates/snipe-core`: authoritative game rules and state transitions
-- `crates/snipe-ai`: the original generic search engine ("Almond") and match tooling
-- `crates/snipe-banana`: the fast game-specific production player ("Banana")
-- `crates/snipe-wasm`: browser-facing WebAssembly API
+- `crates/snipe-core`: the new authoritative reference rules implementation
+- `crates/old-snipe-core`: the legacy game rules and state transitions still
+  used by the web application
+- `crates/old-snipe-ai`: the legacy generic search engine ("Almond") and match
+  tooling
+- `crates/old-snipe-banana`: the legacy game-specific production player
+  ("Banana")
+- `crates/old-snipe-wasm`: the legacy browser-facing WebAssembly API used by
+  the web application
 - `web`: React UI and analysis worker
 
 The older Java and TypeScript implementations remain in the repository as
@@ -63,7 +68,7 @@ npm run build
 Banana-versus-Almond paired deals can be run with:
 
 ```sh
-cargo run --release -p snipe-banana --bin banana_arena -- 10 100 160 0 48
+cargo run --release -p old-snipe-banana --bin banana_arena -- 10 100 160 0 48
 ```
 
 The arguments are deal pairs, Banana milliseconds per move, maximum turns,
@@ -71,15 +76,15 @@ first seed, Banana beam width, and optional Almond milliseconds per move. The
 major-iteration smoke gate gives Banana 5 seconds and Almond 30 seconds:
 
 ```sh
-cargo run --release -p snipe-banana --bin banana_arena -- 1 5000 100 0 48 30000
+cargo run --release -p old-snipe-banana --bin banana_arena -- 1 5000 100 0 48 30000
 ```
 
 The native arena plays paired deals so both engines receive each side of the
 same initial position:
 
 ```sh
-cargo run --release -p snipe-ai --bin arena -- 20 1000 160 greedy 3
-cargo run --release -p snipe-ai --bin arena -- 20 1000 160 random 3
+cargo run --release -p old-snipe-ai --bin arena -- 20 1000 160 greedy 3
+cargo run --release -p old-snipe-ai --bin arena -- 20 1000 160 random 3
 ```
 
 The arguments are game count, milliseconds per search move, maximum game
@@ -99,19 +104,19 @@ Additional benchmark tools are available for adversarial validation:
 
 ```sh
 # Compare two alpha-beta depth limits on mirrored deals.
-cargo run --release -p snipe-ai --bin engine_arena -- 10 100 3 4 120
+cargo run --release -p old-snipe-ai --bin engine_arena -- 10 100 3 4 120
 
 # Challenge alpha-beta with the independent deterministic MCTS player.
-cargo run --release -p snipe-ai --bin mcts_arena -- 5 50 220
+cargo run --release -p old-snipe-ai --bin mcts_arena -- 5 50 220
 
 # Compare the bounded engine with a much deeper mirrored oracle.
-cargo run --release -p snipe-ai --bin oracle_arena -- 2 20000 200000 80 0
+cargo run --release -p old-snipe-ai --bin oracle_arena -- 2 20000 200000 80 0
 
 # Mine replayable fast-versus-teacher decision labels.
-cargo run --release -p snipe-ai --bin teacher_labels -- 6 1 12 4 20000 200000
+cargo run --release -p old-snipe-ai --bin teacher_labels -- 6 1 12 4 20000 200000
 
 # Run training/holdout comparisons for evaluation-weight candidates.
-cargo run --release -p snipe-ai --bin tune_weights -- 10 2 220 19
+cargo run --release -p old-snipe-ai --bin tune_weights -- 10 2 220 19
 ```
 
 At very short 100 ms searches, frozen depth three beat depth four 12–8, which

@@ -1,4 +1,4 @@
-# snipe-ai
+# old-snipe-ai
 
 Native iterative-deepening negamax/PVS search for Snipe Hunt.
 
@@ -17,7 +17,7 @@ The searcher includes:
   and allegiance-aware capture pressure;
 - a seat-swapping native match harness for engine and weight tournaments.
 
-## `snipe-core` adapter contract
+## `old-snipe-core` adapter contract
 
 Implement `GamePosition` for a core-owned wrapper (Rust's orphan rules make a
 wrapper preferable if both trait and state evolve independently). A search move
@@ -39,7 +39,7 @@ weights after rules parity is established.
 Run the timed searcher against a deterministic capture/threat greedy player:
 
 ```sh
-cargo run --release -p snipe-ai --bin arena -- 10 50 300 greedy
+cargo run --release -p old-snipe-ai --bin arena -- 10 50 300 greedy
 ```
 
 Arguments are game count, milliseconds per search move, maximum turns, and

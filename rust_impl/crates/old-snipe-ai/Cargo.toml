@@ -1,11 +1,14 @@
 [package]
-name = "snipe-ai"
-version = "0.1.0"
+name = "old-snipe-ai"
+version = "0.2.0"
 edition = "2021"
 description = "Deadline-safe alpha-beta search for Snipe Hunt"
 
+[lib]
+name = "snipe_ai"
+
 [dependencies]
-snipe-core = { path = "../snipe-core" }
+snipe-core = { package = "old-snipe-core", path = "../old-snipe-core" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 web-time = "1"

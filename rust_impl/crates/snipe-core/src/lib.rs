@@ -92,9 +92,20 @@ impl InitialStateBuilder {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IllegalActionError {
-    // TODO: Add fields
+    SnipeAlreadyCaptured,
+    AlreadyMovedAnimal,
+    StepDestinationOutOfRange,
+    CannotEmptyRowWithoutImmediatelyWinning,
+    DroppedAnimalNotInReserve,
+    CannotEmptyReserve,
+    CannotDropRetreaterOnEnemyBackTwoRanks,
+    MovedCardInReserve,
+    CardNotFound,
+    NotYourAnimal,
+    CannotMoveSameAnimalTwice,
+    CannotCaptureOwnSnipeWithoutAlsoCapturingOpponent,
 }
 
 pub trait ActionWriter {

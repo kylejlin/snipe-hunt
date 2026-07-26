@@ -2,4 +2,7 @@
 /web/node_modules/
 /web/dist/
 /web/src/wasm/pkg/
+/web2/node_modules/
+/web2/dist/
+/web2/src/wasm/pkg/
 *.profraw

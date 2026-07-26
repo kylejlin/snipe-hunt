@@ -5,6 +5,7 @@ members = [
     "crates/agent-avocado",
     "crates/agent-blueberry",
     "crates/snipe-wasm",
+    "crates/snipe-web2-wasm",
 ]
 
 [workspace.package]

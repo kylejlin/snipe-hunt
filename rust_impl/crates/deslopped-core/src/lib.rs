@@ -261,6 +261,10 @@ pub struct AnimalDrop {
 pub trait Analyzer {
     fn set_state(&mut self, state: State);
 
+    /// Repeated calls to `think` will continue from the previous state,
+    /// unless `set_state` was called in between.
+    /// This allows consumers to make the analyzer think for a while, report an analysis,
+    /// think some more, report a (hopefully now-improved) analysis, etc.
     fn think<F>(&mut self, on_tick_complete: F)
     where
         F: FnMut() -> ShouldStopThinking;

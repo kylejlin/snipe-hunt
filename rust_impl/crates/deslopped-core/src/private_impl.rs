@@ -150,3 +150,13 @@ impl Evaluation {
         })
     }
 }
+
+impl ActionWriter for Vec<Action> {
+    fn push(&mut self, action: Action) {
+        Vec::push(self, action);
+    }
+
+    fn reserve(&mut self, additional: usize) {
+        Vec::reserve(self, additional);
+    }
+}

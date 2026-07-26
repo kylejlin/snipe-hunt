@@ -2,14 +2,16 @@
 //! It is NOT time-efficient or space-efficient.
 //! Instead, it prioritizes a clean interface and developer ergonomics.
 //!
-//! The web UI (which shouldn't be too computationally intensive) should use this crate as much as possible.
-//! However, the analyzers (which _extremely_ computationally intensive) should only use
-//! this crate at public interface boundaries, while internally using more efficient algorithms/data-structures.
+//! Analyzers should only use this crate at public interface boundaries,
+//! while internally using more efficient algorithms/data-structures.
 
 // Note: This file is just the "header" file, outlining the public interface.
 // All the non-trivial implementations are in the `private_impl` module.
 
-pub use std::cmp::Ordering;
+pub use std::{
+    cmp::Ordering,
+    fmt::{self, Debug},
+};
 
 mod private_impl;
 
@@ -49,6 +51,12 @@ pub struct State {
     pub r6: CardMultiset,
     pub leading_action: Option<AnimalStep>,
 }
+impl Debug for State {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // We have to manually impl because we want to display a separate `alpha_reserve` (above `r1`) and `beta_reserve` (below `r6`).
+        todo!()
+    }
+}
 impl State {
     pub fn write_legal_actions<W>(&self, w: W)
     where
@@ -66,13 +74,31 @@ impl State {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct InitialStateBuilder {
+    pub alpha_reserve: [Animal; 1],
+    pub r1: [Animal; 2],
+    pub r2: [Animal; 12],
+    pub r3: [Animal; 1],
+    pub r4: [Animal; 1],
+    pub r5: [Animal; 12],
+    pub r6: [Animal; 2],
+    pub beta_reserve: [Animal; 1],
+}
+impl InitialStateBuilder {
+    /// This does not validate the animal counts.
+    pub const fn build(self) -> State {
+        todo!()
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum IllegalActionError {
     // TODO: Add fields
 }
 
 pub trait ActionWriter {
-    fn push(&mut self, element: Action);
+    fn push(&mut self, action: Action);
 
     fn reserve(&mut self, additional: usize);
 }
@@ -101,6 +127,12 @@ pub struct CardMultiset {
     /// Bit0 is Alpha, Bit1 is Beta, the others are "don't care" bits.
     snipes: u8,
 }
+impl Debug for CardMultiset {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // We have to manually impl since we want to show the actual cards.
+        todo!()
+    }
+}
 impl CardMultiset {
     pub const EMPTY: Self = Self {
         alpha_presence: 0,
@@ -108,6 +140,10 @@ impl CardMultiset {
         has_allied_twins: 0,
         snipes: 0,
     };
+
+    pub const fn singleton(card: Card, allegiance: Player) -> Self {
+        todo!()
+    }
 
     pub const fn count(self, card: Card, allegiance: Player) -> u8 {
         self.count_(card, allegiance)
@@ -194,28 +230,13 @@ pub enum Card {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Ply {
-    AnimalSteps(AnimalStep, AnimalStep),
-    SnipeStep,
-    Drop(AnimalDrop),
-}
-impl Ply {
-    pub const fn action_len(self) -> u8 {
-        match self {
-            Self::AnimalSteps(_, _) => 2,
-            Self::SnipeStep | Self::Drop(_) => 1,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Action {
     AnimalStep(AnimalStep),
     SnipeStep,
     Drop(AnimalDrop),
 }
 impl Action {
-    pub const fn is_complete_ply(self) -> bool {
+    pub const fn is_standalone_ply(self) -> bool {
         matches!(self, Self::SnipeStep | Self::Drop(_))
     }
 }

@@ -186,8 +186,9 @@ const {
   };
 });
 
-vi.mock("./engine/fallback-adapter", () => ({
+vi.mock("./engine/engine-services", () => ({
   createEngineServices: () => engine,
+  engineInitializationError: null,
 }));
 
 import App, { formatAlphaScore } from "./App";
@@ -612,7 +613,7 @@ describe("subply history navigation", () => {
       subply: boolean;
       draftStep: TurnMove["steps"][number];
     };
-    expect(stored.schemaVersion).toBe(4);
+    expect(stored.schemaVersion).toBe(5);
     expect(stored.subply).toBe(true);
     expect(stored.draftStep).toEqual(move.steps[0]);
 
@@ -677,7 +678,7 @@ describe("game mode and live analysis", () => {
     }));
   });
 
-  it("uses the new independent defaults and conditional fields", () => {
+  it("uses Blueberry by default and shares the selected strategy with analysis", async () => {
     render(<App />);
 
     expect(
@@ -694,19 +695,33 @@ describe("game mode and live analysis", () => {
       ),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Game Log settings")).toBeInTheDocument();
-    expect(screen.getByText("Version 0.31.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.32.0")).toBeInTheDocument();
 
     const mode = screen.getByLabelText("Mode");
     expect(mode).toHaveValue("computer-beta");
-    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
+    expect(Array.from(mode.querySelectorAll("option")).map((option) => option.textContent)).toEqual([
       "Computer plays as Alpha",
       "Computer plays as Beta",
       "Pass-and-play",
     ]);
+    const strategy = screen.getByLabelText("Strategy");
+    expect(strategy).toHaveValue("blueberry");
+    fireEvent.change(strategy, { target: { value: "avocado" } });
+    expect(
+      screen.getByText(
+        "Deterministic calculation that prizes structure, safety, and patient tactics.",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("switch", { name: "Analysis" }));
+    await waitFor(() => {
+      expect(analyzerAnalyze.mock.calls.at(-1)?.[0]).toMatchObject({
+        strategy: "avocado",
+        timeLimitMs: 2_000,
+      });
+    });
     expect(screen.getByLabelText("Thinking Time")).toHaveValue("5");
-    expect(screen.getByRole("switch", { name: "Analysis" })).not.toBeChecked();
-    expect(screen.getByText("Analysis disabled")).toBeInTheDocument();
-    expect(screen.getByLabelText("Depth limit")).toHaveValue("5");
+    expect(screen.getByRole("switch", { name: "Analysis" })).toBeChecked();
+    expect(screen.getByLabelText("Analysis time")).toHaveValue("2");
     expect(screen.queryByText("Idle")).not.toBeInTheDocument();
     expect(
       screen.queryByText("Turn on impartial, live evaluation of the displayed position."),
@@ -720,7 +735,7 @@ describe("game mode and live analysis", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("switch", { name: "Analysis" }));
 
-    expect(screen.getByLabelText("Depth limit")).toHaveValue("5");
+    expect(screen.getByLabelText("Analysis time")).toHaveValue("2");
     expect(screen.queryByText("Analysis disabled")).not.toBeInTheDocument();
     const score = await screen.findByText("+1.3");
     expect(score).toHaveClass("history-analysis__score--positive");
@@ -741,7 +756,7 @@ describe("game mode and live analysis", () => {
     expect(suggestedLine.querySelector(".move-number")).not.toBeInTheDocument();
     expect(screen.queryByText("Analyzing")).not.toBeInTheDocument();
     expect(screen.queryByText("Complete")).not.toBeInTheDocument();
-    expect(screen.getByText("Depth 3 / 5")).toBeInTheDocument();
+    expect(screen.getByText(/Blueberry · — ticks/)).toBeInTheDocument();
     const rat = screen.getByRole("button", { name: "Alpha Rat, retreater" });
     expect(rat).toBeEnabled();
 
@@ -795,7 +810,7 @@ describe("game mode and live analysis", () => {
         activeLine: string;
         cursor: number;
       };
-      expect(stored.schemaVersion).toBe(4);
+      expect(stored.schemaVersion).toBe(5);
       expect(stored.timeline).toHaveLength(1);
       expect(stored.alternativeLine.divergenceIndex).toBe(0);
       expect(stored.alternativeLine.entries).toHaveLength(2);
@@ -957,32 +972,32 @@ describe("game mode and live analysis", () => {
   it("normalizes numeric text fields on blur", () => {
     render(<App />);
 
-    const depth = screen.getByLabelText("Depth limit");
+    const analysisTime = screen.getByLabelText("Analysis time");
     const thinkingTime = screen.getByLabelText("Thinking Time");
 
-    expect(depth).toHaveAttribute("type", "text");
-    expect(depth).not.toHaveAttribute("min");
-    expect(depth).not.toHaveAttribute("max");
-    expect(depth).not.toHaveAttribute("step");
+    expect(analysisTime).toHaveAttribute("type", "text");
+    expect(analysisTime).not.toHaveAttribute("min");
+    expect(analysisTime).not.toHaveAttribute("max");
+    expect(analysisTime).not.toHaveAttribute("step");
     expect(thinkingTime).toHaveAttribute("type", "text");
     expect(thinkingTime).not.toHaveAttribute("min");
     expect(thinkingTime).not.toHaveAttribute("max");
     expect(thinkingTime).not.toHaveAttribute("step");
 
-    fireEvent.change(depth, { target: { value: "12" } });
-    expect(depth).toHaveValue("12");
-    fireEvent.blur(depth);
-    expect(depth).toHaveValue("10");
+    fireEvent.change(analysisTime, { target: { value: "200" } });
+    expect(analysisTime).toHaveValue("200");
+    fireEvent.blur(analysisTime);
+    expect(analysisTime).toHaveValue("120");
 
-    fireEvent.focus(depth);
-    fireEvent.change(depth, { target: { value: "4.6" } });
-    fireEvent.blur(depth);
-    expect(depth).toHaveValue("5");
+    fireEvent.focus(analysisTime);
+    fireEvent.change(analysisTime, { target: { value: "4.6" } });
+    fireEvent.blur(analysisTime);
+    expect(analysisTime).toHaveValue("4.5");
 
-    fireEvent.focus(depth);
-    fireEvent.change(depth, { target: { value: "not a number" } });
-    fireEvent.blur(depth);
-    expect(depth).toHaveValue("5");
+    fireEvent.focus(analysisTime);
+    fireEvent.change(analysisTime, { target: { value: "not a number" } });
+    fireEvent.blur(analysisTime);
+    expect(analysisTime).toHaveValue("4.5");
 
     fireEvent.change(thinkingTime, { target: { value: "1.37" } });
     expect(thinkingTime).toHaveValue("1.37");

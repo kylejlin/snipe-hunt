@@ -578,13 +578,13 @@ input[type="text"] {
   box-shadow: 0 12px 30px rgba(31, 34, 38, 0.16);
 }
 
-.history-menu__depth {
+.history-menu__time {
   gap: 6px;
   margin: 0;
   padding: 7px 8px 9px;
 }
 
-.history-menu__depth input {
+.history-menu__time input {
   min-height: 34px;
 }
 
@@ -670,7 +670,7 @@ input[type="text"] {
   color: var(--beta);
 }
 
-.history-analysis__depth {
+.history-analysis__work {
   color: var(--muted);
   font: 400 0.59rem "DM Mono", monospace;
   white-space: nowrap;

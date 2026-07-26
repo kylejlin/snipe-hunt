@@ -1,13 +1,18 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { version } from "../package.json";
-import { createEngineServices } from "./engine/fallback-adapter";
+import {
+  createEngineServices,
+  engineInitializationError,
+} from "./engine/engine-services";
 import {
   type Card,
+  type EngineEvaluation,
   type LiveAnalysisUpdate,
   type Location,
   type MoveStep,
   type Player,
   type Position,
+  type Strategy,
   type TurnMove,
   locationLabel,
 } from "./engine/types";
@@ -29,7 +34,7 @@ interface AlternativeLine {
 }
 
 interface StoredGame {
-  schemaVersion: 4;
+  schemaVersion: 5;
   timeline: TimelineEntry[];
   alternativeLine: AlternativeLine | null;
   activeLine: ActiveLine;
@@ -38,8 +43,9 @@ interface StoredGame {
   draftStep: MoveStep | null;
   gameMode: GameMode;
   thinkingTimeSeconds: number;
+  strategy: Strategy;
   analysisEnabled: boolean;
-  analysisDepth: number;
+  analysisTimeSeconds: number;
 }
 
 const STORAGE_KEY = "snipe-hunt.mission-7.game";
@@ -224,7 +230,7 @@ function initialState(): StoredGame {
       if (!Array.isArray(timeline) || timeline.length === 0) {
         throw new Error("Stored timeline is invalid.");
       }
-      if (![1, 2, 3, 4].includes(Number(parsed.schemaVersion))) {
+      if (![1, 2, 3, 4, 5].includes(Number(parsed.schemaVersion))) {
         throw new Error("Stored schema version is invalid.");
       }
 
@@ -245,11 +251,11 @@ function initialState(): StoredGame {
       }
 
       const alternativeLine =
-        parsed.schemaVersion === 4
+        parsed.schemaVersion === 4 || parsed.schemaVersion === 5
           ? restoreAlternativeLine(parsed.alternativeLine, timeline)
           : null;
       const activeLine: ActiveLine =
-        parsed.schemaVersion === 4 &&
+        (parsed.schemaVersion === 4 || parsed.schemaVersion === 5) &&
         parsed.activeLine === "alternative" &&
         alternativeLine
           ? "alternative"
@@ -274,13 +280,17 @@ function initialState(): StoredGame {
       // they can crash the first render.
       engine.legalMoves(restoredTimeline[cursor].position);
       const draftStep =
-        parsed.schemaVersion === 3 || parsed.schemaVersion === 4
+        parsed.schemaVersion === 3 ||
+        parsed.schemaVersion === 4 ||
+        parsed.schemaVersion === 5
           ? parsed.draftStep == null
             ? null
             : (parsed.draftStep as MoveStep)
           : null;
       const subply =
-        (parsed.schemaVersion === 3 || parsed.schemaVersion === 4) &&
+        (parsed.schemaVersion === 3 ||
+          parsed.schemaVersion === 4 ||
+          parsed.schemaVersion === 5) &&
         parsed.subply === true;
       const nextMove = restoredTimeline[cursor + 1]?.move;
       const validSubply =
@@ -293,7 +303,7 @@ function initialState(): StoredGame {
       }
 
       return {
-        schemaVersion: 4,
+        schemaVersion: 5,
         timeline,
         alternativeLine,
         activeLine,
@@ -309,12 +319,16 @@ function initialState(): StoredGame {
           120,
           5,
         ),
+        strategy:
+          parsed.schemaVersion === 5 && parsed.strategy === "avocado"
+            ? "avocado"
+            : "blueberry",
         analysisEnabled:
           parsed.schemaVersion === 1 ? false : parsed.analysisEnabled === true,
-        analysisDepth:
-          parsed.schemaVersion === 1
-            ? 5
-            : clampNumber(parsed.analysisDepth, 1, 10, 5),
+        analysisTimeSeconds:
+          parsed.schemaVersion === 5
+            ? clampNumber(parsed.analysisTimeSeconds, 0.25, 120, 2)
+            : 2,
       };
     }
   } catch {
@@ -322,7 +336,7 @@ function initialState(): StoredGame {
   }
 
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     timeline: [{ position: engine.createGame(), move: null }],
     alternativeLine: null,
     activeLine: "actual",
@@ -331,8 +345,9 @@ function initialState(): StoredGame {
     draftStep: null,
     gameMode: "computer-beta",
     thinkingTimeSeconds: 5,
+    strategy: "blueberry",
     analysisEnabled: false,
-    analysisDepth: 5,
+    analysisTimeSeconds: 2,
   };
 }
 
@@ -340,12 +355,12 @@ function clampNumber(
   value: unknown,
   minimum: number,
   maximum: number,
-  fallback: number,
+  defaultValue: number,
 ): number {
   const numeric = Number(value);
   return Number.isFinite(numeric)
     ? Math.max(minimum, Math.min(maximum, numeric))
-    : fallback;
+    : defaultValue;
 }
 
 function normalizeNumber(
@@ -541,7 +556,6 @@ function BoardLane({
   );
 }
 
-// These mirror old-snipe-ai's public mate score and reserved mate-score range.
 const MATE_SCORE = 1_000_000;
 const MATE_THRESHOLD = MATE_SCORE - 10_000;
 
@@ -554,7 +568,21 @@ export function formatAlphaScore(score: number, turn: Player): string {
   return `${alphaScore >= 0 ? "+" : ""}${(alphaScore / 100).toFixed(1)}`;
 }
 
-export default function App() {
+function evaluationValue(evaluation: EngineEvaluation): number {
+  if (evaluation.kind === "estimate") return evaluation.value;
+  return evaluation.winner === "Alpha"
+    ? MATE_SCORE - evaluation.plies
+    : -MATE_SCORE + evaluation.plies;
+}
+
+function formatEvaluation(evaluation: EngineEvaluation): string {
+  if (evaluation.kind === "mate") {
+    return `${evaluation.winner === "Alpha" ? "+" : "-"}#${evaluation.plies}`;
+  }
+  return `${evaluation.value >= 0 ? "+" : ""}${evaluation.value.toFixed(1)}`;
+}
+
+function GameApp() {
   const [game, setGame] = useState<StoredGame>(initialState);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<LiveAnalysisUpdate | null>(null);
@@ -720,11 +748,9 @@ export default function App() {
       .chooseMove(
         {
           position,
-          history: displayedTimeline
-            .slice(0, game.cursor)
-            .map((timelineEntry) => timelineEntry.position),
           timeLimitMs: Math.round(game.thinkingTimeSeconds * 1_000),
           requestId,
+          strategy: game.strategy,
         },
         controller.signal,
       )
@@ -780,6 +806,7 @@ export default function App() {
     computerTurn,
     atPresent,
     game.subply,
+    game.strategy,
     game.thinkingTimeSeconds,
     legalMoves.length,
     position,
@@ -805,11 +832,9 @@ export default function App() {
       .analyze(
         {
           position,
-          history: displayedTimeline
-            .slice(0, game.cursor)
-            .map((timelineEntry) => timelineEntry.position),
-          maxDepth: game.analysisDepth,
+          timeLimitMs: Math.round(game.analysisTimeSeconds * 1_000),
           requestId,
+          strategy: game.strategy,
           firstStep: midpointStep ?? undefined,
         },
         (update) => {
@@ -844,8 +869,9 @@ export default function App() {
 
     return () => controller.abort();
   }, [
-    game.analysisDepth,
+    game.analysisTimeSeconds,
     game.analysisEnabled,
+    game.strategy,
     game.cursor,
     displayedTimeline,
     legalMoves.length,
@@ -1109,9 +1135,11 @@ export default function App() {
   const suggestedLine = useMemo(() => {
     if (!analysis) return [];
     const moves =
-      analysis.principalVariation.length > 0
-        ? analysis.principalVariation
-        : [analysis.bestMove];
+      analysis.recommendedLine?.length
+        ? analysis.recommendedLine
+        : analysis.principalVariation?.length
+          ? analysis.principalVariation
+          : [analysis.bestMove];
     let variationPosition = position;
     return moves.map((move, index) => {
       const nextVariationPosition = engine.applyMove(variationPosition, move);
@@ -1138,9 +1166,11 @@ export default function App() {
   const playSuggestedLine = (targetIndex: number) => {
     if (!analysis || targetIndex < 0) return;
     const moves =
-      analysis.principalVariation.length > 0
-        ? analysis.principalVariation
-        : [analysis.bestMove];
+      analysis.recommendedLine?.length
+        ? analysis.recommendedLine
+        : analysis.principalVariation?.length
+          ? analysis.principalVariation
+          : [analysis.bestMove];
     const selectedMoves = moves.slice(0, targetIndex + 1);
     if (selectedMoves.length === 0) return;
 
@@ -1227,9 +1257,11 @@ export default function App() {
       ? MATE_SCORE
       : -MATE_SCORE
     : analysis
-      ? position.turn === "Alpha"
-        ? analysis.score
-        : -analysis.score
+      ? analysis.evaluation
+        ? evaluationValue(analysis.evaluation)
+        : position.turn === "Alpha"
+          ? (analysis.score ?? 0)
+          : -(analysis.score ?? 0)
       : null;
   const evaluationTone =
     alphaEvaluation === null || alphaEvaluation === 0
@@ -1476,21 +1508,22 @@ export default function App() {
                     <span aria-hidden="true">⚙</span>
                   </summary>
                   <div className="history-menu__items">
-                    <label className="field history-menu__depth">
-                      <span>Analysis depth</span>
+                    <label className="field history-menu__time">
+                      <span>Analysis time</span>
                       <NumericTextInput
-                        value={game.analysisDepth}
-                        minimum={1}
-                        maximum={10}
-                        increment={1}
-                        ariaLabel="Depth limit"
-                        onCommit={(analysisDepth) => {
+                        value={game.analysisTimeSeconds}
+                        minimum={0.25}
+                        maximum={120}
+                        increment={0.25}
+                        ariaLabel="Analysis time"
+                        onCommit={(analysisTimeSeconds) => {
                           setGame((current) => ({
                             ...current,
-                            analysisDepth,
+                            analysisTimeSeconds,
                           }));
                         }}
                       />
+                      <span>seconds</span>
                     </label>
                     <div className="history-menu__divider" role="separator" />
                     <button type="button" onClick={exportHistory}>
@@ -1548,7 +1581,9 @@ export default function App() {
                       <strong className={evaluationTone}>
                         {analysisError
                           ? "—"
-                          : alphaEvaluation !== null
+                          : analysis?.evaluation
+                            ? formatEvaluation(analysis.evaluation)
+                            : alphaEvaluation !== null
                             ? formatAlphaScore(alphaEvaluation, "Alpha")
                             : "—"}
                       </strong>
@@ -1560,8 +1595,14 @@ export default function App() {
                   )}
                 </div>
                 {game.analysisEnabled && (
-                  <span className="history-analysis__depth">
-                    Depth {analysis?.depth ?? "—"} / {game.analysisDepth}
+                  <span className="history-analysis__work">
+                    {analysis?.engineName ?? (game.strategy === "blueberry" ? "Blueberry" : "Avocado")}
+                    {" · "}
+                    {analysis?.ticks?.toLocaleString() ?? "—"} ticks
+                    {" · "}
+                    {analysis?.elapsedMs !== undefined
+                      ? `${(analysis.elapsedMs / 1000).toFixed(2)}s`
+                      : `${game.analysisTimeSeconds}s`}
                   </span>
                 )}
               </div>
@@ -1601,7 +1642,7 @@ export default function App() {
                   ) : (
                     <p className="empty-copy">
                       {analysisRunning
-                        ? "Searching for the first completed depth…"
+                        ? `${game.strategy === "blueberry" ? "Blueberry" : "Avocado"} is thinking…`
                         : "No legal analysis is available."}
                     </p>
                   )}
@@ -1719,6 +1760,31 @@ export default function App() {
               </select>
             </label>
 
+            <label className="field">
+              <span>Strategy</span>
+              <select
+                aria-label="Strategy"
+                value={game.strategy}
+                onChange={(event) => {
+                  agentRequestSequence.current += 1;
+                  analysisRequestSequence.current += 1;
+                  setAnalysis(null);
+                  setGame((current) => ({
+                    ...current,
+                    strategy: event.target.value as Strategy,
+                  }));
+                }}
+              >
+                <option value="blueberry">Blueberry — Instinctive Hunter</option>
+                <option value="avocado">Avocado — Patient Tactician</option>
+              </select>
+              <small>
+                {game.strategy === "blueberry"
+                  ? "Aggressive Monte Carlo play that chases initiative and forcing captures."
+                  : "Deterministic calculation that prizes structure, safety, and patient tactics."}
+              </small>
+            </label>
+
             {game.gameMode !== "pass-and-play" && (
               <label className="field">
                 <span>Thinking Time</span>
@@ -1759,4 +1825,17 @@ export default function App() {
       </footer>
     </div>
   );
+}
+
+export default function App() {
+  if (engineInitializationError) {
+    return (
+      <main className="app-shell engine-error" role="alert">
+        <h1>Snipe Hunt could not start</h1>
+        <p>The clean Rust/WASM engine failed to initialize.</p>
+        <pre>{engineInitializationError.message}</pre>
+      </main>
+    );
+  }
+  return <GameApp />;
 }

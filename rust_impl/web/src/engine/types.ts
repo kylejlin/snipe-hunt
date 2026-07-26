@@ -1,4 +1,5 @@
 export type Player = "Alpha" | "Beta";
+export type Strategy = "avocado" | "blueberry";
 
 export type Location = "alpha-reserve" | "beta-reserve" | `row-${1 | 2 | 3 | 4 | 5 | 6}`;
 
@@ -35,18 +36,17 @@ export interface TurnMove {
 
 export interface AnalysisRequest {
   position: Position;
-  /** Earlier positions on the active timeline, oldest first. */
-  history?: Position[];
   timeLimitMs: number;
   requestId: number;
+  strategy: Strategy;
+  firstStep?: MoveStep;
 }
 
 export interface LiveAnalysisRequest {
   position: Position;
-  /** Earlier positions on the active timeline, oldest first. */
-  history?: Position[];
-  maxDepth: number;
+  timeLimitMs: number;
   requestId: number;
+  strategy: Strategy;
   firstStep?: MoveStep;
 }
 
@@ -58,22 +58,38 @@ export interface CandidateLine {
 export interface AnalysisResult {
   requestId: number;
   bestMove: TurnMove;
-  score: number;
-  depth: number;
-  nodes: number;
+  evaluation?: EngineEvaluation;
+  ticks?: number;
   elapsedMs: number;
-  principalVariation: string[];
-  candidates: CandidateLine[];
+  recommendedLine?: TurnMove[];
+  strategy?: Strategy;
   engineName: string;
+  /** @deprecated Pre-0.32 compatibility fields. */
+  score?: number;
+  depth?: number;
+  nodes?: number;
+  principalVariation?: string[];
+  candidates?: CandidateLine[];
 }
 
 export interface LiveAnalysisUpdate {
   requestId: number;
   bestMove: TurnMove;
-  score: number;
-  depth: number;
-  principalVariation: TurnMove[];
+  evaluation?: EngineEvaluation;
+  ticks?: number;
+  elapsedMs?: number;
+  recommendedLine?: TurnMove[];
+  strategy?: Strategy;
+  engineName?: string;
+  /** @deprecated Pre-0.32 compatibility fields. */
+  score?: number;
+  depth?: number;
+  principalVariation?: TurnMove[];
 }
+
+export type EngineEvaluation =
+  | { kind: "mate"; winner: Player; plies: number }
+  | { kind: "estimate"; value: number };
 
 export interface RulesEngine {
   readonly name: string;

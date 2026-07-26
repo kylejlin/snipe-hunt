@@ -2,10 +2,9 @@
 resolver = "2"
 members = [
     "crates/snipe-core",
-    "crates/old-snipe-core",
-    "crates/old-snipe-ai",
-    "crates/old-snipe-banana",
-    "crates/old-snipe-wasm",
+    "crates/agent-avocado",
+    "crates/agent-blueberry",
+    "crates/snipe-wasm",
 ]
 
 [workspace.package]
@@ -20,6 +19,3 @@ codegen-units = 1
 opt-level = 3
 panic = "abort"
 strip = true
-
-[profile.release.package.old-snipe-ai]
-debug = 1

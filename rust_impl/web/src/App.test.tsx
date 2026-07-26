@@ -204,12 +204,43 @@ describe("value-semantic card interaction", () => {
 describe("presentation contract", () => {
   it("shows the package version", () => {
     render(<App />);
-    expect(screen.getByText("Version 0.35.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.36.0")).toBeInTheDocument();
   });
 
   it("formats Alpha evaluations", () => {
     expect(formatAlphaScore(125, "Alpha")).toBe("+1.3");
     expect(formatAlphaScore(999_997, "Alpha")).toBe("+#3");
     expect(formatAlphaScore(999_998, "Beta")).toBe("-#2");
+  });
+});
+
+describe("overlays", () => {
+  it("closes Game Log settings on outside interaction and Escape", () => {
+    render(<App />);
+    const settings = screen.getByRole("button", {
+      name: "Game Log settings",
+    });
+
+    fireEvent.click(settings);
+    expect(screen.getByText("Export")).toBeInTheDocument();
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByText("Export")).not.toBeInTheDocument();
+
+    fireEvent.click(settings);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByText("Export")).not.toBeInTheDocument();
+    expect(settings).toHaveFocus();
+  });
+
+  it("uses an in-page confirmation before resetting the game", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset game" }));
+    const dialog = screen.getByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Start a fresh game?");
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   });
 });

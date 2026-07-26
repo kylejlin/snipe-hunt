@@ -475,9 +475,19 @@ function GameApp() {
   const [agentError, setAgentError] = useState<string | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyMenuOpen, setHistoryMenuOpen] = useState(false);
+  const [pendingConfirmation, setPendingConfirmation] = useState<
+    | { kind: "reset" }
+    | { kind: "import"; timeline: TimelineEntry[] }
+    | null
+  >(null);
   const agentRequestSequence = useRef(0);
   const analysisRequestSequence = useRef(0);
   const importInput = useRef<HTMLInputElement>(null);
+  const historyMenu = useRef<HTMLDivElement>(null);
+  const historyMenuButton = useRef<HTMLButtonElement>(null);
+  const confirmationDialog = useRef<HTMLElement>(null);
+  const confirmationCancelButton = useRef<HTMLButtonElement>(null);
 
   const displayedTimeline = useMemo(() => activeTimeline(game), [game]);
   const entry = displayedTimeline[game.cursor];
@@ -560,6 +570,69 @@ function GameApp() {
     setAgentError(null);
     setAnalysisError(null);
   }, [game.cursor, game.subply, position.turnNumber]);
+
+  useEffect(() => {
+    if (!historyMenuOpen) return;
+
+    const closeOnOutsideInteraction = (event: PointerEvent) => {
+      if (
+        historyMenu.current &&
+        !historyMenu.current.contains(event.target as Node)
+      ) {
+        setHistoryMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setHistoryMenuOpen(false);
+      historyMenuButton.current?.focus();
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsideInteraction);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideInteraction);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [historyMenuOpen]);
+
+  useEffect(() => {
+    if (!pendingConfirmation) return;
+
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    confirmationCancelButton.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setPendingConfirmation(null);
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const focusable = Array.from(
+        confirmationDialog.current?.querySelectorAll<HTMLButtonElement>(
+          "button:not(:disabled)",
+        ) ?? [],
+      );
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus();
+    };
+  }, [pendingConfirmation]);
 
   const commitMove = (move: TurnMove) => {
     movementOrigin.current = selectedOccurrence;
@@ -831,13 +904,7 @@ function GameApp() {
     });
   };
 
-  const resetGame = () => {
-    if (
-      !window.confirm(
-        "Start a fresh game? The current history will be replaced.",
-      )
-    )
-      return;
+  const performReset = () => {
     agentRequestSequence.current += 1;
     analysisRequestSequence.current += 1;
     const next = engine.createGame(Date.now() & 0x7fffffff);
@@ -856,6 +923,10 @@ function GameApp() {
       subply: false,
       draftStep: null,
     }));
+  };
+
+  const resetGame = () => {
+    setPendingConfirmation({ kind: "reset" });
   };
 
   const exportHistory = () => {
@@ -904,6 +975,25 @@ function GameApp() {
     }
   };
 
+  const applyImportedHistory = (timeline: TimelineEntry[]) => {
+    agentRequestSequence.current += 1;
+    analysisRequestSequence.current += 1;
+    setAnalysis(null);
+    setAgentThinking(false);
+    setAnalysisRunning(false);
+    setSelectedPieceKey(null);
+    setGame((current) => ({
+      ...current,
+      timeline,
+      alternativeLine: null,
+      activeLine: "actual",
+      cursor: timeline.length - 1,
+      subply: false,
+      draftStep: null,
+      gameMode: "pass-and-play",
+    }));
+  };
+
   const importHistory = async (file: File) => {
     setHistoryError(null);
     if (!file.name.toLowerCase().endsWith(".shgh")) {
@@ -912,30 +1002,11 @@ function GameApp() {
     }
     try {
       const timeline = parseHistory(await file.text(), engine);
-      if (
-        (game.timeline.length > 1 || game.alternativeLine) &&
-        !window.confirm(
-          "Import this history? The current game will be replaced.",
-        )
-      ) {
+      if (game.timeline.length > 1 || game.alternativeLine) {
+        setPendingConfirmation({ kind: "import", timeline });
         return;
       }
-      agentRequestSequence.current += 1;
-      analysisRequestSequence.current += 1;
-      setAnalysis(null);
-      setAgentThinking(false);
-      setAnalysisRunning(false);
-      setSelectedPieceKey(null);
-      setGame((current) => ({
-        ...current,
-        timeline,
-        alternativeLine: null,
-        activeLine: "actual",
-        cursor: timeline.length - 1,
-        subply: false,
-        draftStep: null,
-        gameMode: "pass-and-play",
-      }));
+      applyImportedHistory(timeline);
     } catch (reason) {
       setHistoryError(
         reason instanceof Error
@@ -1306,43 +1377,66 @@ function GameApp() {
                 <span className="move-count">
                   {totalPlyCount} {totalPlyCount === 1 ? "ply" : "plies"}
                 </span>
-                <details className="history-menu">
-                  <summary
+                <div className="history-menu" ref={historyMenu}>
+                  <button
+                    ref={historyMenuButton}
+                    className="history-menu__trigger"
+                    type="button"
                     aria-label="Game Log settings"
                     title="Game Log settings"
+                    aria-expanded={historyMenuOpen}
+                    aria-haspopup="dialog"
+                    aria-controls="history-settings-menu"
+                    onClick={() => setHistoryMenuOpen((open) => !open)}
                   >
                     <span aria-hidden="true">⚙</span>
-                  </summary>
-                  <div className="history-menu__items">
-                    <label className="field history-menu__time">
-                      <span>Analysis time</span>
-                      <NumericTextInput
-                        value={game.analysisTimeSeconds}
-                        minimum={0.25}
-                        maximum={120}
-                        increment={0.25}
-                        ariaLabel="Analysis time"
-                        onCommit={(analysisTimeSeconds) => {
-                          setGame((current) => ({
-                            ...current,
-                            analysisTimeSeconds,
-                          }));
-                        }}
-                      />
-                      <span>seconds</span>
-                    </label>
-                    <div className="history-menu__divider" role="separator" />
-                    <button type="button" onClick={exportHistory}>
-                      Export
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => importInput.current?.click()}
+                  </button>
+                  {historyMenuOpen && (
+                    <div
+                      className="history-menu__items"
+                      id="history-settings-menu"
+                      role="dialog"
+                      aria-label="Game Log settings"
                     >
-                      Import
-                    </button>
-                  </div>
-                </details>
+                      <label className="field history-menu__time">
+                        <span>Analysis time</span>
+                        <NumericTextInput
+                          value={game.analysisTimeSeconds}
+                          minimum={0.25}
+                          maximum={120}
+                          increment={0.25}
+                          ariaLabel="Analysis time"
+                          onCommit={(analysisTimeSeconds) => {
+                            setGame((current) => ({
+                              ...current,
+                              analysisTimeSeconds,
+                            }));
+                          }}
+                        />
+                        <span>seconds</span>
+                      </label>
+                      <div className="history-menu__divider" role="separator" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHistoryMenuOpen(false);
+                          exportHistory();
+                        }}
+                      >
+                        Export
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHistoryMenuOpen(false);
+                          importInput.current?.click();
+                        }}
+                      >
+                        Import
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             <input
@@ -1624,6 +1718,63 @@ function GameApp() {
       <footer>
         <span>Version {version}</span>
       </footer>
+
+      {pendingConfirmation && (
+        <div
+          className="confirmation-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setPendingConfirmation(null);
+            }
+          }}
+        >
+          <section
+            ref={confirmationDialog}
+            className="confirmation-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="confirmation-title"
+            aria-describedby="confirmation-description"
+          >
+            <span className="meta-label">Please confirm</span>
+            <h2 id="confirmation-title">
+              {pendingConfirmation.kind === "reset"
+                ? "Start a fresh game?"
+                : "Import this game history?"}
+            </h2>
+            <p id="confirmation-description">
+              The current game and its history will be replaced.
+            </p>
+            <div className="confirmation-dialog__actions">
+              <button
+                ref={confirmationCancelButton}
+                className="button"
+                type="button"
+                onClick={() => setPendingConfirmation(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="button button--confirm-danger"
+                type="button"
+                onClick={() => {
+                  const confirmation = pendingConfirmation;
+                  setPendingConfirmation(null);
+                  if (confirmation.kind === "reset") {
+                    performReset();
+                  } else {
+                    applyImportedHistory(confirmation.timeline);
+                  }
+                }}
+              >
+                {pendingConfirmation.kind === "reset"
+                  ? "Reset game"
+                  : "Import history"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

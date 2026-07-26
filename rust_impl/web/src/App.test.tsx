@@ -204,7 +204,7 @@ describe("value-semantic card interaction", () => {
 describe("presentation contract", () => {
   it("shows the package version", () => {
     render(<App />);
-    expect(screen.getByText("Version 0.38.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.39.0")).toBeInTheDocument();
   });
 
   it("formats Alpha evaluations", () => {
@@ -230,6 +230,26 @@ describe("overlays", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByText("Export")).not.toBeInTheDocument();
     expect(settings).toHaveFocus();
+  });
+
+  it("commits analysis time before an outside interaction closes settings", () => {
+    render(<App />);
+    const settings = screen.getByRole("button", {
+      name: "Game Log settings",
+    });
+
+    fireEvent.click(settings);
+    const analysisTime = screen.getByRole("textbox", {
+      name: "Analysis time",
+    });
+    analysisTime.focus();
+    fireEvent.change(analysisTime, { target: { value: "7" } });
+    fireEvent.pointerDown(document.body);
+
+    fireEvent.click(settings);
+    expect(
+      screen.getByRole("textbox", { name: "Analysis time" }),
+    ).toHaveValue("7");
   });
 
   it("uses an in-page confirmation before resetting the game", () => {

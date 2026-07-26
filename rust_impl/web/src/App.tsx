@@ -585,6 +585,13 @@ function GameApp() {
         historyMenu.current &&
         !historyMenu.current.contains(event.target as Node)
       ) {
+        const focusedElement = document.activeElement;
+        if (
+          focusedElement instanceof HTMLElement &&
+          historyMenu.current.contains(focusedElement)
+        ) {
+          focusedElement.blur();
+        }
         setHistoryMenuOpen(false);
       }
     };

@@ -233,13 +233,18 @@ pub enum Card {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Action {
     AnimalStep(AnimalStep),
-    SnipeStep,
+    SnipeStep(SnipeStep),
     Drop(AnimalDrop),
 }
 impl Action {
     pub const fn is_standalone_ply(self) -> bool {
-        matches!(self, Self::SnipeStep | Self::Drop(_))
+        matches!(self, Self::SnipeStep(_) | Self::Drop(_))
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SnipeStep {
+    pub destination: Rank,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

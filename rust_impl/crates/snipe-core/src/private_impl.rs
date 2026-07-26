@@ -58,7 +58,7 @@ impl State {
                 *destination = destination
                     .checked_add(CardMultiset::singleton(Card::Snipe, active_player))
                     .expect("a snipe cannot be duplicated in a valid state");
-                self.active_player = opponent(self.active_player);
+                self.active_player = self.active_player.opponent();
             }
             Action::Drop(drop) => {
                 self.validate_drop(drop)?;
@@ -73,7 +73,7 @@ impl State {
                         active_player,
                     ))
                     .expect("a dropped animal cannot be duplicated in a valid state");
-                self.active_player = opponent(self.active_player);
+                self.active_player = self.active_player.opponent();
             }
             Action::AnimalStep(step) => {
                 let source = self.validate_animal_step(step)?;
@@ -103,7 +103,7 @@ impl State {
 
                 if self.leading_action.is_some() {
                     self.leading_action = None;
-                    self.active_player = opponent(self.active_player);
+                    self.active_player = self.active_player.opponent();
                 } else {
                     self.leading_action = Some(step);
                 }
@@ -121,7 +121,7 @@ impl State {
         let mut actions = Vec::new();
         self.write_legal_actions_(&mut actions);
         if actions.is_empty() {
-            Some(opponent(self.active_player))
+            Some(self.active_player.opponent())
         } else {
             None
         }
@@ -649,7 +649,7 @@ impl State {
             }
             if self
                 .rank(source)
-                .count(Card::Animal(step.actor), opponent(self.active_player))
+                .count(Card::Animal(step.actor), self.active_player.opponent())
                 != 0
             {
                 return Err(IllegalActionError::NotYourAnimal);
@@ -671,7 +671,7 @@ impl State {
 
         let destination = *self.rank(step.destination);
         let activates = step.actor.would_activate_triplet_by_entering(destination);
-        let enemy_snipe = destination.count(Card::Snipe, opponent(self.active_player)) != 0;
+        let enemy_snipe = destination.count(Card::Snipe, self.active_player.opponent()) != 0;
         let friendly_snipe = destination.count(Card::Snipe, self.active_player) != 0;
 
         if self.rank(source).card_count() <= 1 {
@@ -866,13 +866,6 @@ const fn source_for_destination(
             Player::Alpha => next_rank(destination),
             Player::Beta => previous_rank(destination),
         },
-    }
-}
-
-const fn opponent(player: Player) -> Player {
-    match player {
-        Player::Alpha => Player::Beta,
-        Player::Beta => Player::Alpha,
     }
 }
 

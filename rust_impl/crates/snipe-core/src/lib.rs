@@ -20,6 +20,14 @@ pub enum Player {
     Alpha,
     Beta,
 }
+impl Player {
+    pub const fn opponent(self) -> Self {
+        match self {
+            Self::Alpha => Self::Beta,
+            Self::Beta => Self::Alpha,
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Rank {

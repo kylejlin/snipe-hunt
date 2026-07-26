@@ -1670,14 +1670,9 @@ function GameApp() {
                   }));
                 }}
               >
-                <option value="blueberry">Blueberry — Instinctive Hunter</option>
-                <option value="avocado">Avocado — Patient Tactician</option>
+                <option value="blueberry">Blueberry</option>
+                <option value="avocado">Avocado</option>
               </select>
-              <small>
-                {game.strategy === "blueberry"
-                  ? "Aggressive Monte Carlo play that chases initiative and forcing captures."
-                  : "Deterministic calculation that prizes structure, safety, and patient tactics."}
-              </small>
             </label>
 
             {game.gameMode !== "pass-and-play" && (

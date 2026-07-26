@@ -180,6 +180,14 @@ pub enum Ply {
     SnipeStep,
     Drop(AnimalDrop),
 }
+impl Ply {
+    pub const fn action_len(self) -> u8 {
+        match self {
+            Self::AnimalSteps(_, _) => 2,
+            Self::SnipeStep | Self::Drop(_) => 1,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Action {

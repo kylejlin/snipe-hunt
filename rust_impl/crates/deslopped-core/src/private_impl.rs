@@ -20,6 +20,30 @@ impl State {
     }
 }
 
+impl Animal {
+    pub(crate) const fn is_retreater_(self) -> bool {
+        todo!()
+    }
+
+    pub(crate) const fn unary_element_(self) -> Option<Element> {
+        todo!()
+    }
+
+    pub(crate) const fn binary_element_(self) -> Option<Element> {
+        todo!()
+    }
+
+    pub(crate) const fn ternary_element_(self) -> Option<Element> {
+        Some(match self {
+            Self::Tiger => Element::Fire,
+            Self::Dragon => Element::Air,
+            Self::Fish => Element::Water,
+            Self::Elephant => Element::Earth,
+            _ => return None,
+        })
+    }
+}
+
 impl Evaluation {
     /// Conceptually, Alpha-wins-in-N has the evaluation `Infinity - N`,
     /// and Beta-wins-in-N has the evaluation `-Infinity + N`.

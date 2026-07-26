@@ -138,25 +138,19 @@ pub enum Animal {
 }
 impl Animal {
     pub const fn is_retreater(self) -> bool {
-        todo!()
+        self.is_retreater_()
     }
 
     pub const fn unary_element(self) -> Option<Element> {
-        todo!()
+        self.unary_element_()
     }
 
     pub const fn binary_element(self) -> Option<Element> {
-        todo!()
+        self.binary_element_()
     }
 
     pub const fn ternary_element(self) -> Option<Element> {
-        Some(match self {
-            Self::Tiger => Element::Fire,
-            Self::Dragon => Element::Air,
-            Self::Fish => Element::Water,
-            Self::Elephant => Element::Earth,
-            _ => return None,
-        })
+        self.ternary_element_()
     }
 }
 

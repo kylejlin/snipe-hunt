@@ -178,19 +178,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "snipe-web2-wasm"
-version = "0.1.0"
-dependencies = [
- "agent-avocado",
- "agent-blueberry",
- "js-sys",
- "serde",
- "serde_json",
- "snipe-core",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "syn"
 version = "2.0.119"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -13,6 +13,7 @@ import type {
 } from "./types";
 import {
   wasmApplyMove,
+  wasmCanonicalizePosition,
   wasmCreateGame,
   wasmLegalMoves,
   wasmPreviewFirstStep,
@@ -23,6 +24,10 @@ export class WasmRulesEngine implements RulesEngine {
 
   createGame(seed?: number): Position {
     return wasmCreateGame(seed);
+  }
+
+  canonicalizePosition(position: Position): Position {
+    return wasmCanonicalizePosition(position);
   }
 
   legalMoves(position: Position): TurnMove[] {
@@ -43,6 +48,7 @@ export class WasmComputerAgent implements ComputerAgent {
   private pending:
     | {
         requestId: number;
+        positionKey: string;
         resolve: (result: AnalysisResult) => void;
         reject: (reason: Error) => void;
         removeAbortListener: () => void;
@@ -53,6 +59,8 @@ export class WasmComputerAgent implements ComputerAgent {
   chooseMove(request: AnalysisRequest, signal: AbortSignal): Promise<AnalysisResult> {
     if (this.disposed) return Promise.reject(new Error("Computer agent disposed."));
     if (signal.aborted) return Promise.reject(abortError("Computer move cancelled."));
+    this.rejectPending(abortError("Computer move superseded."));
+    this.restartWorker();
     this.ensureWorker();
     return new Promise((resolve, reject) => {
       const abort = () => {
@@ -63,6 +71,7 @@ export class WasmComputerAgent implements ComputerAgent {
       signal.addEventListener("abort", abort, { once: true });
       this.pending = {
         requestId: request.requestId,
+        positionKey: request.position.positionKey,
         resolve,
         reject,
         removeAbortListener: () => signal.removeEventListener("abort", abort),
@@ -87,6 +96,10 @@ export class WasmComputerAgent implements ComputerAgent {
         message.type === "error" ? message.requestId : message.payload.requestId;
       if (!this.pending || this.pending.requestId !== requestId) return;
       if (message.type === "agent-result") {
+        if (message.payload.positionKey !== this.pending.positionKey) {
+          this.rejectPending(new Error("Computer returned a stale position."));
+          return;
+        }
         const pending = this.takePending();
         pending?.resolve(message.payload);
       } else if (message.type === "error") {
@@ -125,6 +138,7 @@ export class WasmLiveAnalyzer implements LiveAnalyzer {
   private pending:
     | {
         requestId: number;
+        positionKey: string;
         onProgress: (update: LiveAnalysisUpdate) => void;
         resolve: (result: LiveAnalysisUpdate) => void;
         reject: (reason: Error) => void;
@@ -140,6 +154,8 @@ export class WasmLiveAnalyzer implements LiveAnalyzer {
   ): Promise<LiveAnalysisUpdate> {
     if (this.disposed) return Promise.reject(new Error("Analyzer disposed."));
     if (signal.aborted) return Promise.reject(abortError("Analysis cancelled."));
+    this.rejectPending(abortError("Analysis superseded."));
+    this.restartWorker();
     this.ensureWorker();
     return new Promise((resolve, reject) => {
       const abort = () => {
@@ -150,6 +166,7 @@ export class WasmLiveAnalyzer implements LiveAnalyzer {
       signal.addEventListener("abort", abort, { once: true });
       this.pending = {
         requestId: request.requestId,
+        positionKey: request.position.positionKey,
         onProgress,
         resolve,
         reject,
@@ -175,8 +192,13 @@ export class WasmLiveAnalyzer implements LiveAnalyzer {
         message.type === "error" ? message.requestId : message.payload.requestId;
       if (!this.pending || this.pending.requestId !== requestId) return;
       if (message.type === "analysis-progress") {
+        if (message.payload.positionKey !== this.pending.positionKey) return;
         this.pending.onProgress(message.payload);
       } else if (message.type === "analysis-complete") {
+        if (message.payload.positionKey !== this.pending.positionKey) {
+          this.rejectPending(new Error("Analysis returned a stale position."));
+          return;
+        }
         const pending = this.takePending();
         pending?.resolve(message.payload);
       } else if (message.type === "error") {

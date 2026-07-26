@@ -1,12 +1,11 @@
-# Web2 architecture
+# Web architecture
 
-`web2` is a separate application built directly on `snipe-core`. It does not
-load, migrate, or share browser state with `web`.
+`web` is built directly on `snipe-core`.
 
 ## Authority boundaries
 
 - `snipe-core` is the only rules authority.
-- `snipe-web2-wasm` converts complete Core states and actions to a narrow,
+- `snipe-wasm` converts complete Core states and actions to a narrow,
   value-semantic JSON contract.
 - React renders engine snapshots and submits only engine-advertised turns. It
   never reconstructs legality, captures, ownership changes, or winning state.
@@ -34,7 +33,7 @@ turn or any turn whose derived fields differ from Core's canonical turn.
 The reducer owns timelines, branches, navigation, draft subplies, and settings.
 All commits are scoped to the current canonical position key.
 
-Browser storage uses the private key `snipe-hunt.web2.game` and schema 1.
+Browser storage uses the private key `snipe-hunt.web.game` and schema 1.
 Unsupported schemas and malformed games are discarded rather than migrated.
 Restoration replays every move through Core and validates every stored
 position, including the final one, before the state reaches React.
@@ -43,7 +42,7 @@ position, including the final one, before the state reaches React.
 
 WASM initialization failures have a dedicated startup screen. Unexpected
 render failures are caught before further state can be committed and offer an
-explicit way to discard only web2's saved game. Worker cancellation terminates
+explicit way to discard only the web app's saved game. Worker cancellation terminates
 the worker so synchronous Rust search cannot leak a late result.
 
 ## Local development

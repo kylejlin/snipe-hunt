@@ -1,5 +1,6 @@
 import init, {
   apply_move,
+  canonicalize_position,
   create_game,
   legal_moves,
   preview_first_step,
@@ -28,6 +29,11 @@ function decode<T>(json: string): T {
 export function wasmCreateGame(seed = 7_071): Position {
   requireWasm();
   return decode<Position>(create_game(seed >>> 0));
+}
+
+export function wasmCanonicalizePosition(position: Position): Position {
+  requireWasm();
+  return decode<Position>(canonicalize_position(JSON.stringify(position)));
 }
 
 export function wasmLegalMoves(position: Position): TurnMove[] {

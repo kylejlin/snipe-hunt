@@ -1,4 +1,14 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  Component,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
+import type { ErrorInfo, ReactNode } from "react";
+import type { MutableRefObject } from "react";
 import { version } from "../package.json";
 import {
   createEngineServices,
@@ -15,6 +25,7 @@ import {
   type Strategy,
   type TurnMove,
   locationLabel,
+  selectionKey,
 } from "./engine/types";
 import {
   formatCompletedMove,
@@ -22,33 +33,21 @@ import {
   formatInitialLines,
   parseHistory,
   serializeHistory,
-  type TimelineEntry,
 } from "./history-format";
-
-type GameMode = "computer-alpha" | "computer-beta" | "pass-and-play";
-type ActiveLine = "actual" | "alternative";
-
-interface AlternativeLine {
-  divergenceIndex: number;
-  entries: TimelineEntry[];
-}
-
-interface StoredGame {
-  schemaVersion: 5;
-  timeline: TimelineEntry[];
-  alternativeLine: AlternativeLine | null;
-  activeLine: ActiveLine;
-  cursor: number;
-  subply: boolean;
-  draftStep: MoveStep | null;
-  gameMode: GameMode;
-  thinkingTimeSeconds: number;
-  strategy: Strategy;
-  analysisEnabled: boolean;
-  analysisTimeSeconds: number;
-}
-
-const STORAGE_KEY = "snipe-hunt.mission-7.game";
+import {
+  activeTimeline,
+  computerControls,
+  gameReducer,
+  type ActiveLine,
+  type GameMode,
+  type GameState,
+  type TimelineEntry,
+} from "./state/game-state";
+import {
+  restoreGame,
+  saveGame,
+  STORAGE_KEY,
+} from "./state/persistence";
 const services = createEngineServices();
 const engine = services.rules;
 const locations: Location[] = [
@@ -69,51 +68,27 @@ interface MovingCard {
   card: HTMLButtonElement;
 }
 
-function activeTimeline(game: StoredGame): TimelineEntry[] {
-  if (game.activeLine !== "alternative" || !game.alternativeLine) {
-    return game.timeline;
-  }
-  return [
-    ...game.timeline.slice(0, game.alternativeLine.divergenceIndex + 1),
-    ...game.alternativeLine.entries,
-  ];
-}
-
 function sameMove(left: TurnMove | null, right: TurnMove): boolean {
-  return left?.id === right.id && left.player === right.player;
+  return (
+    left?.positionKey === right.positionKey &&
+    left.id === right.id &&
+    left.player === right.player
+  );
 }
 
-function restoreAlternativeLine(
-  value: unknown,
-  timeline: TimelineEntry[],
-): AlternativeLine | null {
-  if (!value || typeof value !== "object") return null;
-  const candidate = value as Record<string, unknown>;
-  const divergenceIndex = Number(candidate.divergenceIndex);
-  const entries = candidate.entries;
-  if (
-    !Number.isInteger(divergenceIndex) ||
-    divergenceIndex < 0 ||
-    divergenceIndex >= timeline.length ||
-    !Array.isArray(entries)
-  ) {
-    throw new Error("Stored alternative line is invalid.");
-  }
-
-  let position = timeline[divergenceIndex].position;
-  const restoredEntries = entries.map((entry, index) => {
-    const move = (entry as TimelineEntry | undefined)?.move;
-    if (!move) throw new Error(`Stored alternative move ${index + 1} is invalid.`);
-    position = engine.applyMove(position, move);
-    return { position, move };
-  });
-  return { divergenceIndex, entries: restoredEntries };
-}
-
-function useCardMovementAnimation(boardPosition: Position) {
+function useCardMovementAnimation(
+  boardPosition: Position,
+  movementOrigin: MutableRefObject<string | null>,
+) {
   const boardRef = useRef<HTMLDivElement>(null);
-  const previousRects = useRef(new Map<string, DOMRect>());
-  const previousLocations = useRef(new Map<string, Location>());
+  const previousCards = useRef<
+    Array<{
+      pieceKey: string;
+      location: Location;
+      occurrence: string;
+      rect: DOMRect;
+    }>
+  >([]);
   const movingCards = useRef<MovingCard[]>([]);
 
   useLayoutEffect(() => {
@@ -134,42 +109,56 @@ function useCardMovementAnimation(boardPosition: Position) {
     settleMovingCards();
 
     const cards = Array.from(
-      board.querySelectorAll<HTMLButtonElement>("[data-card-id]"),
+      board.querySelectorAll<HTMLButtonElement>("[data-piece-key]"),
     );
-    const nextRects = new Map<string, DOMRect>();
-    for (const card of cards) {
-      nextRects.set(card.dataset.cardId!, card.getBoundingClientRect());
-    }
-    const nextLocations = new Map<string, Location>();
-    for (const location of locations) {
-      for (const card of boardPosition.locations[location]) {
-        nextLocations.set(card.id, location);
-      }
-    }
+    const nextCards = cards.map((card) => ({
+      element: card,
+      pieceKey: card.dataset.pieceKey!,
+      location: card.dataset.location as Location,
+      occurrence: card.dataset.presentationOccurrence!,
+      rect: card.getBoundingClientRect(),
+    }));
+    const preferredOrigin = movementOrigin.current;
+    movementOrigin.current = null;
 
     const reduceMotion = window.matchMedia?.(
       "(prefers-reduced-motion: reduce)",
     ).matches;
     if (
-      previousRects.current.size > 0 &&
+      previousCards.current.length > 0 &&
       !reduceMotion &&
       typeof cards[0]?.animate === "function"
     ) {
-      for (const card of cards) {
-        const cardId = card.dataset.cardId!;
-        const start = previousRects.current.get(cardId);
-        const end = nextRects.get(cardId)!;
-        if (
-          !start ||
-          previousLocations.current.get(cardId) === nextLocations.get(cardId)
-        ) {
-          continue;
+      const unmatchedPrevious = [...previousCards.current];
+      const moving: typeof nextCards = [];
+      for (const next of nextCards) {
+        const unchanged = unmatchedPrevious.findIndex(
+          (previous) =>
+            previous.pieceKey === next.pieceKey &&
+            previous.location === next.location &&
+            previous.occurrence !== preferredOrigin,
+        );
+        if (unchanged >= 0) {
+          unmatchedPrevious.splice(unchanged, 1);
+        } else {
+          moving.push(next);
         }
+      }
+      for (const next of moving) {
+        const previousIndex = unmatchedPrevious.findIndex(
+          (previous) => previous.pieceKey === next.pieceKey,
+        );
+        if (previousIndex < 0) continue;
+        const previous = unmatchedPrevious.splice(previousIndex, 1)[0];
+        const card = next.element;
+        const start = previous.rect;
+        const end = next.rect;
 
         // The real card is clipped by its new lane, so animate a fixed clone
         // above the board and reveal the real card at the destination.
         const clone = card.cloneNode(true) as HTMLButtonElement;
         clone.setAttribute("aria-hidden", "true");
+        clone.dataset.animationOrigin = previous.occurrence;
         clone.tabIndex = -1;
         Object.assign(clone.style, {
           position: "fixed",
@@ -213,155 +202,20 @@ function useCardMovementAnimation(boardPosition: Position) {
       }
     }
 
-    previousRects.current = nextRects;
-    previousLocations.current = nextLocations;
+      previousCards.current = nextCards.map(
+        ({ pieceKey, location, occurrence, rect }) => ({
+          pieceKey,
+          location,
+          occurrence,
+          rect,
+        }),
+      );
     return settleMovingCards;
-  }, [boardPosition]);
+  }, [boardPosition, movementOrigin]);
 
   return boardRef;
 }
 
-function initialState(): StoredGame {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored) as Record<string, unknown>;
-      const timeline = parsed.timeline as TimelineEntry[];
-      if (!Array.isArray(timeline) || timeline.length === 0) {
-        throw new Error("Stored timeline is invalid.");
-      }
-      if (![1, 2, 3, 4, 5].includes(Number(parsed.schemaVersion))) {
-        throw new Error("Stored schema version is invalid.");
-      }
-
-      const gameMode =
-        parsed.schemaVersion === 1
-          ? parsed.mode === "alpha"
-            ? "computer-alpha"
-            : parsed.mode === "beta"
-              ? "computer-beta"
-              : "pass-and-play"
-          : parsed.gameMode;
-      if (
-        gameMode !== "computer-alpha" &&
-        gameMode !== "computer-beta" &&
-        gameMode !== "pass-and-play"
-      ) {
-        throw new Error("Stored game mode is invalid.");
-      }
-
-      const alternativeLine =
-        parsed.schemaVersion === 4 || parsed.schemaVersion === 5
-          ? restoreAlternativeLine(parsed.alternativeLine, timeline)
-          : null;
-      const activeLine: ActiveLine =
-        (parsed.schemaVersion === 4 || parsed.schemaVersion === 5) &&
-        parsed.activeLine === "alternative" &&
-        alternativeLine
-          ? "alternative"
-          : "actual";
-      const restoredTimeline =
-        activeLine === "alternative" && alternativeLine
-          ? [
-              ...timeline.slice(0, alternativeLine.divergenceIndex + 1),
-              ...alternativeLine.entries,
-            ]
-          : timeline;
-      const cursor = Number(parsed.cursor);
-      if (
-        !Number.isInteger(cursor) ||
-        cursor < 0 ||
-        cursor >= restoredTimeline.length
-      ) {
-        throw new Error("Stored history cursor is invalid.");
-      }
-
-      // Let the authoritative engine reject stale or malformed positions before
-      // they can crash the first render.
-      engine.legalMoves(restoredTimeline[cursor].position);
-      const draftStep =
-        parsed.schemaVersion === 3 ||
-        parsed.schemaVersion === 4 ||
-        parsed.schemaVersion === 5
-          ? parsed.draftStep == null
-            ? null
-            : (parsed.draftStep as MoveStep)
-          : null;
-      const subply =
-        (parsed.schemaVersion === 3 ||
-          parsed.schemaVersion === 4 ||
-          parsed.schemaVersion === 5) &&
-        parsed.subply === true;
-      const nextMove = restoredTimeline[cursor + 1]?.move;
-      const validSubply =
-        !subply ||
-        nextMove?.steps.length === 2 ||
-        (cursor === restoredTimeline.length - 1 && Boolean(draftStep));
-      if (!validSubply) throw new Error("Stored subply cursor is invalid.");
-      if (draftStep) {
-        engine.previewFirstStep(restoredTimeline[cursor].position, draftStep);
-      }
-
-      return {
-        schemaVersion: 5,
-        timeline,
-        alternativeLine,
-        activeLine,
-        cursor,
-        subply,
-        draftStep,
-        gameMode,
-        thinkingTimeSeconds: clampNumber(
-          parsed.schemaVersion === 1
-            ? parsed.timeLimitSeconds
-            : parsed.thinkingTimeSeconds,
-          0.25,
-          120,
-          5,
-        ),
-        strategy:
-          parsed.schemaVersion === 5 && parsed.strategy === "avocado"
-            ? "avocado"
-            : "blueberry",
-        analysisEnabled:
-          parsed.schemaVersion === 1 ? false : parsed.analysisEnabled === true,
-        analysisTimeSeconds:
-          parsed.schemaVersion === 5
-            ? clampNumber(parsed.analysisTimeSeconds, 0.25, 120, 2)
-            : 2,
-      };
-    }
-  } catch {
-    localStorage.removeItem(STORAGE_KEY);
-  }
-
-  return {
-    schemaVersion: 5,
-    timeline: [{ position: engine.createGame(), move: null }],
-    alternativeLine: null,
-    activeLine: "actual",
-    cursor: 0,
-    subply: false,
-    draftStep: null,
-    gameMode: "computer-beta",
-    thinkingTimeSeconds: 5,
-    strategy: "blueberry",
-    analysisEnabled: false,
-    analysisTimeSeconds: 2,
-  };
-}
-
-function clampNumber(
-  value: unknown,
-  minimum: number,
-  maximum: number,
-  defaultValue: number,
-): number {
-  const numeric = Number(value);
-  return Number.isFinite(numeric)
-    ? Math.max(minimum, Math.min(maximum, numeric))
-    : defaultValue;
-}
 
 function normalizeNumber(
   value: number,
@@ -434,13 +288,6 @@ function NumericTextInput({
   );
 }
 
-function computerControls(mode: GameMode, turn: Player): boolean {
-  return (
-    (mode === "computer-alpha" && turn === "Alpha") ||
-    (mode === "computer-beta" && turn === "Beta")
-  );
-}
-
 function cardImage(card: Card): string {
   return `${import.meta.env.BASE_URL}cards/${card.isSnipe ? `${card.owner}Snipe` : card.animal}.png`;
 }
@@ -449,21 +296,25 @@ function cardBackground(card: Card): string {
   return `${import.meta.env.BASE_URL}cards/${card.owner}${card.canRetreat && !card.isSnipe ? "Retreater" : ""}Background.png`;
 }
 
-function cardName(position: Position, cardId: string): string {
+function cardName(position: Position, pieceKey: string): string {
   return (
     Object.values(position.locations)
       .flat()
-      .find((card) => card.id === cardId)?.animal ?? cardId
+      .find((card) => card.pieceKey === pieceKey)?.animal ?? pieceKey
   );
 }
 
 function CardTile({
   card,
+  location,
+  presentationOccurrence,
   selected,
   disabled,
   onSelect,
 }: {
   card: Card;
+  location: Location;
+  presentationOccurrence: string;
   selected: boolean;
   disabled: boolean;
   onSelect: () => void;
@@ -471,7 +322,9 @@ function CardTile({
   return (
     <button
       className={`card ${selected ? "card--selected" : ""}`}
-      data-card-id={card.id}
+      data-piece-key={card.pieceKey}
+      data-location={location}
+      data-presentation-occurrence={presentationOccurrence}
       type="button"
       aria-pressed={selected}
       aria-label={`${card.owner} ${card.animal}${card.canRetreat && !card.isSnipe ? ", retreater" : ""}`}
@@ -497,8 +350,9 @@ function CardTile({
 function BoardLane({
   location,
   cards,
-  selectedCardId,
-  selectableCardIds,
+  selectedPieceKey,
+  selectedOccurrence,
+  selectablePieceKeys,
   legalDestination,
   interactionDisabled,
   onCardSelect,
@@ -506,11 +360,12 @@ function BoardLane({
 }: {
   location: Location;
   cards: Card[];
-  selectedCardId: string | null;
-  selectableCardIds: Set<string>;
+  selectedPieceKey: string | null;
+  selectedOccurrence: string | null;
+  selectablePieceKeys: Set<string>;
   legalDestination: boolean;
   interactionDisabled: boolean;
-  onCardSelect: (cardId: string) => void;
+  onCardSelect: (selection: string, occurrence: string) => void;
   onDestination: (location: Location) => void;
 }) {
   const isReserve = location.includes("reserve");
@@ -541,15 +396,29 @@ function BoardLane({
         {cards.length === 0 ? (
           <span className="lane__empty">Open field</span>
         ) : (
-          cards.map((card) => (
-            <CardTile
-              key={card.id}
-              card={card}
-              selected={selectedCardId === card.id}
-              disabled={interactionDisabled || !selectableCardIds.has(card.id)}
-              onSelect={() => onCardSelect(card.id)}
-            />
-          ))
+          cards.map((card, occurrence) => {
+            const semanticSelection = selectionKey(card.pieceKey, location);
+            const presentationOccurrence = `${semanticSelection}#${occurrence}`;
+            return (
+              <CardTile
+                key={presentationOccurrence}
+                card={card}
+                location={location}
+                presentationOccurrence={presentationOccurrence}
+                selected={
+                  selectedPieceKey === semanticSelection &&
+                  selectedOccurrence === presentationOccurrence
+                }
+                disabled={
+                  interactionDisabled ||
+                  !selectablePieceKeys.has(semanticSelection)
+                }
+                onSelect={() =>
+                  onCardSelect(semanticSelection, presentationOccurrence)
+                }
+              />
+            );
+          })
         )}
       </div>
     </section>
@@ -583,8 +452,23 @@ function formatEvaluation(evaluation: EngineEvaluation): string {
 }
 
 function GameApp() {
-  const [game, setGame] = useState<StoredGame>(initialState);
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [game, dispatch] = useReducer(
+    gameReducer,
+    undefined,
+    () => restoreGame(localStorage.getItem(STORAGE_KEY), engine),
+  );
+  const gameRef = useRef(game);
+  gameRef.current = game;
+  const setGame = (update: (current: GameState) => GameState) => {
+    const next = update(gameRef.current);
+    gameRef.current = next;
+    dispatch({ type: "replace", state: next });
+  };
+  const [selectedPieceKey, setSelectedPieceKey] = useState<string | null>(null);
+  const [selectedOccurrence, setSelectedOccurrence] = useState<string | null>(
+    null,
+  );
+  const movementOrigin = useRef<string | null>(null);
   const [analysis, setAnalysis] = useState<LiveAnalysisUpdate | null>(null);
   const [analysisRunning, setAnalysisRunning] = useState(false);
   const [agentThinking, setAgentThinking] = useState(false);
@@ -607,7 +491,7 @@ function GameApp() {
       midpointStep ? engine.previewFirstStep(position, midpointStep) : position,
     [midpointStep, position],
   );
-  const boardRef = useCardMovementAnimation(boardPosition);
+  const boardRef = useCardMovementAnimation(boardPosition, movementOrigin);
   const totalPlyCount =
     displayedTimeline.length - 1 + (game.draftStep ? 0.5 : 0);
   const currentPlyCount = game.cursor + (game.subply ? 0.5 : 0);
@@ -623,21 +507,28 @@ function GameApp() {
     movePrefix.every((step, index) => {
       const candidate = move.steps[index];
       return (
-        candidate?.cardId === step.cardId &&
+        candidate?.pieceKey === step.pieceKey &&
         candidate.from === step.from &&
         candidate.to === step.to
       );
     }),
   );
   const nextStepIndex = movePrefix.length;
-  const selectableCardIds = new Set(
+  const selectablePieceKeys = new Set(
     prefixCandidates
-      .map((move) => move.steps[nextStepIndex]?.cardId)
-      .filter((cardId): cardId is string => Boolean(cardId)),
+      .map((move) => move.steps[nextStepIndex])
+      .filter((step): step is MoveStep => Boolean(step))
+      .map((step) => selectionKey(step.pieceKey, step.from)),
   );
-  const selectedMoves = selectedCardId
+  const selectedMoves = selectedPieceKey
     ? prefixCandidates.filter(
-        (move) => move.steps[nextStepIndex]?.cardId === selectedCardId,
+        (move) => {
+          const step = move.steps[nextStepIndex];
+          return (
+            step &&
+            selectionKey(step.pieceKey, step.from) === selectedPieceKey
+          );
+        },
       )
     : [];
   const legalDestinations = new Set(
@@ -650,22 +541,29 @@ function GameApp() {
       prefixCandidates
         .map((move) => move.steps[nextStepIndex])
         .filter((step): step is MoveStep => Boolean(step))
-        .map((step) => [`${step.cardId}:${step.from}`, step]),
+        .map((step) => [`${step.pieceKey}:${step.from}`, step]),
     ).values(),
   );
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(game));
+    try {
+      localStorage.setItem(STORAGE_KEY, saveGame(game));
+    } catch (reason) {
+      setHistoryError(
+        reason instanceof Error ? reason.message : "Game could not be saved.",
+      );
+    }
   }, [game]);
 
   useEffect(() => {
-    setSelectedCardId(null);
+    setSelectedPieceKey(null);
     setAgentError(null);
     setAnalysisError(null);
   }, [game.cursor, game.subply, position.turnNumber]);
 
   const commitMove = (move: TurnMove) => {
-    setSelectedCardId(null);
+    movementOrigin.current = selectedOccurrence;
+    setSelectedPieceKey(null);
     setHistoryError(null);
     analysisRequestSequence.current += 1;
     setAnalysis(null);
@@ -683,47 +581,11 @@ function GameApp() {
       );
       return;
     }
-    setGame((current) => {
-      const currentTimeline = activeTimeline(current);
-      if (currentTimeline[current.cursor].position !== position) {
-        return current;
-      }
-      if (current.activeLine === "alternative" && current.alternativeLine) {
-        const oldDivergence = current.alternativeLine.divergenceIndex;
-        const divergenceIndex =
-          current.cursor >= oldDivergence ? oldDivergence : current.cursor;
-        const entries =
-          current.cursor >= oldDivergence
-            ? currentTimeline
-                .slice(oldDivergence + 1, current.cursor + 1)
-                .concat({ position: nextPosition, move })
-            : [{ position: nextPosition, move }];
-        return {
-          ...current,
-          alternativeLine: { divergenceIndex, entries },
-          cursor: current.cursor + 1,
-          subply: false,
-          draftStep: null,
-        };
-      }
-
-      const timeline = current.timeline
-        .slice(0, current.cursor + 1)
-        .concat({ position: nextPosition, move });
-      const alternativeLine =
-        current.alternativeLine &&
-        current.cursor >= current.alternativeLine.divergenceIndex
-          ? current.alternativeLine
-          : null;
-      return {
-        ...current,
-        timeline,
-        alternativeLine,
-        activeLine: "actual",
-        cursor: timeline.length - 1,
-        subply: false,
-        draftStep: null,
-      };
+    dispatch({
+      type: "commit",
+      basePositionKey: position.positionKey,
+      position: nextPosition,
+      move,
     });
   };
 
@@ -766,24 +628,11 @@ function GameApp() {
         setAgentThinking(false);
         analysisRequestSequence.current += 1;
         setAnalysis(null);
-        setGame((current) => {
-          const isStillCurrent =
-            current.activeLine === "actual" &&
-            current.cursor === current.timeline.length - 1 &&
-            current.timeline[current.cursor].position === position &&
-            computerControls(current.gameMode, position.turn);
-          if (!isStillCurrent) return current;
-          const timeline = [
-            ...current.timeline,
-            { position: nextPosition, move: result.bestMove },
-          ];
-          return {
-            ...current,
-            timeline,
-            cursor: timeline.length - 1,
-            subply: false,
-            draftStep: null,
-          };
+        dispatch({
+          type: "commit",
+          basePositionKey: position.positionKey,
+          position: nextPosition,
+          move: result.bestMove,
         });
       })
       .catch((reason: unknown) => {
@@ -879,10 +728,16 @@ function GameApp() {
     position,
   ]);
 
-  const chooseCard = (cardId: string) => {
+  const chooseCard = (pieceKey: string, occurrence: string) => {
     if (computerTurn || position.winner) return;
-    if (!selectableCardIds.has(cardId)) return;
-    setSelectedCardId((current) => (current === cardId ? null : cardId));
+    if (!selectablePieceKeys.has(pieceKey)) return;
+    if (selectedOccurrence === occurrence) {
+      setSelectedPieceKey(null);
+      setSelectedOccurrence(null);
+    } else {
+      setSelectedPieceKey(pieceKey);
+      setSelectedOccurrence(occurrence);
+    }
   };
 
   const chooseDestination = (destination: Location) => {
@@ -894,43 +749,9 @@ function GameApp() {
     if (matching.steps.length === nextStepIndex + 1) {
       commitMove(matching);
     } else {
-      setSelectedCardId(null);
-      setGame((current) => {
-        if (current.activeLine === "alternative" && current.alternativeLine) {
-          const currentTimeline = activeTimeline(current);
-          const oldDivergence = current.alternativeLine.divergenceIndex;
-          return {
-            ...current,
-            alternativeLine: {
-              divergenceIndex:
-                current.cursor >= oldDivergence
-                  ? oldDivergence
-                  : current.cursor,
-              entries:
-                current.cursor >= oldDivergence
-                  ? currentTimeline.slice(
-                      oldDivergence + 1,
-                      current.cursor + 1,
-                    )
-                  : [],
-            },
-            subply: true,
-            draftStep: chosenStep,
-          };
-        }
-        return {
-          ...current,
-          timeline: current.timeline.slice(0, current.cursor + 1),
-          alternativeLine:
-            current.alternativeLine &&
-            current.cursor >= current.alternativeLine.divergenceIndex
-              ? current.alternativeLine
-              : null,
-          activeLine: "actual",
-          subply: true,
-          draftStep: chosenStep,
-        };
-      });
+      movementOrigin.current = selectedOccurrence;
+      setSelectedPieceKey(null);
+      dispatch({ type: "draft", step: chosenStep });
     }
   };
 
@@ -940,7 +761,7 @@ function GameApp() {
     setAgentThinking(false);
     setAnalysisRunning(false);
     setAnalysis(null);
-    setSelectedCardId(null);
+    setSelectedPieceKey(null);
     setGame((current) => {
       const nextActiveLine =
         activeLine === "alternative" && current.alternativeLine
@@ -973,7 +794,7 @@ function GameApp() {
     setAgentThinking(false);
     setAnalysisRunning(false);
     setAnalysis(null);
-    setSelectedCardId(null);
+    setSelectedPieceKey(null);
     setGame((current) => {
       const timeline = activeTimeline(current);
       if (current.subply) return { ...current, subply: false };
@@ -993,7 +814,7 @@ function GameApp() {
     setAgentThinking(false);
     setAnalysisRunning(false);
     setAnalysis(null);
-    setSelectedCardId(null);
+    setSelectedPieceKey(null);
     setGame((current) => {
       const timeline = activeTimeline(current);
       if (current.subply) {
@@ -1025,7 +846,7 @@ function GameApp() {
     setAgentThinking(false);
     setAnalysisRunning(false);
     setHistoryError(null);
-    setSelectedCardId(null);
+    setSelectedPieceKey(null);
     setGame((current) => ({
       ...current,
       timeline: [{ position: next, move: null }],
@@ -1060,7 +881,6 @@ function GameApp() {
               }
             : {}),
         },
-        engine.previewFirstStep,
       );
       const blob = new Blob([contents], { type: "text/plain;charset=utf-8" });
       const url = URL.createObjectURL(blob);
@@ -1105,7 +925,7 @@ function GameApp() {
       setAnalysis(null);
       setAgentThinking(false);
       setAnalysisRunning(false);
-      setSelectedCardId(null);
+      setSelectedPieceKey(null);
       setGame((current) => ({
         ...current,
         timeline,
@@ -1134,12 +954,9 @@ function GameApp() {
         : `${position.turn} to move`;
   const suggestedLine = useMemo(() => {
     if (!analysis) return [];
-    const moves =
-      analysis.recommendedLine?.length
-        ? analysis.recommendedLine
-        : analysis.principalVariation?.length
-          ? analysis.principalVariation
-          : [analysis.bestMove];
+    const moves = analysis.recommendedLine.length
+      ? analysis.recommendedLine
+      : [analysis.bestMove];
     let variationPosition = position;
     return moves.map((move, index) => {
       const nextVariationPosition = engine.applyMove(variationPosition, move);
@@ -1151,12 +968,7 @@ function GameApp() {
           game.cursor + index + 1,
           move.player,
         ),
-        notation: formatCompletedMove(
-          variationPosition,
-          move,
-          nextVariationPosition,
-          engine.previewFirstStep,
-        ),
+        notation: formatCompletedMove(move),
       };
       variationPosition = nextVariationPosition;
       return item;
@@ -1165,12 +977,9 @@ function GameApp() {
 
   const playSuggestedLine = (targetIndex: number) => {
     if (!analysis || targetIndex < 0) return;
-    const moves =
-      analysis.recommendedLine?.length
-        ? analysis.recommendedLine
-        : analysis.principalVariation?.length
-          ? analysis.principalVariation
-          : [analysis.bestMove];
+    const moves = analysis.recommendedLine.length
+      ? analysis.recommendedLine
+      : [analysis.bestMove];
     const selectedMoves = moves.slice(0, targetIndex + 1);
     if (selectedMoves.length === 0) return;
 
@@ -1195,7 +1004,7 @@ function GameApp() {
     setAgentThinking(false);
     setAnalysisRunning(false);
     setAnalysis(null);
-    setSelectedCardId(null);
+    setSelectedPieceKey(null);
     setHistoryError(null);
     setGame((current) => {
       const currentTimeline = activeTimeline(current);
@@ -1257,11 +1066,7 @@ function GameApp() {
       ? MATE_SCORE
       : -MATE_SCORE
     : analysis
-      ? analysis.evaluation
-        ? evaluationValue(analysis.evaluation)
-        : position.turn === "Alpha"
-          ? (analysis.score ?? 0)
-          : -(analysis.score ?? 0)
+      ? evaluationValue(analysis.evaluation)
       : null;
   const evaluationTone =
     alphaEvaluation === null || alphaEvaluation === 0
@@ -1283,17 +1088,19 @@ function GameApp() {
               position.turnNumber,
               position.turn,
               true,
-            )} ${formatCompletedMove(
-              position,
-              {
+            )} ${formatCompletedMove({
                 id: "pending-subply",
+                positionKey: position.positionKey,
                 player: position.turn,
                 label: "",
                 steps: movePrefix,
-                captures: [],
-              },
-              boardPosition,
-            )}, …`}
+                captures: {
+                  animals: movePrefix.flatMap((step) => step.capture.animals),
+                  snipe:
+                    movePrefix.find((step) => step.capture.snipe)?.capture
+                      .snipe ?? null,
+                },
+              })}, …`}
           </small>
         </div>
       </li>
@@ -1304,10 +1111,6 @@ function GameApp() {
     if (!alternative || alternative.divergenceIndex !== divergenceIndex) {
       return null;
     }
-    const path = [
-      ...game.timeline.slice(0, divergenceIndex + 1),
-      ...alternative.entries,
-    ];
     const items = alternative.entries.flatMap((timelineEntry, index) => {
       const timelineIndex = divergenceIndex + index + 1;
       const move = timelineEntry.move;
@@ -1332,12 +1135,7 @@ function GameApp() {
               {`${formatDisplayPlyPrefix(
                 timelineIndex,
                 move.player,
-              )} ${formatCompletedMove(
-                path[timelineIndex - 1].position,
-                move,
-                timelineEntry.position,
-                engine.previewFirstStep,
-              )}`}
+              )} ${formatCompletedMove(move)}`}
             </small>
           </button>
         </li>
@@ -1434,8 +1232,9 @@ function GameApp() {
                 key={location}
                 location={location}
                 cards={boardPosition.locations[location]}
-                selectedCardId={selectedCardId}
-                selectableCardIds={selectableCardIds}
+                selectedPieceKey={selectedPieceKey}
+                selectedOccurrence={selectedOccurrence}
+                selectablePieceKeys={selectablePieceKeys}
                 legalDestination={legalDestinations.has(location)}
                 interactionDisabled={computerTurn || Boolean(position.winner)}
                 onCardSelect={chooseCard}
@@ -1461,10 +1260,17 @@ function GameApp() {
                   <button
                     className="button button--quiet"
                     type="button"
-                    key={`${step.cardId}:${step.from}`}
-                    onClick={() => setSelectedCardId(step.cardId)}
+                    key={`${step.pieceKey}:${step.from}`}
+                    onClick={() =>
+                      {
+                        setSelectedPieceKey(
+                          selectionKey(step.pieceKey, step.from),
+                        );
+                        setSelectedOccurrence(null);
+                      }
+                    }
                   >
-                    {cardName(boardPosition, step.cardId)} from{" "}
+                    {cardName(boardPosition, step.pieceKey)} from{" "}
                     {locationLabel(step.from)}
                   </button>
                 ))}
@@ -1481,11 +1287,11 @@ function GameApp() {
             </div>
           )}
 
-          {(computerTurn || selectedCardId || movePrefix.length > 0) && (
+          {(computerTurn || selectedPieceKey || movePrefix.length > 0) && (
             <p className="board-help">
               {computerTurn
                 ? `${position.turn} is controlled by the computer.`
-                : selectedCardId
+                : selectedPieceKey
                   ? "Choose a highlighted rank to complete the move."
                   : "Choose the second animal to complete this ply."}
             </p>
@@ -1713,12 +1519,7 @@ function GameApp() {
                         {`${formatDisplayPlyPrefix(
                           timelineIndex,
                           move.player,
-                        )} ${formatCompletedMove(
-                          game.timeline[timelineIndex - 1].position,
-                          move,
-                          timelineEntry.position,
-                          engine.previewFirstStep,
-                        )}`}
+                        )} ${formatCompletedMove(move)}`}
                       </small>
                     </button>
                   </li>
@@ -1747,7 +1548,7 @@ function GameApp() {
                 value={game.gameMode}
                 onChange={(event) => {
                   agentRequestSequence.current += 1;
-                  setSelectedCardId(null);
+                  setSelectedPieceKey(null);
                   setGame((current) => ({
                     ...current,
                     gameMode: event.target.value as GameMode,
@@ -1837,5 +1638,50 @@ export default function App() {
       </main>
     );
   }
-  return <GameApp />;
+  return (
+    <GameErrorBoundary>
+      <GameApp />
+    </GameErrorBoundary>
+  );
+}
+
+class GameErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(reason: unknown) {
+    return {
+      error:
+        reason instanceof Error
+          ? reason
+          : new Error(`Unexpected game failure: ${String(reason)}`),
+    };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("Snipe Hunt render failed", error, info.componentStack);
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <main className="app-shell engine-error" role="alert">
+        <h1>Snipe Hunt hit an unexpected error</h1>
+        <p>The game was stopped before any further state could be committed.</p>
+        <pre>{this.state.error.message}</pre>
+        <button
+          className="button"
+          type="button"
+          onClick={() => {
+            localStorage.removeItem(STORAGE_KEY);
+            window.location.reload();
+          }}
+        >
+          Discard this game and restart
+        </button>
+      </main>
+    );
+  }
 }

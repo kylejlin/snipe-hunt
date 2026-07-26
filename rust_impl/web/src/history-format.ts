@@ -1,10 +1,9 @@
 import type {
   Card,
-  EngineAdapter,
   Location,
-  MoveStep,
   Player,
   Position,
+  RulesEngine,
   TurnMove,
 } from "./engine/types";
 
@@ -20,8 +19,6 @@ export interface HistoryExportMetadata {
     thinkingTimeSeconds: number;
   };
 }
-
-type PreviewFirstStep = (position: Position, step: MoveStep) => Position;
 
 const ANIMAL_NAMES = [
   "Rat",
@@ -51,27 +48,18 @@ function rankOf(location: Location): number | null {
   return location.startsWith("row-") ? Number(location.slice(4)) : null;
 }
 
-function cardAt(position: Position, cardId: string): Card {
-  const card = Object.values(position.locations)
-    .flat()
-    .find((candidate) => candidate.id === cardId);
-  if (!card) throw new Error(`Card ${cardId} is missing from the position.`);
-  return card;
-}
-
 function cardNotation(card: Card): string {
   return card.isSnipe ? card.owner : card.animal;
 }
 
-function stepNotation(position: Position, move: TurnMove, stepIndex: number): string {
+function stepNotation(move: TurnMove, stepIndex: number): string {
   const step = move.steps[stepIndex];
   if (!step) throw new Error("Move contains an empty step.");
-  const card = cardAt(position, step.cardId);
   const destinationRank = rankOf(step.to);
   if (destinationRank === null) throw new Error("Moves into a reserve cannot be serialized.");
 
   if (step.from.includes("reserve")) {
-    return `${cardNotation(card)} &${destinationRank}`;
+    return `${step.isSnipe ? step.owner : step.animal} &${destinationRank}`;
   }
 
   const sourceRank = rankOf(step.from);
@@ -80,85 +68,27 @@ function stepNotation(position: Position, move: TurnMove, stepIndex: number): st
     move.player === "Alpha"
       ? destinationRank > sourceRank
       : destinationRank < sourceRank;
-  return `${cardNotation(card)} ${isAdvance ? "" : "*"}${destinationRank}`;
+  return `${step.isSnipe ? step.owner : step.animal} ${isAdvance ? "" : "*"}${destinationRank}`;
 }
 
-export function formatMove(position: Position, move: TurnMove): string {
+export function formatMove(move: TurnMove): string {
   return move.steps
-    .map((_, stepIndex) => stepNotation(position, move, stepIndex))
+    .map((_, stepIndex) => stepNotation(move, stepIndex))
     .join(", ");
 }
 
-export function snipeCaptureSuffix(
-  before: Position,
-  after: Position,
-): "" | "+#0" | "-#0" {
-  const capturedInto = (reserve: "alpha-reserve" | "beta-reserve", owner: Player) => {
-    const containsSnipe = (position: Position) =>
-      position.locations[reserve].some(
-        (card) => card.isSnipe && card.owner === owner,
-      );
-    return !containsSnipe(before) && containsSnipe(after);
-  };
-
-  if (capturedInto("alpha-reserve", "Beta")) return "+#0";
-  if (capturedInto("beta-reserve", "Alpha")) return "-#0";
-  return "";
-}
-
-function captureAnnotation(
-  before: Position,
-  after: Position,
-  player: Player,
-): "" | "x" {
-  const reserve = player === "Alpha" ? "alpha-reserve" : "beta-reserve";
-  const beforeCards = before.locations[reserve];
-  const afterCards = after.locations[reserve];
-  const animalCount = (cards: Card[]) =>
-    cards.filter((card) => !card.isSnipe).length;
-  const containsSnipe = (cards: Card[], owner: Player) =>
-    cards.some((card) => card.isSnipe && card.owner === owner);
-  const capturedSnipe = (["Alpha", "Beta"] as const).some(
-    (owner) =>
-      !containsSnipe(beforeCards, owner) &&
-      containsSnipe(afterCards, owner),
-  );
-  return animalCount(afterCards) > animalCount(beforeCards) && !capturedSnipe
-    ? "x"
-    : "";
-}
-
-function movePositions(
-  before: Position,
-  move: TurnMove,
-  after: Position,
-  previewFirstStep?: PreviewFirstStep,
-): Position[] {
-  if (move.steps.length <= 1) return [before, after];
-  if (move.steps.length !== 2 || !previewFirstStep) {
-    throw new Error("Two-step capture notation requires a first-step preview.");
-  }
-  return [before, previewFirstStep(before, move.steps[0]), after];
-}
-
-export function formatCompletedMove(
-  before: Position,
-  move: TurnMove,
-  after: Position,
-  previewFirstStep?: PreviewFirstStep,
-): string {
-  const positions = movePositions(before, move, after, previewFirstStep);
+export function formatCompletedMove(move: TurnMove): string {
   const notation = move.steps
     .map(
       (_, stepIndex) =>
-        `${stepNotation(before, move, stepIndex)}${captureAnnotation(
-          positions[stepIndex],
-          positions[stepIndex + 1],
-          move.player,
-        )}`,
+        `${stepNotation(move, stepIndex)}${
+          move.steps[stepIndex].capture.animals.length > 0 ? "x" : ""
+        }`,
     )
     .join(", ");
-  const suffix = snipeCaptureSuffix(before, after);
+  const capturedSnipe = move.steps.find((step) => step.capture.snipe)?.capture
+    .snipe;
+  const suffix = capturedSnipe === "Beta" ? "+#0" : capturedSnipe === "Alpha" ? "-#0" : "";
   return suffix ? `${notation}${suffix}` : notation;
 }
 
@@ -222,7 +152,6 @@ function formatMetadata(metadata: HistoryExportMetadata): string[] {
 export function serializeHistory(
   timeline: TimelineEntry[],
   metadata?: HistoryExportMetadata,
-  previewFirstStep?: PreviewFirstStep,
 ): string {
   if (timeline.length === 0) throw new Error("A history must contain an initial position.");
   const lines = [
@@ -234,10 +163,7 @@ export function serializeHistory(
     if (!entry.move) throw new Error(`Timeline entry ${index} has no move.`);
     lines.push(
       `${formatPlyPrefix(index, entry.move.player)} ${formatCompletedMove(
-        timeline[index - 1].position,
         entry.move,
-        entry.position,
-        previewFirstStep,
       )}`,
     );
   }
@@ -292,7 +218,7 @@ function cardFromName(
 ): Card {
   if (name === owner) {
     return {
-      id: `${owner.toLowerCase()}-snipe`,
+      pieceKey: `${owner.toLowerCase()}:snipe`,
       animal: "Snipe",
       owner,
       isSnipe: true,
@@ -305,7 +231,7 @@ function cardFromName(
   if (occurrence >= 2) throw new Error(`The initial layout contains more than two ${name} cards.`);
   occurrences.set(name, occurrence + 1);
   return {
-    id: `animal-${baseIndex + occurrence * 16}`,
+    pieceKey: `${owner.toLowerCase()}:animal:${baseIndex}`,
     animal: name,
     owner,
     isSnipe: false,
@@ -327,10 +253,12 @@ function parseInitialPosition(
 
   const position: Position = {
     schemaVersion: 1,
+    positionKey: "",
     seed: 0,
     turn: "Beta",
     turnNumber: 1,
     winner: null,
+    leadingAction: null,
     locations: {
       "alpha-reserve": cards(alpha[0], "Alpha"),
       "row-1": cards(alpha[1], "Alpha"),
@@ -352,7 +280,10 @@ function parseInitialPosition(
 
 export function parseHistory(
   source: string,
-  engine: Pick<EngineAdapter, "legalMoves" | "previewFirstStep" | "applyMove">,
+  engine: Pick<
+    RulesEngine,
+    "canonicalizePosition" | "legalMoves" | "previewFirstStep" | "applyMove"
+  >,
 ): TimelineEntry[] {
   const lines = source
     .replace(/\r\n?/g, "\n")
@@ -361,13 +292,16 @@ export function parseHistory(
     .filter(({ text }) => text.trim().length > 0 && !text.startsWith("//"));
   if (lines.length < 2) throw new Error("History must begin with 0b. and 0a. layout lines.");
 
-  let position = parseInitialPosition(
-    lines[0].text,
-    lines[0].lineNumber,
-    lines[1].text,
-    lines[1].lineNumber,
-  );
+  let position: Position;
   try {
+    position = engine.canonicalizePosition(
+      parseInitialPosition(
+        lines[0].text,
+        lines[0].lineNumber,
+        lines[1].text,
+        lines[1].lineNumber,
+      ),
+    );
     engine.legalMoves(position);
   } catch (reason) {
     throw new Error(
@@ -385,7 +319,6 @@ export function parseHistory(
     }
     const body = text.slice(expectedPrefix.length + 1);
     const suffixMatch = body.match(/([+-]#0)$/);
-    const assertedSuffix = suffixMatch?.[1] ?? "";
     const annotatedMoveBody = suffixMatch
       ? body.slice(0, -suffixMatch[0].length)
       : body;
@@ -398,13 +331,12 @@ export function parseHistory(
       .join(", ");
     const legalMoves = engine
       .legalMoves(position)
-      .filter((move) => formatMove(position, move) === moveBody)
+      .filter((move) => formatMove(move) === moveBody)
       .sort((left, right) => left.id.localeCompare(right.id));
     const move = legalMoves[0];
     if (!move) {
       throw new Error(`Line ${lineNumber}: "${body}" is not a legal move.`);
     }
-    const previousPosition = position;
     try {
       position = engine.applyMove(position, move);
     } catch (reason) {
@@ -412,30 +344,10 @@ export function parseHistory(
         `Line ${lineNumber}: move could not be applied${reason instanceof Error ? ` (${reason.message})` : ""}.`,
       );
     }
-    const actualSuffix = snipeCaptureSuffix(previousPosition, position);
-    const positions = movePositions(
-      previousPosition,
-      move,
-      position,
-      engine.previewFirstStep,
-    );
-    for (let stepIndex = 0; stepIndex < assertedCaptures.length; stepIndex += 1) {
-      if (
-        assertedCaptures[stepIndex] &&
-        captureAnnotation(
-          positions[stepIndex],
-          positions[stepIndex + 1],
-          move.player,
-        ) !== "x"
-      ) {
-        throw new Error(
-          `Line ${lineNumber}: asserted capture on subply ${stepIndex + 1} does not match the actual result.`,
-        );
-      }
-    }
-    if (assertedSuffix && assertedSuffix !== actualSuffix) {
+    const actual = formatCompletedMove(move);
+    if (actual !== body) {
       throw new Error(
-        `Line ${lineNumber}: asserted result "${assertedSuffix}" does not match the actual snipe capture.`,
+        `Line ${lineNumber}: capture annotations do not match the actual result (expected "${actual}").`,
       );
     }
     timeline.push({ position, move });

@@ -1,84 +1,64 @@
 import { describe, expect, it } from "vitest";
-import type { Card, Position, TurnMove } from "./engine/types";
+import type { Position, TurnMove } from "./engine/types";
 import { formatCompletedMove } from "./history-format";
 
-const card = (
-  id: string,
-  animal: string,
-  owner: Card["owner"],
-  isSnipe = false,
-): Card => ({
-  id,
-  animal,
-  owner,
-  isSnipe,
-  canRetreat: animal === "Snake",
-});
-
-const position = (
-  betaReserve: Card[],
-  row4: Card[],
-  row5: Card[],
-): Position => ({
+const position: Position = {
   schemaVersion: 1,
+  positionKey: "position",
   seed: 1,
   turn: "Beta",
   turnNumber: 1,
   winner: null,
+  leadingAction: null,
   locations: {
     "alpha-reserve": [],
-    "beta-reserve": betaReserve,
+    "beta-reserve": [],
     "row-1": [],
     "row-2": [],
     "row-3": [],
-    "row-4": row4,
-    "row-5": row5,
+    "row-4": [],
+    "row-5": [],
     "row-6": [],
   },
-});
-
-const snakeMove: TurnMove = {
-  id: "snake-4",
-  player: "Beta",
-  label: "Snake 4",
-  steps: [{ cardId: "snake", from: "row-5", to: "row-4" }],
-  captures: [],
 };
 
-describe("capture annotations", () => {
-  it("does not invent a capture when stable card IDs are reassigned", () => {
-    const before = position(
-      [card("animal-9", "Rooster", "Beta")],
-      [card("squid", "Squid", "Beta")],
-      [card("snake", "Snake", "Beta")],
-    );
-    const after = position(
-      [card("animal-25", "Rooster", "Beta")],
-      [
-        card("squid", "Squid", "Beta"),
-        card("snake", "Snake", "Beta"),
-      ],
-      [],
-    );
+function move(capture: TurnMove["captures"]): TurnMove {
+  return {
+    id: "snake-4",
+    positionKey: position.positionKey,
+    player: "Beta",
+    label: "Snake 4",
+    steps: [
+      {
+        pieceKey: "beta:animal:5",
+        animal: "Snake",
+        owner: "Beta",
+        isSnipe: false,
+        from: "row-5",
+        to: "row-4",
+        capture,
+      },
+    ],
+    captures: capture,
+  };
+}
 
-    expect(formatCompletedMove(before, snakeMove, after)).toBe("Snake 4");
+describe("authoritative capture annotations", () => {
+  it("does not infer a capture from frontend card-array changes", () => {
+    expect(
+      formatCompletedMove(move({ animals: [], snipe: null })),
+    ).toBe("Snake 4");
   });
 
-  it("annotates an actual increase in the moving player's reserve", () => {
-    const before = position(
-      [card("rooster-before", "Rooster", "Beta")],
-      [card("squid", "Squid", "Alpha")],
-      [card("snake", "Snake", "Beta")],
-    );
-    const after = position(
-      [
-        card("rooster-after", "Rooster", "Beta"),
-        card("captured-squid", "Squid", "Beta"),
-      ],
-      [card("snake", "Snake", "Beta")],
-      [],
-    );
+  it("uses Core's animal capture fact", () => {
+    expect(
+      formatCompletedMove(move({ animals: ["Squid"], snipe: null })),
+    ).toBe("Snake 4x");
+  });
 
-    expect(formatCompletedMove(before, snakeMove, after)).toBe("Snake 4x");
+  it("uses the captured snipe's original owner for the result suffix", () => {
+    expect(
+      formatCompletedMove(move({ animals: [], snipe: "Alpha" })),
+    ).toBe("Snake 4-#0");
   });
 });

@@ -1,37 +1,61 @@
 export type Player = "Alpha" | "Beta";
 export type Strategy = "avocado" | "blueberry";
-
-export type Location = "alpha-reserve" | "beta-reserve" | `row-${1 | 2 | 3 | 4 | 5 | 6}`;
+export type Location =
+  | "alpha-reserve"
+  | "beta-reserve"
+  | `row-${1 | 2 | 3 | 4 | 5 | 6}`;
 
 export interface Card {
-  id: string;
+  /** Value identity shared by interchangeable copies. */
+  pieceKey: string;
   animal: string;
   owner: Player;
   isSnipe: boolean;
   canRetreat: boolean;
 }
 
+export interface LeadingAction {
+  animal: string;
+  direction: "advance" | "retreat";
+  destination: number;
+}
+
 export interface Position {
   schemaVersion: 1;
+  /** Canonical Core position identity, including an optional turn prefix. */
+  positionKey: string;
   seed: number;
   turn: Player;
   turnNumber: number;
   winner: Player | null;
+  leadingAction: LeadingAction | null;
   locations: Record<Location, Card[]>;
 }
 
+export interface Capture {
+  animals: string[];
+  /** Original owner of the captured snipe. */
+  snipe: Player | null;
+}
+
 export interface MoveStep {
-  cardId: string;
+  pieceKey: string;
+  animal: string;
+  owner: Player;
+  isSnipe: boolean;
   from: Location;
   to: Location;
+  capture: Capture;
 }
 
 export interface TurnMove {
   id: string;
+  /** The complete turn is legal only against this canonical position. */
+  positionKey: string;
   player: Player;
   label: string;
   steps: MoveStep[];
-  captures: string[];
+  captures: Capture;
 }
 
 export interface AnalysisRequest {
@@ -42,65 +66,40 @@ export interface AnalysisRequest {
   firstStep?: MoveStep;
 }
 
-export interface LiveAnalysisRequest {
-  position: Position;
-  timeLimitMs: number;
-  requestId: number;
-  strategy: Strategy;
-  firstStep?: MoveStep;
-}
-
-export interface CandidateLine {
-  move: TurnMove;
-  score: number;
-}
-
-export interface AnalysisResult {
-  requestId: number;
-  bestMove: TurnMove;
-  evaluation?: EngineEvaluation;
-  ticks?: number;
-  elapsedMs: number;
-  recommendedLine?: TurnMove[];
-  strategy?: Strategy;
-  engineName: string;
-  /** @deprecated Pre-0.32 compatibility fields. */
-  score?: number;
-  depth?: number;
-  nodes?: number;
-  principalVariation?: string[];
-  candidates?: CandidateLine[];
-}
-
-export interface LiveAnalysisUpdate {
-  requestId: number;
-  bestMove: TurnMove;
-  evaluation?: EngineEvaluation;
-  ticks?: number;
-  elapsedMs?: number;
-  recommendedLine?: TurnMove[];
-  strategy?: Strategy;
-  engineName?: string;
-  /** @deprecated Pre-0.32 compatibility fields. */
-  score?: number;
-  depth?: number;
-  principalVariation?: TurnMove[];
-}
+export type LiveAnalysisRequest = AnalysisRequest;
 
 export type EngineEvaluation =
   | { kind: "mate"; winner: Player; plies: number }
   | { kind: "estimate"; value: number };
 
+export interface AnalysisResult {
+  requestId: number;
+  positionKey: string;
+  bestMove: TurnMove;
+  evaluation: EngineEvaluation;
+  ticks: number;
+  elapsedMs: number;
+  recommendedLine: TurnMove[];
+  strategy: Strategy;
+  engineName: string;
+}
+
+export type LiveAnalysisUpdate = AnalysisResult;
+
 export interface RulesEngine {
   readonly name: string;
   createGame(seed?: number): Position;
+  canonicalizePosition(position: Position): Position;
   legalMoves(position: Position): TurnMove[];
   previewFirstStep(position: Position, step: MoveStep): Position;
   applyMove(position: Position, move: TurnMove): Position;
 }
 
 export interface ComputerAgent {
-  chooseMove(request: AnalysisRequest, signal: AbortSignal): Promise<AnalysisResult>;
+  chooseMove(
+    request: AnalysisRequest,
+    signal: AbortSignal,
+  ): Promise<AnalysisResult>;
   dispose(): void;
 }
 
@@ -119,22 +118,12 @@ export interface EngineServices {
   analyzer: LiveAnalyzer;
 }
 
-/** @deprecated Kept for compatibility with history-format test adapters. */
-export interface EngineAdapter extends RulesEngine {
-  analyze(request: AnalysisRequest, signal: AbortSignal): Promise<AnalysisResult>;
-  dispose(): void;
-}
-
-export function otherPlayer(player: Player): Player {
-  return player === "Alpha" ? "Beta" : "Alpha";
-}
-
-export function rowLocation(rank: number): Location {
-  return `row-${Math.max(1, Math.min(6, rank)) as 1 | 2 | 3 | 4 | 5 | 6}`;
-}
-
 export function locationLabel(location: Location): string {
   if (location === "alpha-reserve") return "Alpha reserve";
   if (location === "beta-reserve") return "Beta reserve";
   return `Rank ${location.slice(-1)}`;
+}
+
+export function selectionKey(pieceKey: string, location: Location): string {
+  return `${pieceKey}@${location}`;
 }

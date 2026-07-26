@@ -1,14 +1,20 @@
-//! Clean browser bridge for `snipe-core`, Avocado, and Blueberry.
+//! Browser contract for Snipe Hunt's value-semantic Core.
+//!
+//! This bridge deliberately exposes no persistent physical-card identity.
+//! A piece is selected by kind, allegiance, and source location. Identical
+//! pieces in one location are interchangeable, exactly as they are in Core.
 
 use agent_avocado::AvocadoAnalyzer;
 use agent_blueberry::BlueberryAnalyzer;
 use serde::{Deserialize, Serialize};
 use snipe_core::{
-    Action, Analyzer, Animal, AnimalDrop, Card, CardMultiset, Evaluation, InitialStateBuilder,
-    Player, Rank, SnipeStep, State, StepDirection,
+    Action, Analyzer, Animal, AnimalDrop, AnimalStep, Card, CardMultiset, Evaluation,
+    InitialStateBuilder, Player, Rank, SnipeStep, State, StepDirection,
 };
+use std::fmt::Write as _;
 use wasm_bindgen::prelude::*;
 
+const POSITION_SCHEMA: u8 = 1;
 const DEFAULT_SEED: u32 = 7_071;
 const MAX_TIME_MS: u64 = 120_000;
 const BATCH_TICKS: usize = 8;
@@ -98,10 +104,10 @@ impl From<PlayerDto> for Player {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CardDto {
-    id: String,
+    piece_key: String,
     animal: String,
     owner: PlayerDto,
     is_snipe: bool,
@@ -130,6 +136,19 @@ struct LocationsDto {
 }
 
 impl LocationsDto {
+    fn empty() -> Self {
+        Self {
+            alpha_reserve: Vec::new(),
+            beta_reserve: Vec::new(),
+            row_1: Vec::new(),
+            row_2: Vec::new(),
+            row_3: Vec::new(),
+            row_4: Vec::new(),
+            row_5: Vec::new(),
+            row_6: Vec::new(),
+        }
+    }
+
     fn get(&self, location: Location) -> &[CardDto] {
         match location {
             Location::AlphaReserve => &self.alpha_reserve,
@@ -159,31 +178,60 @@ impl LocationsDto {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct LeadingActionDto {
+    animal: String,
+    direction: DirectionDto,
+    destination: u8,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+enum DirectionDto {
+    Advance,
+    Retreat,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct PositionDto {
     schema_version: u8,
+    position_key: String,
     seed: u64,
     turn: PlayerDto,
     turn_number: u32,
     winner: Option<PlayerDto>,
+    leading_action: Option<LeadingActionDto>,
     locations: LocationsDto,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CaptureDto {
+    animals: Vec<String>,
+    snipe: Option<PlayerDto>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct MoveStepDto {
-    card_id: String,
+    piece_key: String,
+    animal: String,
+    owner: PlayerDto,
+    is_snipe: bool,
     from: String,
     to: String,
+    capture: CaptureDto,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct TurnMoveDto {
     id: String,
+    position_key: String,
     player: PlayerDto,
     label: String,
     steps: Vec<MoveStepDto>,
-    captures: Vec<String>,
+    captures: CaptureDto,
 }
 
 #[derive(Debug, Deserialize)]
@@ -208,6 +256,7 @@ enum EvaluationDto {
 #[serde(rename_all = "camelCase")]
 struct AnalysisUpdateDto {
     request_id: u64,
+    position_key: String,
     best_move: TurnMoveDto,
     evaluation: EvaluationDto,
     ticks: u64,
@@ -217,7 +266,7 @@ struct AnalysisUpdateDto {
     engine_name: &'static str,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Location {
     AlphaReserve,
     R1,
@@ -239,6 +288,7 @@ const LOCATIONS: [Location; 8] = [
     Location::R6,
     Location::BetaReserve,
 ];
+
 const STATE_LOCATIONS: [Location; 7] = [
     Location::AlphaReserve,
     Location::R1,
@@ -253,7 +303,14 @@ const STATE_LOCATIONS: [Location; 7] = [
 pub fn create_game(seed: Option<u32>) -> Result<String, JsValue> {
     let seed = seed.unwrap_or(DEFAULT_SEED);
     let state = initial_state(u64::from(seed));
-    encode(&state_to_dto(&state, u64::from(seed), 1, None))
+    encode(&state_to_dto(&state, u64::from(seed), 1))
+}
+
+#[wasm_bindgen]
+pub fn canonicalize_position(position_json: &str) -> Result<String, JsValue> {
+    let position: PositionDto = decode(position_json)?;
+    let state = dto_to_state_inner(&position, false)?;
+    encode(&state_to_dto(&state, position.seed, position.turn_number))
 }
 
 #[wasm_bindgen]
@@ -262,7 +319,7 @@ pub fn legal_moves(position_json: &str) -> Result<String, JsValue> {
     let state = dto_to_state(&position)?;
     let moves = full_turns(&state)
         .into_iter()
-        .map(|actions| actions_to_dto(&position, &state, &actions))
+        .map(|actions| actions_to_dto(&state, &actions))
         .collect::<Result<Vec<_>, _>>()?;
     encode(&moves)
 }
@@ -272,16 +329,11 @@ pub fn preview_first_step(position_json: &str, step_json: &str) -> Result<String
     let position: PositionDto = decode(position_json)?;
     let requested: MoveStepDto = decode(step_json)?;
     let state = dto_to_state(&position)?;
-    let action = find_first_action(&position, &state, &requested)?;
+    let action = find_first_action(&state, &requested)?;
     let next = state
         .apply(action)
         .map_err(|error| js_error(format!("illegal first step: {error:?}")))?;
-    encode(&state_to_dto(
-        &next,
-        position.seed,
-        position.turn_number,
-        Some(&position),
-    ))
+    encode(&state_to_dto(&next, position.seed, position.turn_number))
 }
 
 #[wasm_bindgen]
@@ -289,31 +341,38 @@ pub fn apply_move(position_json: &str, move_json: &str) -> Result<String, JsValu
     let position: PositionDto = decode(position_json)?;
     let requested: TurnMoveDto = decode(move_json)?;
     let state = dto_to_state(&position)?;
-    let actions = full_turns(&state)
-        .into_iter()
-        .find(|actions| action_id(actions) == requested.id)
-        .ok_or_else(|| js_error("move is not legal in this position"))?;
+    if requested.position_key != position.position_key {
+        return Err(js_error("move belongs to a different position"));
+    }
+    let actions = matching_requested_turn(&state, &requested)
+        .ok_or_else(|| js_error("move does not exactly match a legal turn"))?;
     let next = execute(state, &actions)?;
     encode(&state_to_dto(
         &next,
         position.seed,
         position.turn_number.saturating_add(1),
-        Some(&position),
     ))
+}
+
+fn matching_requested_turn(state: &State, requested: &TurnMoveDto) -> Option<Vec<Action>> {
+    for actions in full_turns(state) {
+        if actions_to_dto(state, &actions).ok()? == *requested {
+            return Some(actions);
+        }
+    }
+    None
 }
 
 #[wasm_bindgen]
 pub fn analyze(request_json: &str) -> Result<String, JsValue> {
     let request: AnalysisRequestDto = decode(request_json)?;
-    let result = run_analysis(&request, None)?;
-    encode(&result)
+    encode(&run_analysis(&request, None)?)
 }
 
 #[wasm_bindgen]
 pub fn analyze_live(request_json: &str, on_progress: &js_sys::Function) -> Result<String, JsValue> {
     let request: AnalysisRequestDto = decode(request_json)?;
-    let result = run_analysis(&request, Some(on_progress))?;
-    encode(&result)
+    encode(&run_analysis(&request, Some(on_progress))?)
 }
 
 fn run_analysis(
@@ -321,14 +380,19 @@ fn run_analysis(
     callback: Option<&js_sys::Function>,
 ) -> Result<AnalysisUpdateDto, JsValue> {
     let base = dto_to_state(&request.position)?;
-    let state = if let Some(step) = &request.first_step {
-        let action = find_first_action(&request.position, &base, step)?;
-        base.apply(action)
+    let first_action = request
+        .first_step
+        .as_ref()
+        .map(|step| find_first_action(&base, step))
+        .transpose()?;
+    let analyzed = if let Some(action) = first_action {
+        base.clone()
+            .apply(action)
             .map_err(|error| js_error(format!("illegal first step: {error:?}")))?
     } else {
-        base
+        base.clone()
     };
-    let mut analyzer = BrowserAnalyzer::new(request.strategy, state.clone());
+    let mut analyzer = BrowserAnalyzer::new(request.strategy, analyzed);
     let start = js_sys::Date::now();
     let deadline = start + request.time_limit_ms.clamp(1, MAX_TIME_MS) as f64;
     let mut ticks = 0u64;
@@ -340,7 +404,8 @@ fn run_analysis(
         if let Some(callback) = callback
             && now - last_progress >= 75.0
         {
-            let update = analysis_update(request, &state, &analyzer, ticks, now - start)?;
+            let update =
+                analysis_update(request, &base, first_action, &analyzer, ticks, now - start)?;
             let json =
                 serde_json::to_string(&update).map_err(|error| js_error(error.to_string()))?;
             callback.call1(&JsValue::NULL, &JsValue::from_str(&json))?;
@@ -349,7 +414,8 @@ fn run_analysis(
     }
     analysis_update(
         request,
-        &state,
+        &base,
+        first_action,
         &analyzer,
         ticks,
         js_sys::Date::now() - start,
@@ -358,36 +424,77 @@ fn run_analysis(
 
 fn analysis_update(
     request: &AnalysisRequestDto,
-    analyzed_state: &State,
+    base: &State,
+    first_action: Option<Action>,
     analyzer: &BrowserAnalyzer,
     ticks: u64,
     elapsed: f64,
 ) -> Result<AnalysisUpdateDto, JsValue> {
-    let actions = analyzer.line();
-    if actions.is_empty() {
-        return Err(js_error("no legal moves are available"));
+    let mut actions = Vec::new();
+    if let Some(action) = first_action {
+        actions.push(action);
     }
-    let position = if request.first_step.is_some() {
-        state_to_dto(
-            analyzed_state,
-            request.position.seed,
-            request.position.turn_number,
-            Some(&request.position),
-        )
-    } else {
-        request.position.clone()
-    };
-    let best_move = actions_to_dto(&position, analyzed_state, &actions)?;
+    actions.extend(analyzer.line());
+    let recommended_line = complete_analysis_turns(base, first_action, &actions)?;
+    let best_move = recommended_line
+        .first()
+        .cloned()
+        .ok_or_else(|| js_error("no legal moves are available"))?;
     Ok(AnalysisUpdateDto {
         request_id: request.request_id,
+        position_key: request.position.position_key.clone(),
         best_move: best_move.clone(),
         evaluation: evaluation_dto(analyzer.evaluation()),
         ticks,
         elapsed_ms: elapsed.max(0.0) as u64,
-        recommended_line: vec![best_move],
+        recommended_line,
         strategy: request.strategy,
         engine_name: request.strategy.label(),
     })
+}
+
+/// Converts the analyzer's action-level line of play into browser-visible,
+/// fully replayed turns. A trailing half-turn is never exposed.
+fn complete_analysis_turns(
+    base: &State,
+    required_first: Option<Action>,
+    actions: &[Action],
+) -> Result<Vec<TurnMoveDto>, JsValue> {
+    let mut turns = Vec::new();
+    let mut turn_base = base.clone();
+    let mut working = base.clone();
+    let mut current = Vec::new();
+
+    for &action in actions {
+        let player = turn_base.active_player;
+        working = working
+            .apply(action)
+            .map_err(|error| js_error(format!("analyzer returned an illegal action: {error:?}")))?;
+        current.push(action);
+        if working.active_player != player || working.winner().is_some() {
+            turns.push(actions_to_dto(&turn_base, &current)?);
+            turn_base = working.clone();
+            current.clear();
+        }
+    }
+
+    if turns.is_empty() {
+        // A time-limited analyzer may yield no line, or a line ending after
+        // only the leading half of a turn. Complete that turn from Core's
+        // advertised legal turns instead of inventing an invalid browser move.
+        let prefix = if current.is_empty() {
+            required_first.into_iter().collect::<Vec<_>>()
+        } else {
+            current
+        };
+        let completion = full_turns(base)
+            .into_iter()
+            .find(|candidate| candidate.starts_with(&prefix))
+            .ok_or_else(|| js_error("analyzer did not provide a complete legal turn"))?;
+        turns.push(actions_to_dto(base, &completion)?);
+    }
+
+    Ok(turns)
 }
 
 fn initial_state(seed: u64) -> State {
@@ -422,9 +529,17 @@ fn splitmix64(mut value: u64) -> u64 {
 }
 
 fn dto_to_state(dto: &PositionDto) -> Result<State, JsValue> {
+    dto_to_state_inner(dto, true)
+}
+
+fn dto_to_state_inner(dto: &PositionDto, validate_key: bool) -> Result<State, JsValue> {
+    if dto.schema_version != POSITION_SCHEMA {
+        return Err(js_error("unsupported position schema"));
+    }
     let mut sets = [CardMultiset::EMPTY; 7];
     for location in LOCATIONS {
         for card in dto.locations.get(location) {
+            validate_card(location, card)?;
             let player: Player = card.owner.into();
             let value = if card.is_snipe {
                 Card::Snipe
@@ -441,6 +556,11 @@ fn dto_to_state(dto: &PositionDto) -> Result<State, JsValue> {
                 .ok_or_else(|| js_error("position contains an impossible card multiplicity"))?;
         }
     }
+    let leading_action = dto
+        .leading_action
+        .as_ref()
+        .map(leading_action_from_dto)
+        .transpose()?;
     let state = State {
         active_player: dto.turn.into(),
         reserves: sets[0],
@@ -450,60 +570,70 @@ fn dto_to_state(dto: &PositionDto) -> Result<State, JsValue> {
         r4: sets[4],
         r5: sets[5],
         r6: sets[6],
-        leading_action: None,
+        leading_action,
     };
     if state.winner().map(PlayerDto::from) != dto.winner {
         return Err(js_error("position winner does not match Core"));
     }
+    if validate_key && position_key(&state) != dto.position_key {
+        return Err(js_error("position key does not match its contents"));
+    }
     Ok(state)
 }
 
-fn state_to_dto(
-    state: &State,
-    seed: u64,
-    turn_number: u32,
-    prior: Option<&PositionDto>,
-) -> PositionDto {
-    let mut locations = LocationsDto {
-        alpha_reserve: Vec::new(),
-        beta_reserve: Vec::new(),
-        row_1: Vec::new(),
-        row_2: Vec::new(),
-        row_3: Vec::new(),
-        row_4: Vec::new(),
-        row_5: Vec::new(),
-        row_6: Vec::new(),
-    };
-    for (animal_index, animal) in animals().into_iter().enumerate() {
-        let mut ids = prior
-            .map(|position| {
-                LOCATIONS
-                    .into_iter()
-                    .flat_map(|location| position.locations.get(location))
-                    .filter(|card| !card.is_snipe && card.animal == animal_name(animal))
-                    .map(|card| card.id.clone())
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-        ids.sort();
-        while ids.len() < 2 {
-            ids.push(format!("animal-{}", animal_index + ids.len() * 16));
+fn validate_card(location: Location, card: &CardDto) -> Result<(), JsValue> {
+    let player: Player = card.owner.into();
+    let expected_key = if card.is_snipe {
+        piece_key(Card::Snipe, player)
+    } else {
+        let animal = animal_from_name(&card.animal)?;
+        if card.can_retreat != animal.is_retreater() {
+            return Err(js_error("card retreat property does not match Core"));
         }
-        let mut id_cursor = 0;
+        piece_key(Card::Animal(animal), player)
+    };
+    if card.piece_key != expected_key {
+        return Err(js_error("piece key does not match card value"));
+    }
+    match location {
+        Location::AlphaReserve if !card.is_snipe && player != Player::Alpha => {
+            Err(js_error("animal is in the wrong reserve"))
+        }
+        Location::BetaReserve if !card.is_snipe && player != Player::Beta => {
+            Err(js_error("animal is in the wrong reserve"))
+        }
+        Location::AlphaReserve if card.is_snipe && player != Player::Beta => {
+            Err(js_error("snipe is in the wrong capture reserve"))
+        }
+        Location::BetaReserve if card.is_snipe && player != Player::Alpha => {
+            Err(js_error("snipe is in the wrong capture reserve"))
+        }
+        _ => Ok(()),
+    }
+}
+
+fn leading_action_from_dto(dto: &LeadingActionDto) -> Result<AnimalStep, JsValue> {
+    Ok(AnimalStep {
+        actor: animal_from_name(&dto.animal)?,
+        direction: match dto.direction {
+            DirectionDto::Advance => StepDirection::Advance,
+            DirectionDto::Retreat => StepDirection::Retreat,
+        },
+        destination: number_rank(dto.destination)
+            .ok_or_else(|| js_error("leading action destination is out of range"))?,
+    })
+}
+
+fn state_to_dto(state: &State, seed: u64, turn_number: u32) -> PositionDto {
+    let mut locations = LocationsDto::empty();
+    for animal in animals() {
         for location in STATE_LOCATIONS {
             let cards = state_cards(state, location);
             for player in [Player::Alpha, Player::Beta] {
                 for _ in 0..cards.count(Card::Animal(animal), player) {
                     locations
-                        .get_mut(reserve_for(location, player))
-                        .push(CardDto {
-                            id: ids[id_cursor].clone(),
-                            animal: animal_name(animal).to_owned(),
-                            owner: player.into(),
-                            is_snipe: false,
-                            can_retreat: animal.is_retreater(),
-                        });
-                    id_cursor += 1;
+                        .get_mut(animal_output_location(location, player))
+                        .push(card_dto(Card::Animal(animal), player));
                 }
             }
         }
@@ -512,33 +642,80 @@ fn state_to_dto(
         for location in STATE_LOCATIONS {
             if state_cards(state, location).count(Card::Snipe, player) != 0 {
                 locations
-                    .get_mut(reserve_for(location, player))
-                    .push(CardDto {
-                        id: format!("{}-snipe", player_slug(player)),
-                        animal: "Snipe".to_owned(),
-                        owner: player.into(),
-                        is_snipe: true,
-                        can_retreat: true,
-                    });
+                    .get_mut(snipe_output_location(location, player))
+                    .push(card_dto(Card::Snipe, player));
             }
         }
     }
     PositionDto {
-        schema_version: 1,
+        schema_version: POSITION_SCHEMA,
+        position_key: position_key(state),
         seed,
         turn: state.active_player.into(),
         turn_number,
         winner: state.winner().map(Into::into),
+        leading_action: state.leading_action.map(|step| LeadingActionDto {
+            animal: animal_name(step.actor).to_owned(),
+            direction: if step.direction == StepDirection::Advance {
+                DirectionDto::Advance
+            } else {
+                DirectionDto::Retreat
+            },
+            destination: rank_number(step.destination),
+        }),
         locations,
     }
 }
 
-fn reserve_for(location: Location, owner: Player) -> Location {
+fn card_dto(card: Card, player: Player) -> CardDto {
+    match card {
+        Card::Snipe => CardDto {
+            piece_key: piece_key(card, player),
+            animal: "Snipe".to_owned(),
+            owner: player.into(),
+            is_snipe: true,
+            can_retreat: true,
+        },
+        Card::Animal(animal) => CardDto {
+            piece_key: piece_key(card, player),
+            animal: animal_name(animal).to_owned(),
+            owner: player.into(),
+            is_snipe: false,
+            can_retreat: animal.is_retreater(),
+        },
+    }
+}
+
+fn piece_key(card: Card, player: Player) -> String {
+    let owner = if player == Player::Alpha {
+        "alpha"
+    } else {
+        "beta"
+    };
+    match card {
+        Card::Snipe => format!("{owner}:snipe"),
+        Card::Animal(animal) => format!("{owner}:animal:{}", animal_index(animal)),
+    }
+}
+
+fn animal_output_location(location: Location, owner: Player) -> Location {
     if matches!(location, Location::AlphaReserve | Location::BetaReserve) {
         if owner == Player::Alpha {
             Location::AlphaReserve
         } else {
             Location::BetaReserve
+        }
+    } else {
+        location
+    }
+}
+
+fn snipe_output_location(location: Location, owner: Player) -> Location {
+    if matches!(location, Location::AlphaReserve | Location::BetaReserve) {
+        if owner == Player::Alpha {
+            Location::BetaReserve
+        } else {
+            Location::AlphaReserve
         }
     } else {
         location
@@ -590,53 +767,36 @@ fn execute(mut state: State, actions: &[Action]) -> Result<State, JsValue> {
     Ok(state)
 }
 
-fn actions_to_dto(
-    position: &PositionDto,
-    state: &State,
-    actions: &[Action],
-) -> Result<TurnMoveDto, JsValue> {
+fn actions_to_dto(state: &State, actions: &[Action]) -> Result<TurnMoveDto, JsValue> {
     let player = state.active_player;
-    let mut working_state = state.clone();
-    let mut working_position = position.clone();
+    let root_key = position_key(state);
+    let mut working = state.clone();
     let mut steps = Vec::new();
+    let mut captures = CaptureDto::default();
     for &action in actions {
-        let (source, destination, animal, snipe) = action_parts(&working_state, action)?;
-        let card = working_position
-            .locations
-            .get(source)
-            .iter()
-            .find(|card| {
-                card.owner == PlayerDto::from(player)
-                    && card.is_snipe == snipe
-                    && (snipe || card.animal == animal_name(animal))
-            })
-            .ok_or_else(|| js_error("moving card was not found"))?;
-        steps.push(MoveStepDto {
-            card_id: card.id.clone(),
-            from: location_name(source).to_owned(),
-            to: location_name(destination).to_owned(),
-        });
-        working_state = working_state
+        let (source, destination, card) = action_parts(&working, action)?;
+        let next = working
+            .clone()
             .apply(action)
             .map_err(|error| js_error(format!("generated illegal action: {error:?}")))?;
-        working_position = state_to_dto(
-            &working_state,
-            position.seed,
-            position.turn_number,
-            Some(&working_position),
-        );
+        let capture = capture_outcome(&working, &next, action);
+        captures.animals.extend(capture.animals.iter().cloned());
+        captures.snipe = captures.snipe.or(capture.snipe);
+        let (animal, is_snipe) = match card {
+            Card::Snipe => ("Snipe".to_owned(), true),
+            Card::Animal(animal) => (animal_name(animal).to_owned(), false),
+        };
+        steps.push(MoveStepDto {
+            piece_key: piece_key(card, player),
+            animal,
+            owner: player.into(),
+            is_snipe,
+            from: location_name(source).to_owned(),
+            to: location_name(destination).to_owned(),
+            capture,
+        });
+        working = next;
     }
-    let before_cards = all_cards(position);
-    let after_cards = all_cards(&working_position);
-    let captures = before_cards
-        .iter()
-        .filter_map(|before| {
-            let after = after_cards.iter().find(|after| after.id == before.id)?;
-            ((before.owner != after.owner)
-                || (after.is_snipe && is_reserve_id(&card_location(&working_position, &after.id)?)))
-            .then(|| before.id.clone())
-        })
-        .collect();
     let label = steps
         .iter()
         .map(|step| compact_label(step, player))
@@ -644,6 +804,7 @@ fn actions_to_dto(
         .join(", ");
     Ok(TurnMoveDto {
         id: action_id(actions),
+        position_key: root_key,
         player: player.into(),
         label,
         steps,
@@ -651,35 +812,75 @@ fn actions_to_dto(
     })
 }
 
-fn find_first_action(
-    position: &PositionDto,
-    state: &State,
-    requested: &MoveStepDto,
-) -> Result<Action, JsValue> {
-    let mut actions = Vec::new();
-    state.write_legal_actions(&mut actions);
-    for action in actions {
-        if !matches!(action, Action::AnimalStep(_)) {
-            continue;
-        }
-        let dto = actions_to_dto(position, state, &[action])?;
-        if dto.steps.first() == Some(requested) {
-            return Ok(action);
+fn capture_outcome(before: &State, after: &State, action: Action) -> CaptureDto {
+    let player = before.active_player;
+    let dropped = match action {
+        Action::Drop(drop) => Some(drop.actor),
+        _ => None,
+    };
+    let mut captured_animals = Vec::new();
+    for animal in animals() {
+        let before_count = before.reserves.count(Card::Animal(animal), player) as i16;
+        let after_count = after.reserves.count(Card::Animal(animal), player) as i16;
+        let drop_adjustment = i16::from(dropped == Some(animal));
+        let captured = after_count - before_count + drop_adjustment;
+        for _ in 0..captured.max(0) {
+            captured_animals.push(animal_name(animal).to_owned());
         }
     }
-    Err(js_error("first animal step is not legal"))
+    let snipe = [Player::Alpha, Player::Beta]
+        .into_iter()
+        .find(|&owner| {
+            before.reserves.count(Card::Snipe, owner) == 0
+                && after.reserves.count(Card::Snipe, owner) != 0
+        })
+        .map(Into::into);
+    CaptureDto {
+        animals: captured_animals,
+        snipe,
+    }
 }
 
-fn action_parts(
-    state: &State,
-    action: Action,
-) -> Result<(Location, Location, Animal, bool), JsValue> {
+fn find_first_action(state: &State, requested: &MoveStepDto) -> Result<Action, JsValue> {
+    let mut actions = Vec::new();
+    state.write_legal_actions(&mut actions);
+    actions
+        .into_iter()
+        .filter(|action| matches!(action, Action::AnimalStep(_)))
+        .find(|&action| {
+            action_selector(state, action).is_ok_and(|candidate| candidate == *requested)
+        })
+        .ok_or_else(|| js_error("first animal step is not legal"))
+}
+
+fn action_selector(state: &State, action: Action) -> Result<MoveStepDto, JsValue> {
+    let player = state.active_player;
+    let (source, destination, card) = action_parts(state, action)?;
+    let after = state
+        .clone()
+        .apply(action)
+        .map_err(|error| js_error(format!("illegal first action: {error:?}")))?;
+    let (animal, is_snipe) = match card {
+        Card::Snipe => ("Snipe".to_owned(), true),
+        Card::Animal(animal) => (animal_name(animal).to_owned(), false),
+    };
+    Ok(MoveStepDto {
+        piece_key: piece_key(card, player),
+        animal,
+        owner: player.into(),
+        is_snipe,
+        from: location_name(source).to_owned(),
+        to: location_name(destination).to_owned(),
+        capture: capture_outcome(state, &after, action),
+    })
+}
+
+fn action_parts(state: &State, action: Action) -> Result<(Location, Location, Card), JsValue> {
     match action {
         Action::AnimalStep(step) => Ok((
             source_location(step.destination, state.active_player, step.direction)?,
             rank_location(step.destination),
-            step.actor,
-            false,
+            Card::Animal(step.actor),
         )),
         Action::Drop(AnimalDrop { actor, destination }) => Ok((
             if state.active_player == Player::Alpha {
@@ -688,14 +889,14 @@ fn action_parts(
                 Location::BetaReserve
             },
             rank_location(destination),
-            actor,
-            false,
+            Card::Animal(actor),
         )),
-        Action::SnipeStep(SnipeStep { destination }) => {
-            let source = snipe_location(state, state.active_player)
-                .ok_or_else(|| js_error("snipe not found"))?;
-            Ok((source, rank_location(destination), Animal::Mouse, true))
-        }
+        Action::SnipeStep(SnipeStep { destination }) => Ok((
+            snipe_location(state, state.active_player)
+                .ok_or_else(|| js_error("snipe not found"))?,
+            rank_location(destination),
+            Card::Snipe,
+        )),
     }
 }
 
@@ -750,6 +951,34 @@ fn action_id(actions: &[Action]) -> String {
         .join("-")
 }
 
+fn compact_label(step: &MoveStepDto, player: Player) -> String {
+    let destination = step.to.trim_start_matches("row-");
+    if step.from.ends_with("reserve") {
+        return format!("{} &{destination}", step.animal);
+    }
+    let source = step
+        .from
+        .strip_prefix("row-")
+        .and_then(|rank| rank.parse::<u8>().ok())
+        .unwrap_or_default();
+    let target = destination.parse::<u8>().unwrap_or_default();
+    let advances = if player == Player::Alpha {
+        target > source
+    } else {
+        target < source
+    };
+    let name = if step.is_snipe {
+        if player == Player::Alpha {
+            "Alpha"
+        } else {
+            "Beta"
+        }
+    } else {
+        &step.animal
+    };
+    format!("{name} {}{destination}", if advances { "" } else { "*" })
+}
+
 fn evaluation_dto(evaluation: Evaluation) -> EvaluationDto {
     match evaluation {
         Evaluation::MateInN { winner, plies } => EvaluationDto::Mate {
@@ -760,41 +989,51 @@ fn evaluation_dto(evaluation: Evaluation) -> EvaluationDto {
     }
 }
 
-fn all_cards(position: &PositionDto) -> Vec<&CardDto> {
-    LOCATIONS
-        .into_iter()
-        .flat_map(|location| position.locations.get(location))
-        .collect()
-}
-
-fn card_location(position: &PositionDto, id: &str) -> Option<String> {
-    LOCATIONS
-        .into_iter()
-        .find(|&location| {
-            position
-                .locations
-                .get(location)
-                .iter()
-                .any(|card| card.id == id)
-        })
-        .map(|location| location_name(location).to_owned())
-}
-
-fn is_reserve_id(location: &str) -> bool {
-    location.ends_with("reserve")
-}
-
-fn compact_label(step: &MoveStepDto, player: Player) -> String {
-    let name = if step.card_id.ends_with("snipe") {
-        if player == Player::Alpha {
-            "Alpha".to_owned()
-        } else {
-            "Beta".to_owned()
-        }
+fn position_key(state: &State) -> String {
+    // This is deliberately a canonical encoding, not a hash. Position
+    // identity participates in stale-action rejection, so even a theoretical
+    // hash collision would be a correctness bug.
+    let mut key = if state.active_player == Player::Alpha {
+        "p1:A".to_owned()
     } else {
-        step.card_id.clone()
+        "p1:B".to_owned()
     };
-    format!("{name} {}", step.to.trim_start_matches("row-"))
+    for cards in [
+        state.reserves,
+        state.r1,
+        state.r2,
+        state.r3,
+        state.r4,
+        state.r5,
+        state.r6,
+    ]
+    .into_iter()
+    {
+        key.push('|');
+        for card in animals().into_iter().map(Card::Animal).chain([Card::Snipe]) {
+            for player in [Player::Alpha, Player::Beta] {
+                write!(&mut key, "{},", cards.count(card, player))
+                    .expect("writing to a String cannot fail");
+            }
+        }
+    }
+    if let Some(step) = state.leading_action {
+        write!(
+            &mut key,
+            "|L{},{},{}",
+            animal_index(step.actor),
+            rank_number(step.destination),
+            if step.direction == StepDirection::Advance {
+                "a"
+            } else {
+                "r"
+            }
+        )
+        .expect("writing to a String cannot fail");
+    } else {
+        key.push_str("|L-");
+    }
+    key
 }
 
 fn animal_from_name(name: &str) -> Result<Animal, JsValue> {
@@ -887,16 +1126,20 @@ fn rank_number(rank: Rank) -> u8 {
     }
 }
 
-fn number_location(number: i8) -> Option<Location> {
+fn number_rank(number: u8) -> Option<Rank> {
     match number {
-        1 => Some(Location::R1),
-        2 => Some(Location::R2),
-        3 => Some(Location::R3),
-        4 => Some(Location::R4),
-        5 => Some(Location::R5),
-        6 => Some(Location::R6),
+        1 => Some(Rank::R1),
+        2 => Some(Rank::R2),
+        3 => Some(Rank::R3),
+        4 => Some(Rank::R4),
+        5 => Some(Rank::R5),
+        6 => Some(Rank::R6),
         _ => None,
     }
+}
+
+fn number_location(number: i8) -> Option<Location> {
+    number_rank(number.try_into().ok()?).map(rank_location)
 }
 
 fn location_name(location: Location) -> &'static str {
@@ -909,14 +1152,6 @@ fn location_name(location: Location) -> &'static str {
         Location::R4 => "row-4",
         Location::R5 => "row-5",
         Location::R6 => "row-6",
-    }
-}
-
-fn player_slug(player: Player) -> &'static str {
-    if player == Player::Alpha {
-        "alpha"
-    } else {
-        "beta"
     }
 }
 
@@ -937,40 +1172,139 @@ mod tests {
     use super::*;
 
     #[test]
-    fn initial_deals_round_trip_and_generate_applicable_moves() {
-        for seed in 0..8 {
+    fn positions_round_trip_without_physical_card_identity() {
+        for seed in 0..32 {
             let state = initial_state(seed);
-            let dto = state_to_dto(&state, seed, 1, None);
+            let dto = state_to_dto(&state, seed, 1);
             let rebuilt = dto_to_state(&dto).unwrap();
             assert_eq!(format!("{rebuilt:?}"), format!("{state:?}"));
-            for actions in full_turns(&rebuilt) {
-                assert!(actions_to_dto(&dto, &rebuilt, &actions).is_ok());
-                assert!(execute(rebuilt.clone(), &actions).is_ok());
+            assert!(
+                LOCATIONS
+                    .into_iter()
+                    .flat_map(|l| dto.locations.get(l))
+                    .all(|card| !card.piece_key.contains("occurrence")
+                        && !card.piece_key.contains('@'))
+            );
+        }
+    }
+
+    #[test]
+    fn every_advertised_turn_is_applicable_and_scoped_to_its_position() {
+        for seed in 0..16 {
+            let state = initial_state(seed);
+            for actions in full_turns(&state) {
+                let dto = actions_to_dto(&state, &actions).unwrap();
+                assert_eq!(dto.position_key, position_key(&state));
+                assert_eq!(dto.steps.len(), actions.len());
+                assert!(execute(state.clone(), &actions).is_ok());
             }
         }
     }
 
     #[test]
-    fn strategies_have_distinct_move_signatures() {
-        let mut different = 0;
-        for seed in 0..8 {
-            let state = initial_state(seed);
-            let mut avocado = AvocadoAnalyzer::new();
-            avocado.set_state(state.clone());
-            avocado.think(2);
-            let mut avocado_line = Vec::new();
-            avocado.write_optimal_lop(&mut avocado_line);
+    fn value_contract_survives_randomized_multi_ply_play() {
+        for seed in 0..32_u64 {
+            let mut state = initial_state(seed);
+            for ply in 0..40_usize {
+                let dto = state_to_dto(&state, seed, (ply + 1) as u32);
+                let rebuilt = dto_to_state(&dto).unwrap();
+                assert_eq!(position_key(&rebuilt), dto.position_key);
 
-            let mut blueberry = BlueberryAnalyzer::new();
-            blueberry.set_state(state);
-            blueberry.think(2);
-            let mut blueberry_line = Vec::new();
-            blueberry.write_optimal_lop(&mut blueberry_line);
-            different += usize::from(avocado_line != blueberry_line);
+                let turns = full_turns(&state);
+                if turns.is_empty() {
+                    assert!(state.winner().is_some());
+                    break;
+                }
+                for actions in &turns {
+                    let advertised = actions_to_dto(&state, actions).unwrap();
+                    assert_eq!(advertised.position_key, dto.position_key);
+                    assert!(execute(state.clone(), actions).is_ok());
+                }
+                let choice = ((seed as usize).wrapping_mul(31) + ply * 17) % turns.len();
+                state = execute(state, &turns[choice]).unwrap();
+            }
         }
+    }
+
+    #[test]
+    fn midpoint_analysis_returns_a_complete_turn_for_the_base_position() {
+        let state = initial_state(7_071);
+        let actions = full_turns(&state)
+            .into_iter()
+            .find(|actions| actions.len() == 2)
+            .expect("initial state has a two-action turn");
+        let first = actions[0];
+        let after_first = state.clone().apply(first).unwrap();
+        let request = AnalysisRequestDto {
+            position: state_to_dto(&state, 7_071, 1),
+            time_limit_ms: 1,
+            request_id: 1,
+            strategy: Strategy::Blueberry,
+            first_step: Some(action_selector(&state, first).unwrap()),
+        };
+        let mut analyzer = BrowserAnalyzer::new(Strategy::Blueberry, after_first);
+        analyzer.think(1);
+
+        let update = analysis_update(&request, &state, Some(first), &analyzer, 1, 0.0).unwrap();
+
+        assert_eq!(update.best_move.position_key, position_key(&state));
+        assert_eq!(update.best_move.steps.len(), 2);
         assert!(
-            different >= 4,
-            "strategies differed on only {different}/8 seeded positions"
+            full_turns(&state)
+                .iter()
+                .any(|turn| action_id(turn) == update.best_move.id)
         );
+        assert_eq!(update.recommended_line[0].id, update.best_move.id);
+    }
+
+    #[test]
+    fn analyzer_lines_are_split_into_complete_scoped_turns() {
+        let state = initial_state(9);
+        let (first, after_first, second) = full_turns(&state)
+            .into_iter()
+            .find_map(|first| {
+                let after = execute(state.clone(), &first).ok()?;
+                let second = full_turns(&after).into_iter().next()?;
+                Some((first, after, second))
+            })
+            .expect("initial position has a two-turn continuation");
+        let raw = first
+            .iter()
+            .chain(second.iter())
+            .copied()
+            .collect::<Vec<_>>();
+
+        let line = complete_analysis_turns(&state, None, &raw).unwrap();
+
+        assert_eq!(line.len(), 2);
+        assert_eq!(line[0].position_key, position_key(&state));
+        assert_eq!(line[0].id, action_id(&first));
+        assert_eq!(line[1].position_key, position_key(&after_first));
+        assert_eq!(line[1].id, action_id(&second));
+    }
+
+    #[test]
+    fn duplicate_pieces_share_a_semantic_key() {
+        let state = initial_state(4);
+        let dto = state_to_dto(&state, 4, 1);
+        for location in LOCATIONS {
+            for left in dto.locations.get(location) {
+                for right in dto.locations.get(location) {
+                    if left.animal == right.animal && left.owner == right.owner {
+                        assert_eq!(left.piece_key, right.piece_key);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_move_with_forged_derived_fields_is_rejected() {
+        let state = initial_state(2);
+        let actions = full_turns(&state).into_iter().next().unwrap();
+        let mut advertised = actions_to_dto(&state, &actions).unwrap();
+        advertised.label.push_str(" (forged)");
+
+        assert!(matching_requested_turn(&state, &advertised).is_none());
     }
 }

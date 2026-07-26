@@ -7,7 +7,7 @@ import {
   type TimelineEntry,
 } from "./game-state";
 
-export const STORAGE_KEY = "snipe-hunt.web2.game";
+export const STORAGE_KEY = "snipe-hunt.web.game";
 
 export function restoreGame(
   serialized: string | null,

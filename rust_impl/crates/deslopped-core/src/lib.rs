@@ -58,7 +58,7 @@ impl Debug for State {
     }
 }
 impl State {
-    pub fn write_legal_actions<W>(&self, w: W)
+    pub fn write_legal_actions<W>(&self, w: &mut W)
     where
         W: ActionWriter,
     {
@@ -266,7 +266,7 @@ pub trait Analyzer {
     /// "LOP" stands for "line of play".
     /// If there were Insufficient Thinking Ticks,
     /// this is a no-op that returns `MaybeItt::InsufficientThinkingTicks`.
-    fn write_optimal_lop<W>(&self, w: W) -> MaybeItt<()>
+    fn write_optimal_lop<W>(&self, w: &mut W) -> MaybeItt<()>
     where
         W: ActionWriter;
 }

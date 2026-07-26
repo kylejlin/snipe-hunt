@@ -4,7 +4,7 @@
 use super::*;
 
 impl State {
-    pub(crate) fn write_legal_actions_<W>(&self, w: W)
+    pub(crate) fn write_legal_actions_<W>(&self, w: &mut W)
     where
         W: ActionWriter,
     {

@@ -32,12 +32,11 @@
 ## Analyzer redesign
 
 - The current AI implementations will be discarded rather than migrated.
-- The replacement analyzer will be written from scratch and based on alpha-beta pruning.
+- The replacement analyzer will be written from scratch and designed in an on-line manner.
 - Efficient analyzers should use their own internal state representation and convert to or from `snipe-core::State` only at public interface boundaries.
-- The analyzer does not need game-history input merely to preserve the current AIs' repetition or convergence policies. Those policies are not requirements for the new implementation.
+- The analyzer does not need game-history input merely to preserve the current AIs' repetition or convergence policies. Those policies are implementation details of the current (sloppy) AI agents; they are not requirements for the new implementation.
 - Runtime analyzer selection does not require an object-safe trait. An enum will provide dispatch.
 - The UI will display thinking ticks rather than completed search depth, so the analyzer API does not need to report depth.
-- `think` uses `on_tick_complete` for stopping policies such as a tick budget, elapsed wall-clock time, or both.
 - The optimal line of play is emitted as atomic `Action`s. It does not require a separate ply representation.
 
 ## Errors and implementation freedom

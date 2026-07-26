@@ -270,41 +270,42 @@ pub struct AnimalDrop {
     pub destination: Rank,
 }
 
-/// A (roughly) on-line position analyzer.
+/// An on-line position analyzer.
 /// The consumer can initialize with `set_state`,
-/// and then `think` for as long as it wants
-/// (usually, `on_tick_complete` tracks either tick count, physical clock time, or both).
-/// If the execution is interrupted "too early", the analyzer is allowed to return
-/// `MaybeItt::InsufficientThinkingTicks` instead of returning a proper analysis.
-/// What exactly "too early" means will depend on the particular implementation.
+/// and then think for as many ticks as it wants.
+/// For example, `while elapsed_time() < LIMIT { analyzer.think(100); }`.
+/// (Usually, the consumer tracks either tick count, physical clock time, or both.)
+///
+/// "On-line" means that you can receive an analysis after any number of _thinking ticks_ (including zero).
+/// The quality of the analysis will generally improve as you think for more ticks.
+/// A tick is an atomic unit of work.
 pub trait Analyzer {
     fn set_state(&mut self, state: State);
 
-    /// Repeated calls to `think` will continue from the previous state,
-    /// unless `set_state` was called in between.
-    /// This allows consumers to make the analyzer think for a while, report an analysis,
-    /// think some more, report a (hopefully now-improved) analysis, etc.
-    fn think<F>(&mut self, on_tick_complete: F)
-    where
-        F: FnMut() -> ShouldStopThinking;
+    fn think(&mut self, ticks: usize) {
+        for _ in 0..ticks {
+            self.think_for_one_tick();
+        }
+    }
 
-    fn evaluation(&self) -> MaybeItt<Evaluation>;
+    /// - Since ticks are blocking, they should complete fairly quickly.
+    /// - All ticks should take "roughly" (usually we mean "asymptotically") the same amount of time.
+    ///
+    /// The second requirement has a lot of wiggle room, so you rarely have to worry about it in practice.
+    /// Just make sure to not do anything unreasonable (e.g., define 1tick=1depth of IDFS, which would make each tick take exponentially longer than the previous).
+    /// In practice, satisfying the first requirement will almost always automatically satisfy the second requirement.
+    fn think_for_one_tick(&mut self);
+
+    /// If the game is already over, this must return `MateInN { plies: 0, ... }`.
+    fn evaluation(&self) -> Evaluation;
 
     /// "LOP" stands for "line of play".
-    /// If there were Insufficient Thinking Ticks,
-    /// this is a no-op that returns `MaybeItt::InsufficientThinkingTicks`.
-    fn write_optimal_lop<W>(&self, w: &mut W) -> MaybeItt<()>
+    /// This must only write legal actions.
+    /// If the game is not over, this must write enough actions to either complete the active player's ply,
+    /// or end the game.
+    fn write_optimal_lop<W>(&self, w: &mut W)
     where
         W: ActionWriter;
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ShouldStopThinking(pub bool);
-
-#[derive(Debug, Clone, Copy)]
-pub enum MaybeItt<T> {
-    InsufficientThinkingTicks,
-    Ok(T),
 }
 
 #[derive(Debug, Clone, Copy)]

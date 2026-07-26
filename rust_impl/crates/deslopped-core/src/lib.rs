@@ -6,7 +6,7 @@
 //! However, the analyzers (which _extremely_ computationally intensive) should only use
 //! this crate at public interface boundaries, while internally using more efficient algorithms/data-structures.
 
-// Note: This file is just the "signature" file (like a `.h` file in your stereotypical C setup).
+// Note: This file is just the "header" file, outlining the public interface.
 // All the non-trivial implementations are in the `private_impl` module.
 
 pub use std::cmp::Ordering;

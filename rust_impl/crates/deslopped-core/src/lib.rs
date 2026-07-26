@@ -77,6 +77,16 @@ pub trait ActionWriter {
     fn reserve(&mut self, additional: usize);
 }
 
+// There are 2 of each animal in the deck.
+// Therefore, for any animal, there can either be:
+// - 0 of them (bitpattern: `000`)
+// - 1 Alpha (bitpattern: `100`)
+// - 1 Beta (`010`)
+// - 1 of each (2 total) (bitpattern: `110`)
+// - 2 Alpha (bitpattern: `101`)
+// - 2 Beta (bitpattern: `011`)
+// Any other bitpattern form is illegal.
+// The bitpatterns above are written `{alpha_presence}{beta_presence}{has_allied_twins}`.
 #[derive(Clone, Copy)]
 pub struct CardMultiset {
     /// A bit vector where the i-th bit answers "Is there at least one {i-th animal} allegiant to Alpha?"
@@ -100,6 +110,12 @@ impl CardMultiset {
     };
 
     pub const fn count(self, card: Card, allegiance: Player) -> u8 {
+        todo!()
+    }
+
+    /// Returns `None` if the sum would have an illegal number of any of the card types.
+    /// There can be at most 2 of any animal (regardless of allegiance), at most 1 Alpha Snipe, and at most 1 Beta Snipe.
+    pub const fn checked_add(self, other: Self) -> Option<Self> {
         todo!()
     }
 }

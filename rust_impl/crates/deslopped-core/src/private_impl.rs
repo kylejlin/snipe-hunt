@@ -4,6 +4,12 @@
 use super::*;
 
 impl State {
+    // We manually implement this because the public representation combines the
+    // reserves, while Debug should display Alpha's above r1 and Beta's below r6.
+    pub(crate) fn fmt_(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        todo!()
+    }
+
     pub(crate) fn write_legal_actions_<W>(&self, w: &mut W)
     where
         W: ActionWriter,
@@ -20,7 +26,23 @@ impl State {
     }
 }
 
+impl InitialStateBuilder {
+    pub(crate) const fn build_(self) -> Option<State> {
+        todo!()
+    }
+}
+
 impl CardMultiset {
+    // We manually implement this so Debug shows the actual cards rather than
+    // the private bit-vector representation.
+    pub(crate) fn fmt_(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        todo!()
+    }
+
+    pub(crate) const fn singleton_(card: Card, allegiance: Player) -> Self {
+        todo!()
+    }
+
     pub(crate) const fn count_(self, card: Card, allegiance: Player) -> u8 {
         todo!()
     }

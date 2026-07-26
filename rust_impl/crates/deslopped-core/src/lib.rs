@@ -53,8 +53,7 @@ pub struct State {
 }
 impl Debug for State {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // We have to manually impl because we want to display a separate `alpha_reserve` (above `r1`) and `beta_reserve` (below `r6`).
-        todo!()
+        self.fmt_(f)
     }
 }
 impl State {
@@ -89,7 +88,7 @@ impl InitialStateBuilder {
     /// This validates the animal counts.
     /// There must be exactly 2 of each animal, or else this returns `None`.
     pub const fn build(self) -> Option<State> {
-        todo!()
+        self.build_()
     }
 }
 
@@ -130,8 +129,7 @@ pub struct CardMultiset {
 }
 impl Debug for CardMultiset {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // We have to manually impl since we want to show the actual cards.
-        todo!()
+        self.fmt_(f)
     }
 }
 impl CardMultiset {
@@ -143,7 +141,7 @@ impl CardMultiset {
     };
 
     pub const fn singleton(card: Card, allegiance: Player) -> Self {
-        todo!()
+        Self::singleton_(card, allegiance)
     }
 
     pub const fn count(self, card: Card, allegiance: Player) -> u8 {

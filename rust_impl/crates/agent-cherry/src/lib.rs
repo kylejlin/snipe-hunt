@@ -9,13 +9,16 @@ use snipe_core::{
     Action, ActionWriter, Analyzer, Animal, Card, Evaluation, EvaluationEstimate, Player, Rank,
     State, StepDirection,
 };
-use std::{collections::HashSet, fs, io, path::Path};
+use std::{fs, io, path::Path};
 
 pub const INPUT_SIZE: usize = 263;
 pub const HIDDEN_SIZE: usize = 128;
 pub const ACTION_SIZE: usize = 294;
 const MAGIC: &[u8; 8] = b"CHERRY01";
 const MAX_SEARCH_DEPTH: usize = 256;
+const MAX_LEGAL_ACTIONS: usize = ACTION_SIZE;
+const ARGMAX_TEMPERATURE: f32 = 0.01;
+const ARENA_INITIAL_CAPACITY: usize = 1024;
 
 const W1: usize = 0;
 const B1: usize = W1 + INPUT_SIZE * HIDDEN_SIZE;
@@ -124,35 +127,56 @@ impl Model {
         })
     }
 
-    fn forward(&self, input: &[f32]) -> Forward {
-        debug_assert_eq!(input.len(), INPUT_SIZE);
-        let mut hidden_1 = vec![0.0; HIDDEN_SIZE];
-        for (output, hidden) in hidden_1.iter_mut().enumerate() {
-            let mut sum = self.parameters[B1 + output];
-            for (index, &value) in input.iter().enumerate() {
-                sum += value * self.parameters[W1 + index * HIDDEN_SIZE + output];
+    fn forward(&self, input: &[f32; INPUT_SIZE]) -> Forward {
+        let mut hidden_1 = [0.0; HIDDEN_SIZE];
+        hidden_1.copy_from_slice(&self.parameters[B1..B1 + HIDDEN_SIZE]);
+        for (index, &value) in input.iter().enumerate() {
+            // State features are sparse. Besides avoiding useless arithmetic,
+            // traversing a whole weight row at a time gives LLVM a simple,
+            // contiguous loop to vectorize.
+            if value != 0.0 {
+                let weights =
+                    &self.parameters[W1 + index * HIDDEN_SIZE..W1 + (index + 1) * HIDDEN_SIZE];
+                for output in 0..HIDDEN_SIZE {
+                    hidden_1[output] = value.mul_add(weights[output], hidden_1[output]);
+                }
             }
-            *hidden = sum.max(0.0);
         }
-        let mut hidden_2 = vec![0.0; HIDDEN_SIZE];
+        for hidden in &mut hidden_1 {
+            *hidden = hidden.max(0.0);
+        }
+
+        let mut hidden_2 = [0.0; HIDDEN_SIZE];
         for output in 0..HIDDEN_SIZE {
-            let mut sum = hidden_1[output] + self.parameters[BR + output];
-            for (index, &value) in hidden_1.iter().enumerate() {
-                sum += value * self.parameters[WR + index * HIDDEN_SIZE + output];
-            }
-            hidden_2[output] = sum.max(0.0);
+            hidden_2[output] = hidden_1[output] + self.parameters[BR + output];
         }
-        let mut logits = vec![0.0; ACTION_SIZE];
-        for (action, logit) in logits.iter_mut().enumerate() {
-            let mut sum = self.parameters[BP + action];
-            for (index, &value) in hidden_2.iter().enumerate() {
-                sum += value * self.parameters[WP + index * ACTION_SIZE + action];
+        for (index, &value) in hidden_1.iter().enumerate() {
+            if value != 0.0 {
+                let weights =
+                    &self.parameters[WR + index * HIDDEN_SIZE..WR + (index + 1) * HIDDEN_SIZE];
+                for output in 0..HIDDEN_SIZE {
+                    hidden_2[output] = value.mul_add(weights[output], hidden_2[output]);
+                }
             }
-            *logit = sum;
+        }
+        for hidden in &mut hidden_2 {
+            *hidden = hidden.max(0.0);
+        }
+
+        let mut logits = [0.0; ACTION_SIZE];
+        logits.copy_from_slice(&self.parameters[BP..BP + ACTION_SIZE]);
+        for (index, &value) in hidden_2.iter().enumerate() {
+            if value != 0.0 {
+                let weights =
+                    &self.parameters[WP + index * ACTION_SIZE..WP + (index + 1) * ACTION_SIZE];
+                for action in 0..ACTION_SIZE {
+                    logits[action] = value.mul_add(weights[action], logits[action]);
+                }
+            }
         }
         let mut raw_value = self.parameters[BV];
         for (index, &value) in hidden_2.iter().enumerate() {
-            raw_value += value * self.parameters[WV + index];
+            raw_value = value.mul_add(self.parameters[WV + index], raw_value);
         }
         Forward {
             hidden_1,
@@ -162,7 +186,7 @@ impl Model {
         }
     }
 
-    pub fn predict(&self, state: &State) -> (Vec<f32>, f32) {
+    pub fn predict(&self, state: &State) -> ([f32; ACTION_SIZE], f32) {
         let output = self.forward(&encode_state(state));
         (output.logits, output.value)
     }
@@ -170,22 +194,24 @@ impl Model {
 
 #[allow(dead_code)]
 struct Forward {
-    hidden_1: Vec<f32>,
-    hidden_2: Vec<f32>,
-    logits: Vec<f32>,
+    hidden_1: [f32; HIDDEN_SIZE],
+    hidden_2: [f32; HIDDEN_SIZE],
+    logits: [f32; ACTION_SIZE],
     value: f32,
 }
 
 struct Edge {
     action: Action,
     prior: f32,
+    network_prior: f32,
     visits: u32,
     value_sum: f32,
-    child: Option<Box<Node>>,
+    child: Option<usize>,
 }
 
 struct Node {
     state: State,
+    fingerprint: u64,
     edges: Vec<Edge>,
     expanded: bool,
     value: f32,
@@ -193,8 +219,10 @@ struct Node {
 
 impl Node {
     fn new(state: State) -> Self {
+        let fingerprint = state_fingerprint(&state);
         Self {
             state,
+            fingerprint,
             edges: Vec::new(),
             expanded: false,
             value: 0.0,
@@ -211,31 +239,46 @@ impl Node {
             self.expanded = true;
             return self.value;
         }
-        let mut legal = Vec::new();
+        let mut legal = ActionBuffer::new();
         self.state.write_legal_actions(&mut legal);
         let (logits, value) = model.predict(&self.state);
         let maximum = legal
+            .as_slice()
             .iter()
             .map(|&action| logits[action_index(&self.state, action)])
             .fold(f32::NEG_INFINITY, f32::max);
         let denominator = legal
+            .as_slice()
             .iter()
             .map(|&action| (logits[action_index(&self.state, action)] - maximum).exp())
             .sum::<f32>()
             .max(f32::MIN_POSITIVE);
-        self.edges = legal
-            .into_iter()
-            .map(|action| Edge {
-                prior: (logits[action_index(&self.state, action)] - maximum).exp() / denominator,
-                action,
-                visits: 0,
-                value_sum: 0.0,
-                child: None,
-            })
-            .collect();
+        self.edges.clear();
+        self.edges.reserve(legal.len());
+        self.edges
+            .extend(legal.as_slice().iter().copied().map(|action| {
+                let prior =
+                    (logits[action_index(&self.state, action)] - maximum).exp() / denominator;
+                Edge {
+                    prior,
+                    network_prior: prior,
+                    action,
+                    visits: 0,
+                    value_sum: 0.0,
+                    child: None,
+                }
+            }));
         self.value = value;
         self.expanded = true;
         value
+    }
+
+    fn reset(&mut self, state: State) {
+        self.fingerprint = state_fingerprint(&state);
+        self.state = state;
+        self.edges.clear();
+        self.expanded = false;
+        self.value = 0.0;
     }
 
     fn preferred_edge(&self) -> Option<usize> {
@@ -252,24 +295,136 @@ impl Node {
 }
 
 pub struct Search {
-    root: Node,
+    nodes: Vec<Node>,
+    free_nodes: Vec<usize>,
+    root: usize,
     simulations: u64,
+    simulation_path: Vec<(usize, usize)>,
+    reclaim_stack: Vec<usize>,
 }
 
 impl Search {
     pub fn new(state: State, model: &Model) -> Self {
         let mut root = Node::new(state);
         root.expand(model);
+        let mut nodes = Vec::with_capacity(ARENA_INITIAL_CAPACITY);
+        nodes.push(root);
         Self {
-            root,
+            nodes,
+            free_nodes: Vec::new(),
+            root: 0,
             simulations: 0,
+            simulation_path: Vec::with_capacity(MAX_SEARCH_DEPTH),
+            reclaim_stack: Vec::new(),
+        }
+    }
+
+    fn root_node(&self) -> &Node {
+        &self.nodes[self.root]
+    }
+
+    fn root_node_mut(&mut self) -> &mut Node {
+        &mut self.nodes[self.root]
+    }
+
+    fn allocate_node(&mut self, state: State) -> usize {
+        if let Some(index) = self.free_nodes.pop() {
+            self.nodes[index].reset(state);
+            index
+        } else {
+            let index = self.nodes.len();
+            self.nodes.push(Node::new(state));
+            index
+        }
+    }
+
+    fn reclaim_subtree(&mut self, root: usize) {
+        self.reclaim_stack.clear();
+        self.reclaim_stack.push(root);
+        while let Some(index) = self.reclaim_stack.pop() {
+            self.reclaim_stack
+                .extend(self.nodes[index].edges.iter().filter_map(|edge| edge.child));
+            self.free_nodes.push(index);
         }
     }
 
     pub fn simulate(&mut self, model: &Model) {
-        let mut seen = HashSet::new();
-        seen.insert(state_fingerprint(&self.root.state));
-        simulate_node(&mut self.root, model, 0, &mut seen);
+        self.simulation_path.clear();
+        let mut seen = [0_u64; MAX_SEARCH_DEPTH + 1];
+        let mut node_index = self.root;
+        seen[0] = self.nodes[node_index].fingerprint;
+
+        let (mut value, mut value_player) = loop {
+            let depth = self.simulation_path.len();
+            let player = self.nodes[node_index].state.active_player;
+            if depth >= MAX_SEARCH_DEPTH {
+                break (0.0, player);
+            }
+            if !self.nodes[node_index].expanded {
+                let value = self.nodes[node_index].expand(model);
+                break (value, player);
+            }
+            if self.nodes[node_index].edges.is_empty() {
+                break (self.nodes[node_index].value, player);
+            }
+
+            let total = self.nodes[node_index]
+                .edges
+                .iter()
+                .map(|edge| u64::from(edge.visits))
+                .sum::<u64>();
+            let exploration = 1.5 * ((total + 1) as f32).sqrt();
+            let edge_index = self.nodes[node_index]
+                .edges
+                .iter()
+                .enumerate()
+                .max_by(|(_, left), (_, right)| {
+                    let score = |edge: &Edge| {
+                        let q = if edge.visits == 0 {
+                            0.0
+                        } else {
+                            edge.value_sum / edge.visits as f32
+                        };
+                        q + exploration * edge.prior / (edge.visits + 1) as f32
+                    };
+                    score(left).total_cmp(&score(right))
+                })
+                .map(|(index, _)| index)
+                .unwrap_or(0);
+
+            let child_index = if let Some(child) = self.nodes[node_index].edges[edge_index].child {
+                child
+            } else {
+                let action = self.nodes[node_index].edges[edge_index].action;
+                let child_state = self.nodes[node_index]
+                    .state
+                    .clone()
+                    .apply(action)
+                    .expect("Core advertised a legal action");
+                let child = self.allocate_node(child_state);
+                self.nodes[node_index].edges[edge_index].child = Some(child);
+                child
+            };
+            self.simulation_path.push((node_index, edge_index));
+            let fingerprint = self.nodes[child_index].fingerprint;
+            let child_player = self.nodes[child_index].state.active_player;
+            if seen[..=depth].contains(&fingerprint) {
+                break (0.0, child_player);
+            }
+            seen[depth + 1] = fingerprint;
+            node_index = child_index;
+        };
+
+        while let Some((parent_index, edge_index)) = self.simulation_path.pop() {
+            let parent_player = self.nodes[parent_index].state.active_player;
+            if value_player != parent_player {
+                value = -value;
+            }
+            let edge = &mut self.nodes[parent_index].edges[edge_index];
+            edge.visits += 1;
+            edge.value_sum += value;
+            value_player = parent_player;
+        }
         self.simulations += 1;
     }
 
@@ -279,60 +434,175 @@ impl Search {
         }
     }
 
-    pub fn root_value(&self) -> f32 {
-        if self.root.edges.is_empty() {
-            return self.root.value;
+    /// Mixes symmetric Dirichlet noise into root priors for self-play search.
+    ///
+    /// `alpha` is the concentration of each legal action and `epsilon` is the
+    /// fraction of the noisy prior. Original network priors remain available
+    /// for zero-visit policy targets.
+    pub fn add_root_dirichlet_noise(&mut self, alpha: f32, epsilon: f32, seed: u64) {
+        assert!(
+            alpha.is_finite() && alpha > 0.0,
+            "Dirichlet alpha must be finite and positive"
+        );
+        assert!(
+            epsilon.is_finite() && (0.0..=1.0).contains(&epsilon),
+            "Dirichlet epsilon must be finite and in [0, 1]"
+        );
+        if self.root_node().edges.is_empty() {
+            return;
         }
-        let visits = self.root.edges.iter().map(|edge| edge.visits).sum::<u32>();
-        if visits == 0 {
-            self.root.value
+        if epsilon == 0.0 {
+            for edge in &mut self.root_node_mut().edges {
+                edge.prior = edge.network_prior;
+            }
+            return;
+        }
+
+        let action_count = self.root_node().edges.len();
+        debug_assert!(action_count <= MAX_LEGAL_ACTIONS);
+        let mut rng = Rng::new(seed);
+        let mut noise = [0.0_f64; MAX_LEGAL_ACTIONS];
+        let mut total = 0.0;
+        for sample in &mut noise[..action_count] {
+            *sample = rng.gamma(f64::from(alpha));
+            total += *sample;
+        }
+        debug_assert!(total.is_finite() && total > 0.0);
+        let clean_fraction = 1.0 - epsilon;
+        for (edge, sample) in self.root_node_mut().edges.iter_mut().zip(noise) {
+            edge.prior = clean_fraction * edge.network_prior + epsilon * (sample / total) as f32;
+        }
+    }
+
+    /// Re-roots after an atomic action while retaining the explored child tree.
+    ///
+    /// Nodes from discarded sibling trees are recycled by later simulations.
+    pub fn advance(&mut self, action: Action, model: &Model) -> bool {
+        let Some(edge_index) = self
+            .root_node()
+            .edges
+            .iter()
+            .position(|edge| edge.action == action)
+        else {
+            return false;
+        };
+
+        let old_root = self.root;
+        let child = if let Some(child) = self.nodes[old_root].edges[edge_index].child.take() {
+            child
         } else {
-            self.root
-                .edges
-                .iter()
-                .map(|edge| edge.value_sum)
-                .sum::<f32>()
-                / visits as f32
+            let Ok(state) = self.nodes[old_root].state.clone().apply(action) else {
+                return false;
+            };
+            self.allocate_node(state)
+        };
+        self.root = child;
+        self.reclaim_subtree(old_root);
+        if !self.root_node().expanded {
+            let root = self.root;
+            self.nodes[root].expand(model);
+        }
+        self.simulations = 0;
+        true
+    }
+
+    pub fn root_action_count(&self) -> usize {
+        self.root_node().edges.len()
+    }
+
+    pub fn root_value(&self) -> f32 {
+        let root = self.root_node();
+        if root.edges.is_empty() {
+            return root.value;
+        }
+        let visits = root
+            .edges
+            .iter()
+            .map(|edge| u64::from(edge.visits))
+            .sum::<u64>();
+        if visits == 0 {
+            root.value
+        } else {
+            root.edges.iter().map(|edge| edge.value_sum).sum::<f32>() / visits as f32
         }
     }
 
     pub fn policy(&self, temperature: f32) -> Vec<(Action, f32)> {
-        if self.root.edges.is_empty() {
+        let root = self.root_node();
+        if root.edges.is_empty() {
             return Vec::new();
         }
-        if temperature <= 0.01 {
-            let best = self.root.preferred_edge().unwrap_or(0);
-            return self
-                .root
+        let total_visits = root
+            .edges
+            .iter()
+            .map(|edge| u64::from(edge.visits))
+            .sum::<u64>();
+        let base = |edge: &Edge| {
+            if total_visits == 0 {
+                edge.network_prior
+            } else {
+                edge.visits as f32
+            }
+        };
+        if !temperature.is_finite() || temperature <= ARGMAX_TEMPERATURE {
+            let best = root
                 .edges
                 .iter()
                 .enumerate()
-                .map(|(index, edge)| (edge.action, (index == best) as u8 as f32))
+                .max_by(|(_, left), (_, right)| {
+                    base(left)
+                        .total_cmp(&base(right))
+                        .then_with(|| left.network_prior.total_cmp(&right.network_prior))
+                })
+                .map(|(index, _)| index)
+                .unwrap_or(0);
+            return root
+                .edges
+                .iter()
+                .enumerate()
+                .map(|(index, edge)| (edge.action, f32::from(index == best)))
                 .collect();
         }
-        let power = 1.0 / temperature;
-        let weights = self
-            .root
+
+        let inverse_temperature = 1.0 / temperature;
+        let maximum = root
             .edges
             .iter()
-            .map(|edge| (edge.visits.max(1) as f32).powf(power))
-            .collect::<Vec<_>>();
-        let total = weights.iter().sum::<f32>().max(f32::MIN_POSITIVE);
-        self.root
-            .edges
-            .iter()
-            .zip(weights)
-            .map(|(edge, weight)| (edge.action, weight / total))
-            .collect()
+            .map(|edge| {
+                let weight = base(edge);
+                if weight > 0.0 {
+                    weight.ln() * inverse_temperature
+                } else {
+                    f32::NEG_INFINITY
+                }
+            })
+            .fold(f32::NEG_INFINITY, f32::max);
+        let mut policy = Vec::with_capacity(root.edges.len());
+        let mut total = 0.0;
+        for edge in &root.edges {
+            let weight = base(edge);
+            let probability = if weight > 0.0 {
+                (weight.ln() * inverse_temperature - maximum).exp()
+            } else {
+                0.0
+            };
+            total += probability;
+            policy.push((edge.action, probability));
+        }
+        debug_assert!(total.is_finite() && total > 0.0);
+        for (_, probability) in &mut policy {
+            *probability /= total;
+        }
+        policy
     }
 
     pub fn best_complete_ply(&self, model: &Model) -> Vec<Action> {
-        let player = self.root.state.active_player;
-        let mut state = self.root.state.clone();
+        let player = self.root_node().state.active_player;
+        let mut state = self.root_node().state.clone();
         let mut actions = Vec::new();
-        let mut current = &self.root;
-        while let Some(index) = current.preferred_edge() {
-            let action = current.edges[index].action;
+        let mut current_index = self.root;
+        while let Some(index) = self.nodes[current_index].preferred_edge() {
+            let action = self.nodes[current_index].edges[index].action;
             let Ok(next) = state.clone().apply(action) else {
                 break;
             };
@@ -341,8 +611,8 @@ impl Search {
             if state.active_player != player || state.winner().is_some() {
                 break;
             }
-            if let Some(child) = current.edges[index].child.as_deref() {
-                current = child;
+            if let Some(child) = self.nodes[current_index].edges[index].child {
+                current_index = child;
             } else {
                 let mut temporary = Node::new(state.clone());
                 temporary.expand(model);
@@ -354,64 +624,6 @@ impl Search {
         }
         actions
     }
-}
-
-fn simulate_node(node: &mut Node, model: &Model, depth: usize, seen: &mut HashSet<u64>) -> f32 {
-    if depth >= MAX_SEARCH_DEPTH {
-        return 0.0;
-    }
-    if !node.expanded {
-        return node.expand(model);
-    }
-    if node.edges.is_empty() {
-        return node.value;
-    }
-    let total = node.edges.iter().map(|edge| edge.visits).sum::<u32>();
-    let exploration = 1.5 * ((total + 1) as f32).sqrt();
-    let index = node
-        .edges
-        .iter()
-        .enumerate()
-        .max_by(|(_, left), (_, right)| {
-            let score = |edge: &Edge| {
-                let q = if edge.visits == 0 {
-                    0.0
-                } else {
-                    edge.value_sum / edge.visits as f32
-                };
-                q + exploration * edge.prior / (edge.visits + 1) as f32
-            };
-            score(left).total_cmp(&score(right))
-        })
-        .map(|(index, _)| index)
-        .unwrap_or(0);
-    let parent_player = node.state.active_player;
-    let action = node.edges[index].action;
-    if node.edges[index].child.is_none() {
-        let child_state = node
-            .state
-            .clone()
-            .apply(action)
-            .expect("Core advertised a legal action");
-        node.edges[index].child = Some(Box::new(Node::new(child_state)));
-    }
-    let child = node.edges[index].child.as_mut().expect("created child");
-    let fingerprint = state_fingerprint(&child.state);
-    let child_value = if !seen.insert(fingerprint) {
-        0.0
-    } else {
-        let result = simulate_node(child, model, depth + 1, seen);
-        seen.remove(&fingerprint);
-        result
-    };
-    let value = if child.state.active_player == parent_player {
-        child_value
-    } else {
-        -child_value
-    };
-    node.edges[index].visits += 1;
-    node.edges[index].value_sum += value;
-    value
 }
 
 pub struct CherryAnalyzer {
@@ -481,7 +693,49 @@ fn estimate(value: f64) -> Evaluation {
     Evaluation::Estimate(EvaluationEstimate::new(value).expect("finite model evaluation"))
 }
 
-pub fn encode_state(state: &State) -> Vec<f32> {
+struct ActionBuffer {
+    actions: [Action; MAX_LEGAL_ACTIONS],
+    len: usize,
+}
+
+impl ActionBuffer {
+    fn new() -> Self {
+        Self {
+            actions: [Action::SnipeStep(snipe_core::SnipeStep {
+                destination: Rank::R1,
+            }); MAX_LEGAL_ACTIONS],
+            len: 0,
+        }
+    }
+
+    fn as_slice(&self) -> &[Action] {
+        &self.actions[..self.len]
+    }
+
+    fn len(&self) -> usize {
+        self.len
+    }
+}
+
+impl ActionWriter for ActionBuffer {
+    fn push(&mut self, action: Action) {
+        assert!(
+            self.len < MAX_LEGAL_ACTIONS,
+            "legal action count exceeds policy head size"
+        );
+        self.actions[self.len] = action;
+        self.len += 1;
+    }
+
+    fn reserve(&mut self, additional: usize) {
+        assert!(
+            self.len + additional <= MAX_LEGAL_ACTIONS,
+            "legal action count exceeds policy head size"
+        );
+    }
+}
+
+pub fn encode_state(state: &State) -> [f32; INPUT_SIZE] {
     let locations = [
         &state.reserves,
         &state.r1,
@@ -492,7 +746,7 @@ pub fn encode_state(state: &State) -> Vec<f32> {
         &state.r6,
     ];
     let animals = animals();
-    let mut encoded = vec![0.0; INPUT_SIZE];
+    let mut encoded = [0.0; INPUT_SIZE];
     let perspective = state.active_player;
     for canonical_location in 0..7 {
         let actual_location = if perspective == Player::Alpha || canonical_location == 0 {
@@ -552,14 +806,54 @@ fn canonical_rank(player: Player, rank: Rank) -> usize {
 }
 
 fn state_fingerprint(state: &State) -> u64 {
-    encode_state(state).into_iter().fold(
-        if state.leading_action.is_some() {
-            0xCBF2_9CE4_8422_2325
-        } else {
-            0x8422_2325_CBF2_9CE4
-        },
-        |hash, value| (hash ^ u64::from(value.to_bits())).wrapping_mul(0x100_0000_01B3),
-    )
+    let locations = [
+        &state.reserves,
+        &state.r1,
+        &state.r2,
+        &state.r3,
+        &state.r4,
+        &state.r5,
+        &state.r6,
+    ];
+    let mut hash = 0xCBF2_9CE4_8422_2325_u64;
+    hash = hash_byte(hash, u8::from(state.active_player == Player::Beta));
+    for cards in locations {
+        for animal in animals() {
+            hash = hash_byte(hash, cards.count(Card::Animal(animal), Player::Alpha));
+            hash = hash_byte(hash, cards.count(Card::Animal(animal), Player::Beta));
+        }
+        hash = hash_byte(hash, cards.count(Card::Snipe, Player::Alpha));
+        hash = hash_byte(hash, cards.count(Card::Snipe, Player::Beta));
+    }
+    if let Some(leading) = state.leading_action {
+        hash = hash_byte(hash, 1);
+        hash = hash_byte(hash, animal_index(leading.actor) as u8);
+        hash = hash_byte(hash, u8::from(leading.direction == StepDirection::Retreat));
+        hash = hash_byte(hash, rank_index(leading.destination) as u8);
+    } else {
+        hash = hash_byte(hash, 0);
+    }
+    hash
+}
+
+/// Compact, allocation-free state identity for replay/cycle detection.
+pub fn state_key(state: &State) -> u64 {
+    state_fingerprint(state)
+}
+
+fn hash_byte(hash: u64, value: u8) -> u64 {
+    (hash ^ u64::from(value)).wrapping_mul(0x100_0000_01B3)
+}
+
+fn rank_index(rank: Rank) -> usize {
+    match rank {
+        Rank::R1 => 0,
+        Rank::R2 => 1,
+        Rank::R3 => 2,
+        Rank::R4 => 3,
+        Rank::R5 => 4,
+        Rank::R6 => 5,
+    }
 }
 
 fn animal_index(animal: Animal) -> usize {
@@ -608,6 +902,43 @@ impl Rng {
         (self.next_u64() >> 40) as f32 / (1_u32 << 24) as f32
     }
 
+    fn unit_open_f64(&mut self) -> f64 {
+        // Taking the high 53 bits and adding half a unit keeps both endpoints
+        // open, which is required by logarithmic samplers.
+        ((self.next_u64() >> 11) as f64 + 0.5) * (1.0 / ((1_u64 << 53) as f64))
+    }
+
+    fn standard_normal(&mut self) -> f64 {
+        let radius = (-2.0 * self.unit_open_f64().ln()).sqrt();
+        let angle = std::f64::consts::TAU * self.unit_open_f64();
+        radius * angle.cos()
+    }
+
+    /// Marsaglia-Tsang Gamma(shape, 1), including the shape < 1 transform.
+    fn gamma(&mut self, shape: f64) -> f64 {
+        debug_assert!(shape.is_finite() && shape > 0.0);
+        if shape < 1.0 {
+            return self.gamma(shape + 1.0) * self.unit_open_f64().powf(1.0 / shape);
+        }
+
+        let d = shape - 1.0 / 3.0;
+        let c = 1.0 / (9.0 * d).sqrt();
+        loop {
+            let x = self.standard_normal();
+            let candidate = 1.0 + c * x;
+            if candidate <= 0.0 {
+                continue;
+            }
+            let candidate_cubed = candidate * candidate * candidate;
+            let uniform = self.unit_open_f64();
+            if uniform < 1.0 - 0.0331 * x * x * x * x
+                || uniform.ln() < 0.5 * x * x + d * (1.0 - candidate_cubed + candidate_cubed.ln())
+            {
+                return d * candidate_cubed;
+            }
+        }
+    }
+
     fn normalish(&mut self) -> f32 {
         (0..6).map(|_| self.unit()).sum::<f32>() - 3.0
     }
@@ -618,14 +949,15 @@ pub mod training {
     use super::*;
 
     pub struct Sample {
-        pub input: Vec<f32>,
-        pub policy: Vec<f32>,
+        pub input: [f32; INPUT_SIZE],
+        pub policy: [f32; ACTION_SIZE],
         pub value: f32,
     }
 
     pub struct Adam {
         first: Vec<f32>,
         second: Vec<f32>,
+        gradient: Vec<f32>,
         step: u64,
     }
 
@@ -634,6 +966,7 @@ pub mod training {
             Self {
                 first: vec![0.0; PARAM_COUNT],
                 second: vec![0.0; PARAM_COUNT],
+                gradient: vec![0.0; PARAM_COUNT],
                 step: 0,
             }
         }
@@ -679,6 +1012,7 @@ pub mod training {
             Ok(Self {
                 first: values[..PARAM_COUNT].to_vec(),
                 second: values[PARAM_COUNT..].to_vec(),
+                gradient: vec![0.0; PARAM_COUNT],
                 step,
             })
         }
@@ -697,25 +1031,24 @@ pub mod training {
             optimizer: &mut Adam,
             learning_rate: f32,
         ) -> f32 {
-            let mut gradient = vec![0.0; PARAM_COUNT];
+            optimizer.gradient.fill(0.0);
+            let gradient = &mut optimizer.gradient;
             let mut total_loss = 0.0;
             for sample in samples {
-                let forward = self.forward(&sample.input);
+                let mut forward = self.forward(&sample.input);
                 let max_logit = forward
                     .logits
                     .iter()
                     .copied()
                     .fold(f32::NEG_INFINITY, f32::max);
-                let mut probabilities = forward
-                    .logits
-                    .iter()
-                    .map(|logit| (*logit - max_logit).exp())
-                    .collect::<Vec<_>>();
-                let denominator = probabilities.iter().sum::<f32>().max(f32::MIN_POSITIVE);
-                for probability in &mut probabilities {
+                for logit in &mut forward.logits {
+                    *logit = (*logit - max_logit).exp();
+                }
+                let denominator = forward.logits.iter().sum::<f32>().max(f32::MIN_POSITIVE);
+                for probability in &mut forward.logits {
                     *probability /= denominator;
                 }
-                for (action, probability) in probabilities.iter_mut().enumerate() {
+                for (action, probability) in forward.logits.iter_mut().enumerate() {
                     let target = sample.policy[action];
                     if target > 0.0 {
                         total_loss -= target * probability.max(1e-12).ln();
@@ -726,46 +1059,66 @@ pub mod training {
                 total_loss += value_error * value_error;
                 let value_delta = 2.0 * value_error * (1.0 - forward.value * forward.value);
 
-                let mut hidden_2_gradient = vec![0.0; HIDDEN_SIZE];
+                let mut hidden_2_gradient = [0.0; HIDDEN_SIZE];
                 for hidden in 0..HIDDEN_SIZE {
+                    let weights = &self.parameters
+                        [WP + hidden * ACTION_SIZE..WP + (hidden + 1) * ACTION_SIZE];
+                    let weight_gradient =
+                        &mut gradient[WP + hidden * ACTION_SIZE..WP + (hidden + 1) * ACTION_SIZE];
+                    let activation = forward.hidden_2[hidden];
                     for action in 0..ACTION_SIZE {
-                        gradient[WP + hidden * ACTION_SIZE + action] +=
-                            forward.hidden_2[hidden] * probabilities[action];
-                        hidden_2_gradient[hidden] += self.parameters
-                            [WP + hidden * ACTION_SIZE + action]
-                            * probabilities[action];
+                        weight_gradient[action] =
+                            activation.mul_add(forward.logits[action], weight_gradient[action]);
+                        hidden_2_gradient[hidden] = weights[action]
+                            .mul_add(forward.logits[action], hidden_2_gradient[hidden]);
                     }
                     gradient[WV + hidden] += forward.hidden_2[hidden] * value_delta;
                     hidden_2_gradient[hidden] += self.parameters[WV + hidden] * value_delta;
                 }
                 for action in 0..ACTION_SIZE {
-                    gradient[BP + action] += probabilities[action];
+                    gradient[BP + action] += forward.logits[action];
                 }
                 gradient[BV] += value_delta;
 
-                let mut hidden_1_gradient = vec![0.0; HIDDEN_SIZE];
                 for output in 0..HIDDEN_SIZE {
                     if forward.hidden_2[output] <= 0.0 {
                         hidden_2_gradient[output] = 0.0;
                     }
                     gradient[BR + output] += hidden_2_gradient[output];
-                    hidden_1_gradient[output] += hidden_2_gradient[output];
-                    for input in 0..HIDDEN_SIZE {
-                        gradient[WR + input * HIDDEN_SIZE + output] +=
-                            forward.hidden_1[input] * hidden_2_gradient[output];
-                        hidden_1_gradient[input] += self.parameters
-                            [WR + input * HIDDEN_SIZE + output]
-                            * hidden_2_gradient[output];
-                    }
                 }
-                for hidden in 0..HIDDEN_SIZE {
-                    if forward.hidden_1[hidden] <= 0.0 {
-                        hidden_1_gradient[hidden] = 0.0;
+
+                let mut hidden_1_gradient = hidden_2_gradient;
+                for input in 0..HIDDEN_SIZE {
+                    let weights =
+                        &self.parameters[WR + input * HIDDEN_SIZE..WR + (input + 1) * HIDDEN_SIZE];
+                    let weight_gradient =
+                        &mut gradient[WR + input * HIDDEN_SIZE..WR + (input + 1) * HIDDEN_SIZE];
+                    let activation = forward.hidden_1[input];
+                    let mut input_gradient = hidden_1_gradient[input];
+                    for output in 0..HIDDEN_SIZE {
+                        weight_gradient[output] =
+                            activation.mul_add(hidden_2_gradient[output], weight_gradient[output]);
+                        input_gradient =
+                            weights[output].mul_add(hidden_2_gradient[output], input_gradient);
                     }
-                    gradient[B1 + hidden] += hidden_1_gradient[hidden];
-                    for input in 0..INPUT_SIZE {
-                        gradient[W1 + input * HIDDEN_SIZE + hidden] +=
-                            sample.input[input] * hidden_1_gradient[hidden];
+                    hidden_1_gradient[input] = input_gradient;
+                }
+
+                for output in 0..HIDDEN_SIZE {
+                    if forward.hidden_1[output] <= 0.0 {
+                        hidden_1_gradient[output] = 0.0;
+                    }
+                    gradient[B1 + output] += hidden_1_gradient[output];
+                }
+                for input in 0..INPUT_SIZE {
+                    let activation = sample.input[input];
+                    if activation != 0.0 {
+                        let weight_gradient =
+                            &mut gradient[W1 + input * HIDDEN_SIZE..W1 + (input + 1) * HIDDEN_SIZE];
+                        for hidden in 0..HIDDEN_SIZE {
+                            weight_gradient[hidden] = activation
+                                .mul_add(hidden_1_gradient[hidden], weight_gradient[hidden]);
+                        }
                     }
                 }
             }
@@ -791,7 +1144,55 @@ pub mod training {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use snipe_core::initial_state;
+    use snipe_core::{CardMultiset, initial_state};
+    use std::collections::HashSet;
+
+    fn cards(entries: &[(Card, Player)]) -> CardMultiset {
+        entries
+            .iter()
+            .fold(CardMultiset::EMPTY, |cards, &(card, player)| {
+                cards
+                    .checked_add(CardMultiset::singleton(card, player))
+                    .expect("fixture card multiplicities are valid")
+            })
+    }
+
+    fn reference_forward(model: &Model, input: &[f32; INPUT_SIZE]) -> Forward {
+        let mut hidden_1 = [0.0; HIDDEN_SIZE];
+        for (output, hidden) in hidden_1.iter_mut().enumerate() {
+            let mut sum = model.parameters[B1 + output];
+            for (index, &value) in input.iter().enumerate() {
+                sum += value * model.parameters[W1 + index * HIDDEN_SIZE + output];
+            }
+            *hidden = sum.max(0.0);
+        }
+        let mut hidden_2 = [0.0; HIDDEN_SIZE];
+        for output in 0..HIDDEN_SIZE {
+            let mut sum = hidden_1[output] + model.parameters[BR + output];
+            for (index, &value) in hidden_1.iter().enumerate() {
+                sum += value * model.parameters[WR + index * HIDDEN_SIZE + output];
+            }
+            hidden_2[output] = sum.max(0.0);
+        }
+        let mut logits = [0.0; ACTION_SIZE];
+        for (action, logit) in logits.iter_mut().enumerate() {
+            let mut sum = model.parameters[BP + action];
+            for (index, &value) in hidden_2.iter().enumerate() {
+                sum += value * model.parameters[WP + index * ACTION_SIZE + action];
+            }
+            *logit = sum;
+        }
+        let mut raw_value = model.parameters[BV];
+        for (index, &value) in hidden_2.iter().enumerate() {
+            raw_value += value * model.parameters[WV + index];
+        }
+        Forward {
+            hidden_1,
+            hidden_2,
+            logits,
+            value: raw_value.tanh(),
+        }
+    }
 
     #[test]
     fn action_indices_are_unique_for_legal_actions() {
@@ -806,6 +1207,238 @@ mod tests {
             assert_eq!(indices.len(), actions.len());
             assert!(indices.iter().all(|&index| index < ACTION_SIZE));
         }
+    }
+
+    #[test]
+    fn policy_uses_network_priors_until_an_edge_is_visited() {
+        let model = Model::seeded(7);
+        let mut search = Search::new(initial_state(9), &model);
+        let network_priors = search
+            .root_node()
+            .edges
+            .iter()
+            .map(|edge| edge.network_prior)
+            .collect::<Vec<_>>();
+
+        // Root noise guides search but must not leak into a zero-visit target.
+        search.add_root_dirichlet_noise(0.3, 0.25, 1234);
+        let fallback = search.policy(1.0);
+        for ((_, actual), expected) in fallback.iter().zip(&network_priors) {
+            assert!((actual - expected).abs() < 1e-7);
+        }
+
+        search.simulate(&model);
+        let visited = search.policy(1.0);
+        assert_eq!(
+            visited
+                .iter()
+                .filter(|(_, probability)| *probability > 0.0)
+                .count(),
+            1,
+            "unvisited actions must have zero visit-policy mass"
+        );
+        assert!(
+            (visited
+                .iter()
+                .map(|(_, probability)| probability)
+                .sum::<f32>()
+                - 1.0)
+                .abs()
+                < 1e-6
+        );
+    }
+
+    #[test]
+    fn low_temperature_policy_is_finite_and_normalized() {
+        let model = Model::seeded(11);
+        let mut search = Search::new(initial_state(4), &model);
+        let root = search.root_node_mut();
+        root.edges[0].visits = 100;
+        root.edges[1].visits = 99;
+
+        let policy = search.policy(0.05);
+        assert!(
+            policy
+                .iter()
+                .all(|(_, probability)| probability.is_finite())
+        );
+        assert!(
+            (policy
+                .iter()
+                .map(|(_, probability)| probability)
+                .sum::<f32>()
+                - 1.0)
+                .abs()
+                < 1e-6
+        );
+        assert!(policy[0].1 > policy[1].1);
+        assert!(
+            policy
+                .iter()
+                .skip(2)
+                .all(|(_, probability)| *probability == 0.0)
+        );
+    }
+
+    #[test]
+    fn dirichlet_noise_is_seeded_normalized_and_preserves_network_priors() {
+        let model = Model::seeded(17);
+        let mut first = Search::new(initial_state(5), &model);
+        let mut second = Search::new(initial_state(5), &model);
+        let clean = first
+            .root_node()
+            .edges
+            .iter()
+            .map(|edge| edge.network_prior)
+            .collect::<Vec<_>>();
+
+        first.add_root_dirichlet_noise(0.3, 0.25, 0xD1A1_C4E7);
+        second.add_root_dirichlet_noise(0.3, 0.25, 0xD1A1_C4E7);
+        let first_priors = first
+            .root_node()
+            .edges
+            .iter()
+            .map(|edge| edge.prior)
+            .collect::<Vec<_>>();
+        let second_priors = second
+            .root_node()
+            .edges
+            .iter()
+            .map(|edge| edge.prior)
+            .collect::<Vec<_>>();
+
+        assert_eq!(first_priors, second_priors);
+        assert!(
+            first_priors
+                .iter()
+                .zip(&clean)
+                .any(|(noisy, original)| noisy != original)
+        );
+        assert!((first_priors.iter().sum::<f32>() - 1.0).abs() < 1e-5);
+        assert_eq!(
+            first
+                .root_node()
+                .edges
+                .iter()
+                .map(|edge| edge.network_prior)
+                .collect::<Vec<_>>(),
+            clean
+        );
+    }
+
+    #[test]
+    fn gamma_sampler_has_expected_dirichlet_moments() {
+        const COMPONENTS: usize = 3;
+        const SAMPLES: usize = 10_000;
+        let alpha = 0.5;
+        let mut rng = Rng::new(0xD1A1_C4E7_5EED);
+        let mut sum = 0.0;
+        let mut square_sum = 0.0;
+        for _ in 0..SAMPLES {
+            let samples = [rng.gamma(alpha), rng.gamma(alpha), rng.gamma(alpha)];
+            let component = samples[0] / samples.iter().sum::<f64>();
+            sum += component;
+            square_sum += component * component;
+        }
+        let mean = sum / SAMPLES as f64;
+        let variance = square_sum / SAMPLES as f64 - mean * mean;
+        let expected_mean = 1.0 / COMPONENTS as f64;
+        let expected_variance = (COMPONENTS - 1) as f64
+            / (COMPONENTS * COMPONENTS) as f64
+            / (COMPONENTS as f64 * alpha + 1.0);
+        assert!((mean - expected_mean).abs() < 0.01, "{mean}");
+        assert!(
+            (variance - expected_variance).abs() < 0.01,
+            "{variance} != {expected_variance}"
+        );
+    }
+
+    #[test]
+    fn advance_retains_the_selected_arena_subtree_and_recycles_siblings() {
+        let model = Model::seeded(23);
+        let mut search = Search::new(initial_state(19), &model);
+        search.simulate_n(&model, 48);
+        let edge_index = search.root_node().preferred_edge().unwrap();
+        let action = search.root_node().edges[edge_index].action;
+        let child = search.root_node().edges[edge_index]
+            .child
+            .expect("a visited edge has a child");
+        let retained_action_count = search.nodes[child].edges.len();
+
+        assert!(search.advance(action, &model));
+        assert_eq!(search.root, child);
+        assert_eq!(search.root_action_count(), retained_action_count);
+        assert!(!search.free_nodes.is_empty());
+
+        let allocated_before = search.nodes.len();
+        search.simulate_n(&model, 16);
+        assert_eq!(
+            search.nodes.len(),
+            allocated_before,
+            "discarded arena slots should be reused before the arena grows"
+        );
+    }
+
+    fn swap_allegiances(cards: CardMultiset) -> CardMultiset {
+        let mut swapped = CardMultiset::EMPTY;
+        for card in animals()
+            .into_iter()
+            .map(Card::Animal)
+            .chain(std::iter::once(Card::Snipe))
+        {
+            for _ in 0..cards.count(card, Player::Alpha) {
+                swapped = swapped
+                    .checked_add(CardMultiset::singleton(card, Player::Beta))
+                    .unwrap();
+            }
+            for _ in 0..cards.count(card, Player::Beta) {
+                swapped = swapped
+                    .checked_add(CardMultiset::singleton(card, Player::Alpha))
+                    .unwrap();
+            }
+        }
+        swapped
+    }
+
+    fn opposite_rank(rank: Rank) -> Rank {
+        match rank {
+            Rank::R1 => Rank::R6,
+            Rank::R2 => Rank::R5,
+            Rank::R3 => Rank::R4,
+            Rank::R4 => Rank::R3,
+            Rank::R5 => Rank::R2,
+            Rank::R6 => Rank::R1,
+        }
+    }
+
+    #[test]
+    fn state_keys_distinguish_raw_mirror_swapped_positions() {
+        let state = initial_state(31);
+        let mirrored = State {
+            active_player: state.active_player.opponent(),
+            reserves: swap_allegiances(state.reserves),
+            r1: swap_allegiances(state.r6),
+            r2: swap_allegiances(state.r5),
+            r3: swap_allegiances(state.r4),
+            r4: swap_allegiances(state.r3),
+            r5: swap_allegiances(state.r2),
+            r6: swap_allegiances(state.r1),
+            leading_action: state.leading_action.map(|leading| snipe_core::AnimalStep {
+                actor: leading.actor,
+                direction: leading.direction,
+                destination: opposite_rank(leading.destination),
+            }),
+        };
+        assert_eq!(
+            encode_state(&state),
+            encode_state(&mirrored),
+            "the network intentionally canonicalizes these positions"
+        );
+        assert_ne!(
+            state_key(&state),
+            state_key(&mirrored),
+            "cycle detection must use raw, non-canonical position identity"
+        );
     }
 
     #[test]
@@ -826,11 +1459,75 @@ mod tests {
     }
 
     #[test]
+    fn search_fixture_finds_a_short_triplet_capture_without_a_mate_overlay() {
+        use Animal::{Dog, Dragon, Fish, Horse, Mouse, Ox, Rooster, Tiger};
+
+        // Rooster entering r3 completes the fire unary/binary/ternary triplet
+        // with Horse and Tiger and captures Beta's Snipe. Extra legal drops and
+        // steps make this a search fixture rather than a single-action state.
+        let state = State {
+            active_player: Player::Alpha,
+            reserves: cards(&[
+                (Card::Animal(Dragon), Player::Alpha),
+                (Card::Animal(Fish), Player::Alpha),
+            ]),
+            r1: cards(&[
+                (Card::Snipe, Player::Alpha),
+                (Card::Animal(Dog), Player::Alpha),
+            ]),
+            r2: cards(&[
+                (Card::Animal(Rooster), Player::Alpha),
+                (Card::Animal(Mouse), Player::Alpha),
+            ]),
+            r3: cards(&[
+                (Card::Animal(Horse), Player::Beta),
+                (Card::Animal(Tiger), Player::Beta),
+                (Card::Snipe, Player::Beta),
+            ]),
+            r4: cards(&[(Card::Animal(Ox), Player::Alpha)]),
+            r5: CardMultiset::EMPTY,
+            r6: CardMultiset::EMPTY,
+            leading_action: None,
+        };
+        assert_eq!(state.winner(), None);
+
+        let model = Model::seeded(0x7AC7_1CA1);
+        let mut search = Search::new(state.clone(), &model);
+        search.simulate_n(&model, 2_048);
+        let actions = search.best_complete_ply(&model);
+        assert!(!actions.is_empty());
+
+        let mut after = state;
+        for action in actions {
+            after = after.apply(action).expect("search fixture action is legal");
+        }
+        assert_eq!(
+            after.winner(),
+            Some(Player::Alpha),
+            "corrected MCTS should discover the short terminal tactic"
+        );
+    }
+
+    #[test]
     fn checkpoints_round_trip() {
         let model = Model::seeded(42);
         let rebuilt = Model::from_bytes(&model.to_bytes()).unwrap();
         let state = initial_state(4);
         assert_eq!(model.predict(&state), rebuilt.predict(&state));
+    }
+
+    #[test]
+    fn optimized_forward_matches_reference() {
+        let model = Model::seeded(0xA11C_E5E5);
+        for seed in 0..16 {
+            let input = encode_state(&initial_state(seed));
+            let optimized = model.forward(&input);
+            let reference = reference_forward(&model, &input);
+            for (actual, expected) in optimized.logits.iter().zip(reference.logits) {
+                assert!((actual - expected).abs() < 2e-6, "{actual} != {expected}");
+            }
+            assert!((optimized.value - reference.value).abs() < 2e-6);
+        }
     }
 
     #[cfg(feature = "training")]

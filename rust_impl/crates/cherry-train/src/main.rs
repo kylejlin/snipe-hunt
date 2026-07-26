@@ -1,12 +1,12 @@
 use agent_cherry::{
-    ACTION_SIZE, INPUT_SIZE, Model, Search, action_index, encode_state,
+    ACTION_SIZE, INPUT_SIZE, Model, Search, action_index, encode_state, state_key,
     training::{Adam, Sample},
 };
 use snipe_core::{Action, Player, initial_state};
 use std::{
     collections::HashSet,
     env, fs,
-    io::{self, Read},
+    io::{self, BufReader, BufWriter, Read, Write},
     path::{Path, PathBuf},
     process::ExitCode,
     sync::mpsc,
@@ -16,11 +16,19 @@ use std::{
 
 const DEFAULT_RUN_DIR: &str = "training/cherry-main";
 const DEFAULT_HOURS: f64 = 8.0;
-const DEFAULT_SIMULATIONS: usize = 12;
-const MAX_REPLAY: usize = 12_000;
+const DEFAULT_SIMULATIONS: usize = 512;
+const MAX_REPLAY: usize = 500_000;
 const MAX_ATOMIC_ACTIONS: usize = 256;
 const BATCH_SIZE: usize = 32;
 const BATCHES_PER_GAME: usize = 6;
+const REPLAY_SAVE_INTERVAL: u64 = 25;
+const PROMOTION_INTERVAL: u64 = 1_000;
+const PROMOTION_PAIRS: usize = 96;
+const DIRICHLET_ALPHA: f32 = 0.3;
+const ROOT_NOISE_FRACTION: f32 = 0.25;
+const PACKED_INPUT_SIZE: usize = INPUT_SIZE.div_ceil(4);
+const REPLAY_MAGIC_V1: &[u8; 8] = b"CHREPLAY";
+const REPLAY_MAGIC_V2: &[u8; 8] = b"CHREPL02";
 
 fn main() -> ExitCode {
     match run() {
@@ -88,7 +96,8 @@ fn help() {
          audit         [--run-dir PATH] [--simulations N] [--pairs N]\n\
          publish       [--run-dir PATH]\n\
          \n\
-         Weights checkpoint after every completed game and replay every ten.\n\
+         Simulations is a base; wide positions automatically receive at least 3x legal actions.\n\
+         Weights and optimizer checkpoint after every completed game; compact replay every 25.\n\
          Stop with Ctrl-C and rerun the same command to resume."
     );
 }
@@ -97,10 +106,75 @@ struct RunState {
     model: Model,
     champion: Model,
     optimizer: Adam,
-    replay: Vec<Sample>,
+    replay: ReplayBuffer,
     games: u64,
     promotions: u64,
     rng: Rng,
+}
+
+struct CompactSample {
+    input: [u8; PACKED_INPUT_SIZE],
+    policy: Box<[(u16, u16)]>,
+    value: i8,
+}
+
+struct ReplayBuffer {
+    entries: Vec<CompactSample>,
+    next: usize,
+    capacity: usize,
+}
+
+impl ReplayBuffer {
+    fn new() -> Self {
+        Self::with_capacity(MAX_REPLAY)
+    }
+
+    fn with_capacity(capacity: usize) -> Self {
+        let capacity = capacity.max(1);
+        Self {
+            entries: Vec::with_capacity(capacity),
+            next: 0,
+            capacity,
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    fn push(&mut self, sample: CompactSample) {
+        if self.entries.len() < self.capacity {
+            self.entries.push(sample);
+        } else {
+            self.entries[self.next] = sample;
+            self.next = (self.next + 1) % self.capacity;
+        }
+    }
+
+    fn extend(&mut self, samples: impl IntoIterator<Item = CompactSample>) {
+        for sample in samples {
+            self.push(sample);
+        }
+    }
+
+    fn get(&self, index: usize) -> &CompactSample {
+        &self.entries[index]
+    }
+
+    fn chronological(&self) -> impl Iterator<Item = &CompactSample> {
+        let split = if self.entries.len() == self.capacity {
+            self.next
+        } else {
+            0
+        };
+        self.entries[split..]
+            .iter()
+            .chain(self.entries[..split].iter())
+    }
 }
 
 fn default_workers() -> usize {
@@ -113,10 +187,11 @@ fn default_workers() -> usize {
 
 fn train(run_dir: &Path, duration: Duration, simulations: usize, workers: usize) -> io::Result<()> {
     fs::create_dir_all(run_dir)?;
-    let mut run = load_run(run_dir)?;
+    let mut run = load_run(run_dir, true)?;
     let started = Instant::now();
+    let mut training_batch = Vec::with_capacity(BATCH_SIZE);
     println!(
-        "Cherry training resumed: games={}, steps={}, replay={}, simulations/action={}, workers={}",
+        "Cherry training resumed: games={}, steps={}, replay={}, base simulations/action={}, workers={}",
         run.games,
         run.model.training_steps,
         run.replay.len(),
@@ -144,26 +219,35 @@ fn train(run_dir: &Path, duration: Duration, simulations: usize, workers: usize)
                 });
             }
             drop(sender);
-            for (mut samples, winner, actions) in receiver {
-                run.replay.append(&mut samples);
-                if run.replay.len() > MAX_REPLAY {
-                    run.replay.drain(..run.replay.len() - MAX_REPLAY);
-                }
+            for (samples, winner, actions) in receiver {
+                run.replay.extend(samples);
                 run.games += 1;
 
                 let mut loss = 0.0;
                 if !run.replay.is_empty() {
                     for _ in 0..BATCHES_PER_GAME {
-                        let batch = random_batch(&run.replay, BATCH_SIZE, &mut run.rng);
-                        loss += run.model.train_batch(&batch, &mut run.optimizer, 0.0005);
+                        fill_random_batch(
+                            &run.replay,
+                            BATCH_SIZE,
+                            &mut run.rng,
+                            &mut training_batch,
+                        );
+                        loss += run
+                            .model
+                            .train_batch(&training_batch, &mut run.optimizer, 0.0005);
                     }
                     loss /= BATCHES_PER_GAME as f32;
                 }
 
                 let mut arena_result = None;
-                if run.games % 50 == 0 {
-                    let result =
-                        arena(&run.model, &run.champion, simulations.max(8), run.games, 32);
+                if run.games % PROMOTION_INTERVAL == 0 {
+                    let result = arena(
+                        &run.model,
+                        &run.champion,
+                        simulations,
+                        run.games,
+                        PROMOTION_PAIRS,
+                    );
                     if result.lower_bound > 0.5
                         && passes_league_guard(
                             run_dir,
@@ -185,7 +269,7 @@ fn train(run_dir: &Path, duration: Duration, simulations: usize, workers: usize)
                     &run,
                     loss,
                     arena_result,
-                    run.games < 10 || run.games % 10 == 0,
+                    run.games < 10 || run.games % REPLAY_SAVE_INTERVAL == 0,
                 )?;
                 println!(
                     "game {:>6}  winner={:<5} actions={:<3} replay={:<5} loss={:.4} batch={:.1}s{}",
@@ -200,7 +284,7 @@ fn train(run_dir: &Path, duration: Duration, simulations: usize, workers: usize)
                     loss,
                     batch_started.elapsed().as_secs_f32(),
                     arena_result.map_or_else(String::new, |result| format!(
-                        " arena={:.3} lower95={:.3}",
+                        " arena={:.3} lower99={:.3}",
                         result.score, result.lower_bound
                     )),
                 );
@@ -220,53 +304,74 @@ fn self_play(
     seed: u64,
     simulations: usize,
     rng: &mut Rng,
-) -> (Vec<Sample>, Option<Player>, usize) {
+) -> (Vec<CompactSample>, Option<Player>, usize) {
+    struct PendingSample {
+        input: [u8; PACKED_INPUT_SIZE],
+        policy: Box<[(u16, u16)]>,
+        player: Player,
+    }
+
     let mut state = initial_state(seed);
     let mut records = Vec::new();
     let mut seen = HashSet::new();
     let mut winner = None;
+    let mut search = Search::new(state.clone(), model);
     for action_number in 0..MAX_ATOMIC_ACTIONS {
         if let Some(found) = state.winner() {
             winner = Some(found);
             break;
         }
-        let fingerprint = format!("{state:?}");
-        if !seen.insert(fingerprint) {
+        if !seen.insert(state_key(&state)) {
             break;
         }
-        let mut search = Search::new(state.clone(), model);
-        search.simulate_n(model, simulations);
+        search.add_root_dirichlet_noise(DIRICHLET_ALPHA, ROOT_NOISE_FRACTION, rng.next_u64());
+        search.simulate_n(
+            model,
+            adaptive_simulations(simulations, search.root_action_count()),
+        );
         let policy = search.policy(if action_number < 30 { 1.0 } else { 0.05 });
         if policy.is_empty() {
             winner = state.winner();
             break;
         }
-        let mut target = vec![0.0; ACTION_SIZE];
-        for &(action, probability) in &policy {
-            target[action_index(&state, action)] = probability;
-        }
-        records.push((encode_state(&state), target, state.active_player));
-        let action = exploratory_choice(&policy, rng);
+        let sparse_policy = policy
+            .iter()
+            .filter(|(_, probability)| *probability > 0.0)
+            .filter_map(|&(action, probability)| {
+                let weight = (probability * f32::from(u16::MAX)).round() as u16;
+                (weight > 0).then_some((
+                    u16::try_from(action_index(&state, action)).expect("action index fits u16"),
+                    weight,
+                ))
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        records.push(PendingSample {
+            input: compact_input(&encode_state(&state)),
+            policy: sparse_policy,
+            player: state.active_player,
+        });
+        let action = sample_policy(&policy, rng);
         state = state
             .apply(action)
             .expect("MCTS policy contains legal actions");
+        if !search.advance(action, model) {
+            search = Search::new(state.clone(), model);
+        }
     }
     winner = winner.or_else(|| state.winner());
     let samples = records
         .into_iter()
-        .map(|(input, policy, player)| Sample {
-            input,
-            policy,
-            value: winner.map_or(0.0, |won| if won == player { 1.0 } else { -1.0 }),
+        .map(|record| CompactSample {
+            input: record.input,
+            policy: record.policy,
+            value: winner.map_or(0, |won| if won == record.player { 1 } else { -1 }),
         })
         .collect::<Vec<_>>();
     (samples, winner, seen.len())
 }
 
-fn exploratory_choice(policy: &[(Action, f32)], rng: &mut Rng) -> Action {
-    if rng.unit() < 0.08 {
-        return policy[(rng.next_u64() as usize) % policy.len()].0;
-    }
+fn sample_policy(policy: &[(Action, f32)], rng: &mut Rng) -> Action {
     let target = rng.unit();
     let mut cumulative = 0.0;
     for &(action, probability) in policy {
@@ -278,17 +383,57 @@ fn exploratory_choice(policy: &[(Action, f32)], rng: &mut Rng) -> Action {
     policy.last().expect("non-empty policy").0
 }
 
-fn random_batch(replay: &[Sample], size: usize, rng: &mut Rng) -> Vec<Sample> {
-    (0..size.min(replay.len()))
-        .map(|_| {
-            let sample = &replay[(rng.next_u64() as usize) % replay.len()];
-            Sample {
-                input: sample.input.clone(),
-                policy: sample.policy.clone(),
-                value: sample.value,
-            }
-        })
-        .collect()
+fn adaptive_simulations(base: usize, branching_factor: usize) -> usize {
+    base.max(branching_factor.saturating_mul(3).min(1_536))
+}
+
+fn compact_input(input: &[f32; INPUT_SIZE]) -> [u8; PACKED_INPUT_SIZE] {
+    let mut packed = [0; PACKED_INPUT_SIZE];
+    for (index, value) in input.iter().copied().enumerate() {
+        let quantized = (value * 2.0).round();
+        debug_assert!(
+            (value - quantized * 0.5).abs() < f32::EPSILON,
+            "state features must be exact half increments"
+        );
+        debug_assert!((0.0..=3.0).contains(&quantized));
+        set_packed_feature(&mut packed, index, quantized as u8);
+    }
+    packed
+}
+
+fn set_packed_feature(packed: &mut [u8], index: usize, value: u8) {
+    let shift = (index % 4) * 2;
+    packed[index / 4] = (packed[index / 4] & !(0b11 << shift)) | (value << shift);
+}
+
+fn packed_feature(packed: &[u8], index: usize) -> u8 {
+    (packed[index / 4] >> ((index % 4) * 2)) & 0b11
+}
+
+fn fill_random_batch(replay: &ReplayBuffer, size: usize, rng: &mut Rng, batch: &mut Vec<Sample>) {
+    let target_len = size.min(replay.len());
+    batch.resize_with(target_len, || Sample {
+        input: [0.0; INPUT_SIZE],
+        policy: [0.0; ACTION_SIZE],
+        value: 0.0,
+    });
+    for output in batch {
+        let sample = replay.get((rng.next_u64() as usize) % replay.len());
+        for (index, destination) in output.input.iter_mut().enumerate() {
+            *destination = f32::from(packed_feature(&sample.input[..], index)) * 0.5;
+        }
+        output.policy.fill(0.0);
+        let total_weight = sample
+            .policy
+            .iter()
+            .map(|(_, weight)| u32::from(*weight))
+            .sum::<u32>()
+            .max(1);
+        for &(index, weight) in sample.policy.iter() {
+            output.policy[usize::from(index)] = weight as f32 / total_weight as f32;
+        }
+        output.value = f32::from(sample.value);
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -305,12 +450,27 @@ fn arena(
     round: u64,
     pairs: usize,
 ) -> ArenaResult {
-    let mut paired_scores = Vec::with_capacity(pairs);
-    for pair in 0..pairs {
-        let seed = 0xA2E1_0000_0000_0000 ^ round.rotate_left(17) ^ pair as u64;
-        let alpha_score = play_match(candidate, incumbent, seed, simulations);
-        let beta_score = 1.0 - play_match(incumbent, candidate, seed, simulations);
-        paired_scores.push((alpha_score + beta_score) * 0.5);
+    let worker_count = default_workers().min(pairs.max(1));
+    let (sender, receiver) = mpsc::channel();
+    thread::scope(|scope| {
+        for worker in 0..worker_count {
+            let sender = sender.clone();
+            scope.spawn(move || {
+                for pair in (worker..pairs).step_by(worker_count) {
+                    let seed = 0xA2E1_0000_0000_0000 ^ round.rotate_left(17) ^ pair as u64;
+                    let alpha_score = play_match(candidate, incumbent, seed, simulations);
+                    let beta_score = 1.0 - play_match(incumbent, candidate, seed, simulations);
+                    sender
+                        .send((pair, (alpha_score + beta_score) * 0.5))
+                        .expect("arena receiver remains alive");
+                }
+            });
+        }
+        drop(sender);
+    });
+    let mut paired_scores = vec![0.0; pairs];
+    for (pair, score) in receiver {
+        paired_scores[pair] = score;
     }
     let score = paired_scores.iter().sum::<f32>() / pairs.max(1) as f32;
     let variance = if pairs > 1 {
@@ -325,7 +485,7 @@ fn arena(
     let standard_error = (variance / pairs.max(1) as f32).sqrt();
     ArenaResult {
         score,
-        lower_bound: (score - 1.645 * standard_error).clamp(0.0, 1.0),
+        lower_bound: (score - 2.326 * standard_error).clamp(0.0, 1.0),
         games: pairs * 2,
     }
 }
@@ -344,24 +504,36 @@ fn play_match_with_budgets(
 ) -> f32 {
     let mut state = initial_state(seed);
     let mut seen = HashSet::new();
+    let mut search = None;
     for _ in 0..MAX_ATOMIC_ACTIONS {
         if let Some(winner) = state.winner() {
             return if winner == Player::Alpha { 1.0 } else { 0.0 };
         }
-        if !seen.insert(format!("{state:?}")) {
+        if !seen.insert(state_key(&state)) {
             return 0.5;
         }
-        let (model, simulations) = if state.active_player == Player::Alpha {
+        let moving_player = state.active_player;
+        let (model, simulations) = if moving_player == Player::Alpha {
             (alpha, alpha_simulations)
         } else {
             (beta, beta_simulations)
         };
-        let mut search = Search::new(state.clone(), model);
-        search.simulate_n(model, simulations);
-        let Some((action, _)) = search.policy(0.0).into_iter().find(|(_, p)| *p > 0.0) else {
+        let current_search = search.get_or_insert_with(|| Search::new(state.clone(), model));
+        current_search.simulate_n(
+            model,
+            adaptive_simulations(simulations, current_search.root_action_count()),
+        );
+        let Some((action, _)) = current_search
+            .policy(0.0)
+            .into_iter()
+            .find(|(_, p)| *p > 0.0)
+        else {
             return 0.5;
         };
         state = state.apply(action).expect("search returns legal action");
+        if state.active_player != moving_player || !current_search.advance(action, model) {
+            search = None;
+        }
     }
     0.5
 }
@@ -373,7 +545,7 @@ fn audit_command(run_dir: &Path, arguments: &[String]) -> io::Result<()> {
     let pairs = option(arguments, "--pairs")
         .and_then(|value| value.parse().ok())
         .unwrap_or(64);
-    let run = load_run(run_dir)?;
+    let run = load_run(run_dir, false)?;
     let adversary_simulations = simulations.saturating_mul(4);
     let mut champion_scores = Vec::with_capacity(pairs);
     for pair in 0..pairs {
@@ -413,41 +585,50 @@ fn evaluate_command(run_dir: &Path, arguments: &[String]) -> io::Result<()> {
     let pairs = option(arguments, "--pairs")
         .and_then(|value| value.parse().ok())
         .unwrap_or(64);
-    let run = load_run(run_dir)?;
+    let run = load_run(run_dir, false)?;
     let result = arena(&run.model, &run.champion, simulations, run.games + 1, pairs);
     println!(
-        "latest vs staged champion: score={:.3}, lower95={:.3}, games={}, simulations/action={simulations}",
+        "latest vs staged champion: score={:.3}, lower99={:.3}, games={}, base simulations/action={simulations}",
         result.score, result.lower_bound, result.games
     );
     Ok(())
 }
 
 fn publish(run_dir: &Path) -> io::Result<()> {
-    let source = run_dir.join("latest.bin");
-    let model = Model::load(&source)?;
+    let (_, _, _, validated_protocol) = load_meta(&run_dir.join("state.txt"))?;
+    if !validated_protocol {
+        return Err(io::Error::other(
+            "run predates the robust promotion protocol; resume training before publishing",
+        ));
+    }
+    let source = run_dir.join("champion.bin");
+    let champion = Model::load(&source)?;
+    let latest = Model::load(run_dir.join("latest.bin"))?;
     let destination = PathBuf::from("crates/agent-cherry/model/cherry.bin");
     let Some(parent) = destination.parent() else {
         return Err(io::Error::other("invalid publication path"));
     };
     fs::create_dir_all(parent)?;
-    atomic_write(&destination, &model.to_bytes())?;
+    atomic_write(&destination, &champion.to_bytes())?;
     println!(
-        "Published Cherry step {} from {} to {}",
-        model.training_steps,
+        "Published validated Cherry champion step {} from {} to {} (latest unvalidated training step {})",
+        champion.training_steps,
         source.display(),
-        destination.display()
+        destination.display(),
+        latest.training_steps,
     );
     println!("Rebuild WASM to load the new checkpoint.");
     Ok(())
 }
 
 fn status(run_dir: &Path) -> io::Result<()> {
-    let run = load_run(run_dir)?;
+    let run = load_run(run_dir, false)?;
     println!("run={}", absolute(run_dir)?.display());
     println!("games={}", run.games);
-    println!("training_steps={}", run.model.training_steps);
+    println!("latest_training_steps={}", run.model.training_steps);
+    println!("champion_training_steps={}", run.champion.training_steps);
     println!("replay_positions={}", run.replay.len());
-    println!("promotions={}", run.promotions);
+    println!("validated_promotions={}", run.promotions);
     println!(
         "latest={}",
         absolute(&run_dir.join("latest.bin"))?.display()
@@ -455,30 +636,36 @@ fn status(run_dir: &Path) -> io::Result<()> {
     Ok(())
 }
 
-fn load_run(run_dir: &Path) -> io::Result<RunState> {
+fn load_run(run_dir: &Path, prepare_training: bool) -> io::Result<RunState> {
     let latest = run_dir.join("latest.bin");
     let model = if latest.exists() {
         Model::load(&latest)?
     } else {
         Model::seeded(0xC4E2_9917_D15C_A11E)
     };
+    let (games, promotions, rng_seed, validated_protocol) = load_meta(&run_dir.join("state.txt"))?;
     let champion_path = run_dir.join("champion.bin");
-    let champion = if champion_path.exists() {
+    let champion = if validated_protocol && champion_path.exists() {
         Model::load(champion_path)?
     } else {
+        // Rebootstrap from the current network instead of trusting a champion
+        // selected by the historical four-game promotion protocol.
         model.clone()
     };
-    let replay = if run_dir.join("replay.bin").exists() {
-        load_replay(&run_dir.join("replay.bin"))?
+    let replay = load_run_replay(&run_dir.join("replay.bin"), prepare_training)?;
+    let optimizer_path = run_dir.join("optimizer.bin");
+    let optimizer = if validated_protocol && optimizer_path.exists() {
+        Adam::from_bytes(&fs::read(&optimizer_path)?)?
     } else {
-        Vec::new()
-    };
-    let optimizer = if run_dir.join("optimizer.bin").exists() {
-        Adam::from_bytes(&fs::read(run_dir.join("optimizer.bin"))?)?
-    } else {
+        if prepare_training && !validated_protocol && optimizer_path.exists() {
+            let backup = quarantine_file(&optimizer_path, "optimizer-v1-corrupt")?;
+            println!(
+                "Quarantined legacy Adam moments at {}; starting a clean optimizer.",
+                backup.display()
+            );
+        }
         Adam::new()
     };
-    let (games, promotions, rng_seed) = load_meta(&run_dir.join("state.txt"))?;
     Ok(RunState {
         model,
         champion,
@@ -488,6 +675,46 @@ fn load_run(run_dir: &Path) -> io::Result<RunState> {
         promotions,
         rng: Rng::new(rng_seed),
     })
+}
+
+fn load_run_replay(path: &Path, quarantine_legacy: bool) -> io::Result<ReplayBuffer> {
+    if !path.exists() {
+        return Ok(ReplayBuffer::new());
+    }
+    let mut file = fs::File::open(path)?;
+    let mut magic = [0; 8];
+    file.read_exact(&mut magic)?;
+    if &magic != REPLAY_MAGIC_V1 {
+        return load_replay(path);
+    }
+    drop(file);
+    if !quarantine_legacy {
+        println!("Ignoring corrupt legacy policy replay; training will quarantine it.");
+        return Ok(ReplayBuffer::new());
+    }
+
+    let backup = quarantine_file(path, "replay-v1-corrupt")?;
+    println!(
+        "Quarantined corrupt legacy policy replay at {}; starting a clean compact replay.",
+        backup.display()
+    );
+    Ok(ReplayBuffer::new())
+}
+
+fn quarantine_file(path: &Path, backup_stem: &str) -> io::Result<PathBuf> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let backup = (0_u64..)
+        .map(|suffix| {
+            if suffix == 0 {
+                parent.join(format!("{backup_stem}.bin"))
+            } else {
+                parent.join(format!("{backup_stem}-{suffix}.bin"))
+            }
+        })
+        .find(|candidate| !candidate.exists())
+        .expect("an available replay backup filename exists");
+    fs::rename(path, &backup)?;
+    Ok(backup)
 }
 
 fn save_run(
@@ -500,11 +727,11 @@ fn save_run(
     atomic_write(&run_dir.join("latest.bin"), &run.model.to_bytes())?;
     atomic_write(&run_dir.join("champion.bin"), &run.champion.to_bytes())?;
     if save_replay {
-        atomic_write(&run_dir.join("replay.bin"), &replay_bytes(&run.replay))?;
-        atomic_write(&run_dir.join("optimizer.bin"), &run.optimizer.to_bytes())?;
+        save_replay_file(&run_dir.join("replay.bin"), &run.replay)?;
     }
+    atomic_write(&run_dir.join("optimizer.bin"), &run.optimizer.to_bytes())?;
     let metadata = format!(
-        "games={}\npromotions={}\nrng={}\ntraining_steps={}\nreplay_positions={}\nlast_loss={loss}\nlast_arena={}\nupdated_unix={}\n",
+        "games={}\nvalidated_promotions={}\npromotion_protocol=2\nrng={}\ntraining_steps={}\nreplay_positions={}\nlast_loss={loss}\nlast_arena={}\nupdated_unix={}\n",
         run.games,
         run.promotions,
         run.rng.0,
@@ -513,7 +740,7 @@ fn save_run(
         arena.map_or_else(
             || "not-run".to_owned(),
             |result| format!(
-                "score:{:.6},lower95:{:.6},games:{}",
+                "score:{:.6},lower99:{:.6},games:{}",
                 result.score, result.lower_bound, result.games
             )
         ),
@@ -526,7 +753,7 @@ fn save_run(
 }
 
 fn archive_champion(run_dir: &Path, run: &RunState) -> io::Result<()> {
-    let league = run_dir.join("league");
+    let league = run_dir.join("validated-league-v2");
     fs::create_dir_all(&league)?;
     run.champion.save(league.join(format!(
         "champion-{:04}-step-{}.bin",
@@ -535,9 +762,7 @@ fn archive_champion(run_dir: &Path, run: &RunState) -> io::Result<()> {
 }
 
 fn append_arena_report(run_dir: &Path, run: &RunState, result: ArenaResult) -> io::Result<()> {
-    use std::io::Write as _;
-
-    let path = run_dir.join("arena.csv");
+    let path = run_dir.join("arena-v2.csv");
     let is_new = !path.exists();
     let mut file = fs::OpenOptions::new()
         .create(true)
@@ -546,7 +771,7 @@ fn append_arena_report(run_dir: &Path, run: &RunState, result: ArenaResult) -> i
     if is_new {
         writeln!(
             file,
-            "games,training_steps,promotions,score,lower95,arena_games"
+            "games,training_steps,validated_promotions,score,lower99,arena_games"
         )?;
     }
     writeln!(
@@ -568,7 +793,10 @@ fn passes_league_guard(
     simulations: usize,
     round: u64,
 ) -> io::Result<bool> {
-    let league = run_dir.join("league");
+    // Deliberately ignore the legacy `league/` directory: those checkpoints
+    // include promotions decided by four-game arenas and are not trustworthy
+    // strength anchors.
+    let league = run_dir.join("validated-league-v2");
     if !league.exists() {
         return Ok(true);
     }
@@ -587,8 +815,8 @@ fn passes_league_guard(
     for (index, path) in checkpoints.iter().enumerate() {
         let anchor = Model::load(path)?;
         let arena_round = round ^ (index as u64).rotate_left(29);
-        candidate_score += arena(candidate, &anchor, simulations, arena_round, 8).score;
-        incumbent_score += arena(incumbent, &anchor, simulations, arena_round, 8).score;
+        candidate_score += arena(candidate, &anchor, simulations, arena_round, 24).score;
+        incumbent_score += arena(incumbent, &anchor, simulations, arena_round, 24).score;
     }
     candidate_score /= checkpoints.len() as f32;
     incumbent_score /= checkpoints.len() as f32;
@@ -596,12 +824,12 @@ fn passes_league_guard(
         "league guard: candidate={candidate_score:.3}, incumbent={incumbent_score:.3}, checkpoints={}",
         checkpoints.len()
     );
-    Ok(candidate_score + 0.02 >= incumbent_score)
+    Ok(candidate_score + 0.01 >= incumbent_score)
 }
 
-fn load_meta(path: &Path) -> io::Result<(u64, u64, u64)> {
+fn load_meta(path: &Path) -> io::Result<(u64, u64, u64, bool)> {
     if !path.exists() {
-        return Ok((0, 0, 0x51A7_E5E5_C4E2_0001));
+        return Ok((0, 0, 0x51A7_E5E5_C4E2_0001, false));
     }
     let text = fs::read_to_string(path)?;
     let get = |name: &str| {
@@ -610,57 +838,125 @@ fn load_meta(path: &Path) -> io::Result<(u64, u64, u64)> {
             .and_then(|value| value.parse::<u64>().ok())
             .unwrap_or(0)
     };
-    Ok((get("games"), get("promotions"), get("rng").max(1)))
+    Ok((
+        get("games"),
+        get("validated_promotions"),
+        get("rng").max(1),
+        get("promotion_protocol") == 2,
+    ))
 }
 
-fn replay_bytes(replay: &[Sample]) -> Vec<u8> {
-    let floats_per_sample = INPUT_SIZE + ACTION_SIZE + 1;
-    let mut bytes = Vec::with_capacity(16 + replay.len() * floats_per_sample * 4);
-    bytes.extend_from_slice(b"CHREPLAY");
-    bytes.extend_from_slice(&(replay.len() as u64).to_le_bytes());
-    for sample in replay {
-        for value in sample
-            .input
-            .iter()
-            .chain(&sample.policy)
-            .chain(std::iter::once(&sample.value))
-        {
-            bytes.extend_from_slice(&value.to_le_bytes());
+fn save_replay_file(path: &Path, replay: &ReplayBuffer) -> io::Result<()> {
+    let temporary = path.with_extension("tmp");
+    let file = fs::File::create(&temporary)?;
+    let mut writer = BufWriter::new(file);
+    writer.write_all(REPLAY_MAGIC_V2)?;
+    writer.write_all(&(replay.len() as u64).to_le_bytes())?;
+    for sample in replay.chronological() {
+        writer.write_all(sample.input.as_slice())?;
+        let policy_len = u16::try_from(sample.policy.len()).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, "replay policy is too large")
+        })?;
+        writer.write_all(&policy_len.to_le_bytes())?;
+        for &(index, weight) in sample.policy.iter() {
+            writer.write_all(&index.to_le_bytes())?;
+            writer.write_all(&weight.to_le_bytes())?;
         }
+        writer.write_all(&sample.value.to_le_bytes())?;
     }
-    bytes
+    writer.flush()?;
+    writer.get_ref().sync_all()?;
+    drop(writer);
+    fs::rename(temporary, path)
 }
 
-fn load_replay(path: &Path) -> io::Result<Vec<Sample>> {
-    let mut file = fs::File::open(path)?;
-    let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes)?;
-    if bytes.len() < 16 || &bytes[..8] != b"CHREPLAY" {
+fn load_replay(path: &Path) -> io::Result<ReplayBuffer> {
+    let mut reader = BufReader::new(fs::File::open(path)?);
+    let mut magic = [0; 8];
+    reader.read_exact(&mut magic)?;
+    let count = read_u64(&mut reader)?;
+    if count > 10_000_000 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            "invalid Cherry replay",
+            "Cherry replay has an unreasonable sample count",
         ));
     }
-    let count = u64::from_le_bytes(bytes[8..16].try_into().expect("checked")) as usize;
-    let floats_per_sample = INPUT_SIZE + ACTION_SIZE + 1;
-    if bytes.len() != 16 + count * floats_per_sample * 4 {
+    if &magic != REPLAY_MAGIC_V2 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            "truncated Cherry replay",
+            "invalid compact Cherry replay",
         ));
     }
-    let values = bytes[16..]
-        .chunks_exact(4)
-        .map(|chunk| f32::from_le_bytes(chunk.try_into().expect("four bytes")))
-        .collect::<Vec<_>>();
-    Ok(values
-        .chunks_exact(floats_per_sample)
-        .map(|sample| Sample {
-            input: sample[..INPUT_SIZE].to_vec(),
-            policy: sample[INPUT_SIZE..INPUT_SIZE + ACTION_SIZE].to_vec(),
-            value: sample[floats_per_sample - 1],
-        })
-        .collect())
+    let mut replay = ReplayBuffer::new();
+    load_replay_v2(&mut reader, count as usize, &mut replay)?;
+    let mut trailing = [0];
+    if reader.read(&mut trailing)? != 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Cherry replay contains trailing data",
+        ));
+    }
+    Ok(replay)
+}
+
+fn load_replay_v2(
+    reader: &mut impl Read,
+    count: usize,
+    replay: &mut ReplayBuffer,
+) -> io::Result<()> {
+    for _ in 0..count {
+        let mut input = [0; PACKED_INPUT_SIZE];
+        reader.read_exact(&mut input)?;
+        let policy_len = usize::from(read_u16(reader)?);
+        if policy_len == 0 || policy_len > ACTION_SIZE {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "replay policy has too many entries",
+            ));
+        }
+        let mut policy = Vec::with_capacity(policy_len);
+        let mut seen_actions = [false; ACTION_SIZE];
+        for _ in 0..policy_len {
+            let index = read_u16(reader)?;
+            let weight = read_u16(reader)?;
+            if usize::from(index) >= ACTION_SIZE || weight == 0 || seen_actions[usize::from(index)]
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "replay contains an invalid sparse policy",
+                ));
+            }
+            seen_actions[usize::from(index)] = true;
+            policy.push((index, weight));
+        }
+        let mut value = [0];
+        reader.read_exact(&mut value)?;
+        let value = i8::from_le_bytes(value);
+        if !(-1..=1).contains(&value) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "replay contains an invalid outcome",
+            ));
+        }
+        replay.push(CompactSample {
+            input,
+            policy: policy.into_boxed_slice(),
+            value,
+        });
+    }
+    Ok(())
+}
+
+fn read_u16(reader: &mut impl Read) -> io::Result<u16> {
+    let mut bytes = [0; 2];
+    reader.read_exact(&mut bytes)?;
+    Ok(u16::from_le_bytes(bytes))
+}
+
+fn read_u64(reader: &mut impl Read) -> io::Result<u64> {
+    let mut bytes = [0; 8];
+    reader.read_exact(&mut bytes)?;
+    Ok(u64::from_le_bytes(bytes))
 }
 
 fn atomic_write(path: &Path, bytes: &[u8]) -> io::Result<()> {
@@ -693,5 +989,109 @@ impl Rng {
 
     fn unit(&mut self) -> f32 {
         (self.next_u64() >> 40) as f32 / (1_u32 << 24) as f32
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static NEXT_PATH: AtomicU64 = AtomicU64::new(0);
+
+    fn temporary_path(name: &str) -> PathBuf {
+        env::temp_dir().join(format!(
+            "cherry-train-{name}-{}-{}.bin",
+            std::process::id(),
+            NEXT_PATH.fetch_add(1, Ordering::Relaxed)
+        ))
+    }
+
+    fn temporary_dir(name: &str) -> PathBuf {
+        let path = temporary_path(name).with_extension("dir");
+        fs::create_dir(&path).unwrap();
+        path
+    }
+
+    fn compact_sample(marker: u8) -> CompactSample {
+        let mut input = [0; PACKED_INPUT_SIZE];
+        set_packed_feature(&mut input, 0, marker % 3);
+        CompactSample {
+            input,
+            policy: vec![(usize::from(marker).min(ACTION_SIZE - 1) as u16, u16::MAX)]
+                .into_boxed_slice(),
+            value: (marker % 3) as i8 - 1,
+        }
+    }
+
+    #[test]
+    fn adaptive_budget_covers_wide_roots_without_capping_explicit_depth() {
+        assert_eq!(adaptive_simulations(24, 290), 870);
+        assert_eq!(adaptive_simulations(256, 100), 300);
+        assert_eq!(adaptive_simulations(2_000, 290), 2_000);
+    }
+
+    #[test]
+    fn circular_replay_keeps_newest_samples_in_chronological_order() {
+        let mut replay = ReplayBuffer::with_capacity(3);
+        for marker in 0..5 {
+            replay.push(compact_sample(marker));
+        }
+        let markers = replay
+            .chronological()
+            .map(|sample| sample.policy[0].0)
+            .collect::<Vec<_>>();
+        assert_eq!(markers, [2, 3, 4]);
+    }
+
+    #[test]
+    fn compact_replay_round_trips_and_expands_a_training_batch() {
+        let path = temporary_path("round-trip");
+        let mut replay = ReplayBuffer::with_capacity(3);
+        for marker in 0..5 {
+            replay.push(compact_sample(marker));
+        }
+        save_replay_file(&path, &replay).unwrap();
+        let loaded = load_replay(&path).unwrap();
+        fs::remove_file(&path).unwrap();
+
+        let markers = loaded
+            .chronological()
+            .map(|sample| sample.policy[0].0)
+            .collect::<Vec<_>>();
+        assert_eq!(markers, [2, 3, 4]);
+        let mut rng = Rng::new(7);
+        let mut batch = Vec::new();
+        fill_random_batch(&loaded, 2, &mut rng, &mut batch);
+        assert_eq!(batch.len(), 2);
+        for sample in batch {
+            assert!(sample.input[0] >= 1.0);
+            assert_eq!(sample.policy.iter().sum::<f32>(), 1.0);
+            assert!((-1.0..=1.0).contains(&sample.value));
+        }
+    }
+
+    #[test]
+    fn legacy_dense_replay_is_quarantined_instead_of_trained_on() {
+        let directory = temporary_dir("legacy");
+        let path = directory.join("replay.bin");
+        fs::write(&path, REPLAY_MAGIC_V1).unwrap();
+
+        let loaded = load_run_replay(&path, true).unwrap();
+        assert!(loaded.is_empty());
+        assert!(!path.exists());
+        assert!(directory.join("replay-v1-corrupt.bin").exists());
+        fs::remove_file(directory.join("replay-v1-corrupt.bin")).unwrap();
+        fs::remove_dir(directory).unwrap();
+    }
+
+    #[test]
+    fn legacy_promotion_count_is_not_treated_as_validated() {
+        let path = temporary_path("legacy-meta");
+        fs::write(&path, b"games=80\npromotions=20\nrng=9\n").unwrap();
+        let (games, promotions, rng, validated_protocol) = load_meta(&path).unwrap();
+        fs::remove_file(&path).unwrap();
+        assert_eq!((games, promotions, rng), (80, 0, 9));
+        assert!(!validated_protocol);
     }
 }

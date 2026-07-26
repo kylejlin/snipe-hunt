@@ -6,11 +6,12 @@
 //! However, the analyzers (which _extremely_ computationally intensive) should only use
 //! this crate at public interface boundaries, while internally using more efficient algorithms/data-structures.
 
+// Note: This file is just the "signature" file (like a `.h` file in your stereotypical C setup).
+// All the non-trivial implementations are in the `private_impl` module.
+
 pub use std::cmp::Ordering;
 
-/// This module contains the implementation.
-/// It does NOT declare any `pub` items.
-mod impl_;
+mod private_impl;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Player {
@@ -32,7 +33,7 @@ pub enum Rank {
 /// in order to improve developer ergonomics.
 /// Consequently, it is not `Copy`.
 ///
-/// Also, it allows an `incomplete_ply`, which further improves developer ergonomics
+/// Also, it allows an `leading_action`, which further improves developer ergonomics
 /// at the cost of performance.
 ///
 /// If you are implementing your own `Agent`, we recommend you create your own, more efficient representation.  
@@ -46,7 +47,34 @@ pub struct State {
     pub r4: CardMultiset,
     pub r5: CardMultiset,
     pub r6: CardMultiset,
-    pub incomplete_ply: Option<IncompletePly>,
+    pub leading_action: Option<AnimalStep>,
+}
+impl State {
+    pub fn write_legal_actions<W>(&self, w: W)
+    where
+        W: ActionWriter,
+    {
+        self.write_legal_actions_(w);
+    }
+
+    pub fn apply(self, action: Action) -> Result<Self, IllegalActionError> {
+        self.apply_(action)
+    }
+
+    pub fn winner(&self) -> Option<Player> {
+        self.winner_()
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum IllegalActionError {
+    // TODO: Add fields
+}
+
+pub trait ActionWriter {
+    fn push(&mut self, element: Action);
+
+    fn reserve(&mut self, additional: usize);
 }
 
 #[derive(Clone, Copy)]
@@ -70,6 +98,10 @@ impl CardMultiset {
         has_allied_twins: 0,
         snipes: 0,
     };
+
+    pub const fn count(self, card: Card, allegiance: Player) -> u8 {
+        todo!()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -155,41 +187,54 @@ pub enum Ply {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Action {
+    AnimalStep(AnimalStep),
+    SnipeStep,
+    Drop(AnimalDrop),
+}
+impl Action {
+    pub const fn is_complete_ply(self) -> bool {
+        matches!(self, Self::SnipeStep | Self::Drop(_))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AnimalDrop {
     pub actor: Animal,
     pub destination: Rank,
 }
 
+/// A (roughly) on-line position analyzer.
+/// The consumer can initialize with `set_state`,
+/// and then `think` for as long as it wants
+/// (usually, `on_tick_complete` tracks either tick count, physical clock time, or both).
+/// If the execution is interrupted "too early", the analyzer is allowed to return
+/// `MaybeItt::InsufficientThinkingTicks` instead of returning a proper analysis.
+/// What exactly "too early" means will depend on the particular implementation.
 pub trait Analyzer {
     fn set_state(&mut self, state: State);
 
-    fn think<F>(&mut self, on_tick: F)
+    fn think<F>(&mut self, on_tick_complete: F)
     where
         F: FnMut() -> ShouldStopThinking;
 
-    fn evaluation(&self) -> MaybeIta<Evaluation>;
+    fn evaluation(&self) -> MaybeItt<Evaluation>;
 
-    fn write_optimal_lop<W>(&self, w: W) -> MaybeIta<()>
+    /// "LOP" stands for "line of play".
+    /// If there were Insufficient Thinking Ticks,
+    /// this is a no-op that returns `MaybeItt::InsufficientThinkingTicks`.
+    fn write_optimal_lop<W>(&self, w: W) -> MaybeItt<()>
     where
-        W: LopWriter;
+        W: ActionWriter;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ShouldStopThinking(pub bool);
 
 #[derive(Debug, Clone, Copy)]
-pub enum MaybeIta<T> {
-    InsufficientThinkingAllowance,
+pub enum MaybeItt<T> {
+    InsufficientThinkingTicks,
     Ok(T),
-}
-
-/// "LOP" stands for "line of play".
-pub trait LopWriter {
-    fn push_second_animal_step(&mut self, step: AnimalStep);
-
-    fn push_ply(&mut self, ply: Ply);
-
-    fn reserve(&mut self, additional_ply_count: usize);
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -202,81 +247,7 @@ impl PartialOrd for Evaluation {
     /// and Beta-wins-in-N has the evaluation `-Infinity + N`.
     /// In other words, a faster win is better than a slower win.
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(match (self, other) {
-            (
-                Self::MateInN {
-                    winner: Player::Beta,
-                    plies: _,
-                },
-                Self::Estimate(_),
-            )
-            | (
-                Self::Estimate(_),
-                Self::MateInN {
-                    winner: Player::Alpha,
-                    plies: _,
-                },
-            )
-            | (
-                Self::MateInN {
-                    winner: Player::Beta,
-                    plies: _,
-                },
-                Self::MateInN {
-                    winner: Player::Alpha,
-                    plies: _,
-                },
-            ) => Ordering::Less,
-
-            (
-                Self::Estimate(_),
-                Self::MateInN {
-                    winner: Player::Beta,
-                    plies: _,
-                },
-            )
-            | (
-                Self::MateInN {
-                    winner: Player::Alpha,
-                    plies: _,
-                },
-                Self::Estimate(_),
-            )
-            | (
-                Self::MateInN {
-                    winner: Player::Alpha,
-                    plies: _,
-                },
-                Self::MateInN {
-                    winner: Player::Beta,
-                    plies: _,
-                },
-            ) => Ordering::Greater,
-
-            (
-                Self::MateInN {
-                    winner: Player::Alpha,
-                    plies: left,
-                },
-                Self::MateInN {
-                    winner: Player::Alpha,
-                    plies: right,
-                },
-            ) => left.cmp(right).reverse(),
-
-            (
-                Self::MateInN {
-                    winner: Player::Beta,
-                    plies: left,
-                },
-                Self::MateInN {
-                    winner: Player::Beta,
-                    plies: right,
-                },
-            ) => left.cmp(right),
-
-            (Self::Estimate(left), Self::Estimate(right)) => left.partial_cmp(right)?,
-        })
+        self.partial_cmp_(other)
     }
 }
 impl PartialEq for Evaluation {

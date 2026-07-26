@@ -109,6 +109,37 @@ pub enum Animal {
     Squid,
     Frog,
 }
+impl Animal {
+    pub const fn is_retreater(self) -> bool {
+        todo!()
+    }
+
+    pub const fn unary_element(self) -> Option<Element> {
+        todo!()
+    }
+
+    pub const fn binary_element(self) -> Option<Element> {
+        todo!()
+    }
+
+    pub const fn ternary_element(self) -> Option<Element> {
+        Some(match self {
+            Self::Tiger => Element::Fire,
+            Self::Dragon => Element::Air,
+            Self::Fish => Element::Water,
+            Self::Elephant => Element::Earth,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum Element {
+    Fire,
+    Water,
+    Earth,
+    Air,
+}
 
 #[derive(Debug, Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Card {

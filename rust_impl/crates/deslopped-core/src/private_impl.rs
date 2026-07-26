@@ -42,6 +42,13 @@ impl Animal {
             _ => return None,
         })
     }
+
+    pub(crate) const fn would_activate_triplet_by_entering_(
+        self,
+        destination: CardMultiset,
+    ) -> bool {
+        todo!()
+    }
 }
 
 impl Evaluation {

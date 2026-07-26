@@ -152,6 +152,10 @@ impl Animal {
     pub const fn ternary_element(self) -> Option<Element> {
         self.ternary_element_()
     }
+
+    pub const fn would_activate_triplet_by_entering(self, destination: CardMultiset) -> bool {
+        self.would_activate_triplet_by_entering_(destination)
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]

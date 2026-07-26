@@ -1,0 +1,13 @@
+[package]
+name = "cherry-train"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[[bin]]
+name = "cherry-train"
+path = "src/main.rs"
+
+[dependencies]
+agent-cherry = { path = "../agent-cherry", features = ["training"] }
+snipe-core = { path = "../snipe-core" }

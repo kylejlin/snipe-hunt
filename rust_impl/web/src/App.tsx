@@ -62,6 +62,12 @@ const locations: Location[] = [
 ];
 const CARD_MOVE_DURATION_MS = 200;
 
+function strategyLabel(strategy: Strategy): string {
+  if (strategy === "cherry") return "Cherry";
+  if (strategy === "blueberry") return "Blueberry";
+  return "Avocado";
+}
+
 interface MovingCard {
   animation: Animation;
   clone: HTMLButtonElement;
@@ -1496,7 +1502,7 @@ function GameApp() {
                 </div>
                 {game.analysisEnabled && (
                   <span className="history-analysis__work">
-                    {analysis?.engineName ?? (game.strategy === "blueberry" ? "Blueberry" : "Avocado")}
+                    {analysis?.engineName ?? strategyLabel(game.strategy)}
                     {" · "}
                     {analysis?.ticks?.toLocaleString() ?? "—"} ticks
                     {" · "}
@@ -1542,7 +1548,7 @@ function GameApp() {
                   ) : (
                     <p className="empty-copy">
                       {analysisRunning
-                        ? `${game.strategy === "blueberry" ? "Blueberry" : "Avocado"} is thinking…`
+                        ? `${strategyLabel(game.strategy)} is thinking…`
                         : "No legal analysis is available."}
                     </p>
                   )}
@@ -1670,6 +1676,7 @@ function GameApp() {
                   }));
                 }}
               >
+                <option value="cherry">Cherry</option>
                 <option value="blueberry">Blueberry</option>
                 <option value="avocado">Avocado</option>
               </select>

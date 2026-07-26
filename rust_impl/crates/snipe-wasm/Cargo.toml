@@ -11,6 +11,7 @@ path = "src/lib.rs"
 [dependencies]
 agent-avocado = { path = "../agent-avocado" }
 agent-blueberry = { path = "../agent-blueberry" }
+agent-cherry = { path = "../agent-cherry" }
 js-sys = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

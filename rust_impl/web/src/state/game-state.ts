@@ -72,7 +72,7 @@ export function newGame(position: Position): GameState {
     draftStep: null,
     gameMode: "computer-beta",
     thinkingTimeSeconds: 5,
-    strategy: "blueberry",
+    strategy: "cherry",
     analysisEnabled: false,
     analysisTimeSeconds: 2,
   };

@@ -129,6 +129,7 @@ impl Analyzer for AvocadoAnalyzer {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn minimax(
     state: &State,
     depth: usize,

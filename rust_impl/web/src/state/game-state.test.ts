@@ -66,6 +66,10 @@ function engine(): RulesEngine {
 }
 
 describe("game-state invariants", () => {
+  it("uses Cherry for new games", () => {
+    expect(newGame(initial).strategy).toBe("cherry");
+  });
+
   it("refuses a commit calculated against a stale position", () => {
     const game = newGame(initial);
     const result = gameReducer(game, {

@@ -3,4 +3,5 @@
 /web/dist/
 /web/src/wasm/pkg/
 /web/.vite/
+/training/
 *.profraw

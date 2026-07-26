@@ -17,6 +17,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent-cherry"
+version = "0.1.0"
+dependencies = [
+ "snipe-core",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -27,6 +34,14 @@ name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
+
+[[package]]
+name = "cherry-train"
+version = "0.1.0"
+dependencies = [
+ "agent-cherry",
+ "snipe-core",
+]
 
 [[package]]
 name = "futures-core"
@@ -170,6 +185,7 @@ version = "0.1.0"
 dependencies = [
  "agent-avocado",
  "agent-blueberry",
+ "agent-cherry",
  "js-sys",
  "serde",
  "serde_json",

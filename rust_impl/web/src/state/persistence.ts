@@ -121,7 +121,11 @@ function assertGameState(value: unknown): asserts value is GameState {
   ) {
     throw new Error("invalid game mode");
   }
-  if (game.strategy !== "avocado" && game.strategy !== "blueberry") {
+  if (
+    game.strategy !== "avocado" &&
+    game.strategy !== "blueberry" &&
+    game.strategy !== "cherry"
+  ) {
     throw new Error("invalid strategy");
   }
   if (typeof game.analysisEnabled !== "boolean") {

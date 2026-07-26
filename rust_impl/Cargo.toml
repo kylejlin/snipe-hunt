@@ -4,6 +4,8 @@ members = [
     "crates/snipe-core",
     "crates/agent-avocado",
     "crates/agent-blueberry",
+    "crates/agent-cherry",
+    "crates/cherry-train",
     "crates/snipe-wasm",
 ]
 

@@ -6,10 +6,11 @@
 
 use agent_avocado::AvocadoAnalyzer;
 use agent_blueberry::BlueberryAnalyzer;
+use agent_cherry::CherryAnalyzer;
 use serde::{Deserialize, Serialize};
 use snipe_core::{
-    Action, Analyzer, Animal, AnimalDrop, AnimalStep, Card, CardMultiset, Evaluation,
-    InitialStateBuilder, Player, Rank, SnipeStep, State, StepDirection,
+    Action, Analyzer, Animal, AnimalDrop, AnimalStep, Card, CardMultiset, Evaluation, Player, Rank,
+    SnipeStep, State, StepDirection, initial_state,
 };
 use std::fmt::Write as _;
 use wasm_bindgen::prelude::*;
@@ -24,6 +25,7 @@ const BATCH_TICKS: usize = 8;
 enum Strategy {
     Avocado,
     Blueberry,
+    Cherry,
 }
 
 impl Strategy {
@@ -31,6 +33,7 @@ impl Strategy {
         match self {
             Self::Avocado => "Avocado",
             Self::Blueberry => "Blueberry",
+            Self::Cherry => "Cherry",
         }
     }
 }
@@ -38,6 +41,7 @@ impl Strategy {
 enum BrowserAnalyzer {
     Avocado(AvocadoAnalyzer),
     Blueberry(BlueberryAnalyzer),
+    Cherry(CherryAnalyzer),
 }
 
 impl BrowserAnalyzer {
@@ -53,6 +57,11 @@ impl BrowserAnalyzer {
                 analyzer.set_state(state);
                 Self::Blueberry(analyzer)
             }
+            Strategy::Cherry => {
+                let mut analyzer = CherryAnalyzer::new();
+                analyzer.set_state(state);
+                Self::Cherry(analyzer)
+            }
         }
     }
 
@@ -60,6 +69,7 @@ impl BrowserAnalyzer {
         match self {
             Self::Avocado(analyzer) => analyzer.think(ticks),
             Self::Blueberry(analyzer) => analyzer.think(ticks),
+            Self::Cherry(analyzer) => analyzer.think(ticks),
         }
     }
 
@@ -67,6 +77,7 @@ impl BrowserAnalyzer {
         match self {
             Self::Avocado(analyzer) => analyzer.evaluation(),
             Self::Blueberry(analyzer) => analyzer.evaluation(),
+            Self::Cherry(analyzer) => analyzer.evaluation(),
         }
     }
 
@@ -75,6 +86,7 @@ impl BrowserAnalyzer {
         match self {
             Self::Avocado(analyzer) => analyzer.write_optimal_lop(&mut actions),
             Self::Blueberry(analyzer) => analyzer.write_optimal_lop(&mut actions),
+            Self::Cherry(analyzer) => analyzer.write_optimal_lop(&mut actions),
         }
         actions
     }
@@ -495,37 +507,6 @@ fn complete_analysis_turns(
     }
 
     Ok(turns)
-}
-
-fn initial_state(seed: u64) -> State {
-    let mut deck = [Animal::Mouse; 32];
-    for (index, slot) in deck.iter_mut().enumerate() {
-        *slot = animals()[index % 16];
-    }
-    let mut rng = seed ^ 0x9E37_79B9_7F4A_7C15;
-    for index in (1..deck.len()).rev() {
-        rng = splitmix64(rng);
-        deck.swap(index, (rng as usize) % (index + 1));
-    }
-    InitialStateBuilder {
-        alpha_reserve: [deck[0]],
-        r1: [deck[1], deck[2]],
-        r2: deck[3..15].try_into().expect("fixed slice"),
-        r3: [deck[15]],
-        r4: [deck[16]],
-        r5: deck[17..29].try_into().expect("fixed slice"),
-        r6: [deck[29], deck[30]],
-        beta_reserve: [deck[31]],
-    }
-    .build()
-    .expect("two copies of every animal")
-}
-
-fn splitmix64(mut value: u64) -> u64 {
-    value = value.wrapping_add(0x9E37_79B9_7F4A_7C15);
-    value = (value ^ (value >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    value = (value ^ (value >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-    value ^ (value >> 31)
 }
 
 fn dto_to_state(dto: &PositionDto) -> Result<State, JsValue> {

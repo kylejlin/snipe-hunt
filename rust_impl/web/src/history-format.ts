@@ -112,11 +112,18 @@ function captureAnnotation(
   player: Player,
 ): "" | "x" {
   const reserve = player === "Alpha" ? "alpha-reserve" : "beta-reserve";
-  const beforeIds = new Set(before.locations[reserve].map((card) => card.id));
-  const captured = after.locations[reserve].filter(
-    (card) => !beforeIds.has(card.id),
+  const beforeCards = before.locations[reserve];
+  const afterCards = after.locations[reserve];
+  const animalCount = (cards: Card[]) =>
+    cards.filter((card) => !card.isSnipe).length;
+  const containsSnipe = (cards: Card[], owner: Player) =>
+    cards.some((card) => card.isSnipe && card.owner === owner);
+  const capturedSnipe = (["Alpha", "Beta"] as const).some(
+    (owner) =>
+      !containsSnipe(beforeCards, owner) &&
+      containsSnipe(afterCards, owner),
   );
-  return captured.length > 0 && !captured.some((card) => card.isSnipe)
+  return animalCount(afterCards) > animalCount(beforeCards) && !capturedSnipe
     ? "x"
     : "";
 }

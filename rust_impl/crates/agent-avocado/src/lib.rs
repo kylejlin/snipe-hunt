@@ -26,7 +26,7 @@ pub struct AvocadoAnalyzer {
     cursor: usize,
     depth: usize,
     evaluation: Evaluation,
-    transpositions: HashMap<(u64, usize), f64>,
+    transpositions: HashMap<(u64, usize, usize), f64>,
 }
 
 impl Default for AvocadoAnalyzer {
@@ -75,8 +75,7 @@ impl Analyzer for AvocadoAnalyzer {
             .into_iter()
             .filter_map(|actions| {
                 apply_actions(state.clone(), &actions).map(|child| Candidate {
-                    score: terminal_score(&child, actions.len())
-                        .unwrap_or_else(|| evaluate(&child)),
+                    score: terminal_score(&child, 1).unwrap_or_else(|| evaluate(&child)),
                     actions,
                     state: child,
                 })
@@ -101,6 +100,7 @@ impl Analyzer for AvocadoAnalyzer {
         self.candidates[index].score = minimax(
             &state,
             self.depth.saturating_sub(1),
+            1,
             -MATE,
             MATE,
             &mut visited,
@@ -132,20 +132,21 @@ impl Analyzer for AvocadoAnalyzer {
 fn minimax(
     state: &State,
     depth: usize,
+    plies_from_root: usize,
     mut alpha: f64,
     mut beta: f64,
     visited: &mut usize,
     budget: usize,
-    transpositions: &mut HashMap<(u64, usize), f64>,
+    transpositions: &mut HashMap<(u64, usize, usize), f64>,
 ) -> f64 {
     *visited += 1;
-    if let Some(score) = terminal_score(state, 0) {
+    if let Some(score) = terminal_score(state, plies_from_root) {
         return score;
     }
     if depth == 0 || *visited >= budget {
         return evaluate(state);
     }
-    let key = (fingerprint(state), depth);
+    let key = (fingerprint(state), depth, plies_from_root);
     if let Some(&cached) = transpositions.get(&key) {
         return cached;
     }
@@ -162,6 +163,7 @@ fn minimax(
             value = value.max(minimax(
                 &child,
                 depth - 1,
+                plies_from_root + 1,
                 alpha,
                 beta,
                 visited,
@@ -184,6 +186,7 @@ fn minimax(
             value = value.min(minimax(
                 &child,
                 depth - 1,
+                plies_from_root + 1,
                 alpha,
                 beta,
                 visited,
@@ -362,7 +365,17 @@ fn animals() -> [Animal; 16] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use snipe_core::InitialStateBuilder;
+    use snipe_core::{CardMultiset, InitialStateBuilder};
+
+    fn cards(cards: &[(Card, Player)]) -> CardMultiset {
+        cards
+            .iter()
+            .fold(CardMultiset::EMPTY, |result, &(card, player)| {
+                result
+                    .checked_add(CardMultiset::singleton(card, player))
+                    .unwrap()
+            })
+    }
 
     fn state() -> State {
         let deck = animals();
@@ -397,5 +410,37 @@ mod tests {
         assert!(!line.is_empty());
         let child = apply_actions(state, &line).unwrap();
         assert!(child.active_player == Player::Alpha || child.winner().is_some());
+    }
+
+    #[test]
+    fn keeps_a_terminal_child_one_ply_away_after_thinking() {
+        let state = State {
+            active_player: Player::Alpha,
+            reserves: CardMultiset::EMPTY,
+            r1: cards(&[
+                (Card::Snipe, Player::Alpha),
+                (Card::Animal(Animal::Mouse), Player::Alpha),
+            ]),
+            r2: cards(&[
+                (Card::Animal(Animal::Rooster), Player::Beta),
+                (Card::Animal(Animal::Tiger), Player::Beta),
+                (Card::Snipe, Player::Beta),
+            ]),
+            r3: CardMultiset::EMPTY,
+            r4: CardMultiset::EMPTY,
+            r5: CardMultiset::EMPTY,
+            r6: CardMultiset::EMPTY,
+            leading_action: None,
+        };
+        let expected = Evaluation::MateInN {
+            winner: Player::Alpha,
+            plies: 1,
+        };
+        let mut analyzer = AvocadoAnalyzer::new();
+
+        analyzer.set_state(state);
+        assert_eq!(analyzer.evaluation(), expected);
+        analyzer.think(32);
+        assert_eq!(analyzer.evaluation(), expected);
     }
 }

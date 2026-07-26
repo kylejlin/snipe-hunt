@@ -105,11 +105,6 @@ impl CardMultiset {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum IncompletePly {
-    FirstAnimalStep(AnimalStep),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AnimalStep {
     pub actor: Animal,
     pub direction: StepDirection,

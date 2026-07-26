@@ -5,6 +5,7 @@ members = [
     "crates/snipe-ai",
     "crates/snipe-banana",
     "crates/snipe-wasm",
+    "crates/deslopped-core",
 ]
 
 [workspace.package]

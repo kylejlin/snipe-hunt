@@ -67,7 +67,7 @@ const { services, move, applyMove } = vi.hoisted(() => {
     requestId,
     positionKey: initial.positionKey,
     bestMove: move,
-    evaluation: { kind: "estimate", value: 0 },
+    evaluation: { kind: "estimate", millipoints: 0 },
     ticks: 1,
     elapsedMs: 1,
     recommendedLine: [move],
@@ -106,7 +106,7 @@ vi.mock("./engine/engine-services", () => ({
   engineInitializationError: null,
 }));
 
-import App, { formatAlphaScore } from "./App";
+import App, { formatAlphaScore, formatEvaluation } from "./App";
 
 afterEach(cleanup);
 
@@ -204,13 +204,25 @@ describe("value-semantic card interaction", () => {
 describe("presentation contract", () => {
   it("shows the package version", () => {
     render(<App />);
-    expect(screen.getByText("Version 0.39.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.40.0")).toBeInTheDocument();
   });
 
   it("formats Alpha evaluations", () => {
     expect(formatAlphaScore(125, "Alpha")).toBe("+1.3");
     expect(formatAlphaScore(999_997, "Alpha")).toBe("+#3");
     expect(formatAlphaScore(999_998, "Beta")).toBe("-#2");
+  });
+
+  it("formats integer engine evaluations as point scores", () => {
+    expect(
+      formatEvaluation({ kind: "estimate", millipoints: 1_250 }),
+    ).toBe("+1.3");
+    expect(
+      formatEvaluation({ kind: "estimate", millipoints: -100_000 }),
+    ).toBe("-100.0");
+    expect(
+      formatEvaluation({ kind: "mate", winner: "Beta", plies: 7 }),
+    ).toBe("-#7");
   });
 });
 

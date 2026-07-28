@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/snipe-core",
+    "crates/snipe-prng",
     "crates/agent-avocado",
     "crates/agent-blueberry",
     "crates/agent-cherry",

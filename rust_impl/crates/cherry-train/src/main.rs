@@ -2,7 +2,8 @@ use agent_cherry::{
     ACTION_SIZE, INPUT_SIZE, Model, Search, action_index, encode_state, state_key,
     training::{Adam, Sample},
 };
-use snipe_core::{Action, Player, initial_state};
+use snipe_core::{Action, Player};
+use snipe_prng::initial_state;
 use std::{
     collections::HashSet,
     env, fs,

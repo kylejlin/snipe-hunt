@@ -70,7 +70,7 @@ export type LiveAnalysisRequest = AnalysisRequest;
 
 export type EngineEvaluation =
   | { kind: "mate"; winner: Player; plies: number }
-  | { kind: "estimate"; value: number };
+  | { kind: "estimate"; millipoints: number };
 
 export interface AnalysisResult {
   requestId: number;

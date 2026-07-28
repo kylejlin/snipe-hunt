@@ -10,8 +10,9 @@ use agent_cherry::CherryAnalyzer;
 use serde::{Deserialize, Serialize};
 use snipe_core::{
     Action, Analyzer, Animal, AnimalDrop, AnimalStep, Card, CardMultiset, Evaluation, Player, Rank,
-    SnipeStep, State, StepDirection, initial_state,
+    SnipeStep, State, StepDirection,
 };
+use snipe_prng::initial_state;
 use std::fmt::Write as _;
 use wasm_bindgen::prelude::*;
 
@@ -260,8 +261,8 @@ struct AnalysisRequestDto {
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 enum EvaluationDto {
-    Mate { winner: PlayerDto, plies: usize },
-    Estimate { value: f64 },
+    Mate { winner: PlayerDto, plies: u32 },
+    Estimate { millipoints: i32 },
 }
 
 #[derive(Debug, Serialize)]
@@ -962,11 +963,13 @@ fn compact_label(step: &MoveStepDto, player: Player) -> String {
 
 fn evaluation_dto(evaluation: Evaluation) -> EvaluationDto {
     match evaluation {
-        Evaluation::MateInN { winner, plies } => EvaluationDto::Mate {
-            winner: winner.into(),
-            plies,
+        Evaluation::MateInN(mate) => EvaluationDto::Mate {
+            winner: mate.winner().into(),
+            plies: mate.plies(),
         },
-        Evaluation::Estimate(value) => EvaluationDto::Estimate { value: value.raw() },
+        Evaluation::Estimate(estimate) => EvaluationDto::Estimate {
+            millipoints: estimate.millipoints(),
+        },
     }
 }
 
@@ -1167,6 +1170,28 @@ mod tests {
                         && !card.piece_key.contains('@'))
             );
         }
+    }
+
+    #[test]
+    fn evaluations_serialize_with_explicit_integer_units() {
+        let estimate = snipe_core::EvaluationEstimate::from_millipoints(1_250).unwrap();
+        assert_eq!(
+            serde_json::to_value(evaluation_dto(estimate.into())).unwrap(),
+            serde_json::json!({
+                "kind": "estimate",
+                "millipoints": 1_250,
+            })
+        );
+
+        let mate = snipe_core::MateInN::new(Player::Beta, 7).unwrap();
+        assert_eq!(
+            serde_json::to_value(evaluation_dto(mate.into())).unwrap(),
+            serde_json::json!({
+                "kind": "mate",
+                "winner": "Beta",
+                "plies": 7,
+            })
+        );
     }
 
     #[test]

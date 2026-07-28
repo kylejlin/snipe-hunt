@@ -6,8 +6,8 @@
 //! part of the model.
 
 use snipe_core::{
-    Action, ActionWriter, Analyzer, Animal, Card, Evaluation, EvaluationEstimate, Player, Rank,
-    State, StepDirection,
+    Action, ActionWriter, Analyzer, Animal, Card, Evaluation, EvaluationEstimate, MateInN, Player,
+    Rank, State, StepDirection,
 };
 use std::{fs, io, path::Path};
 
@@ -669,7 +669,7 @@ impl Analyzer for CherryAnalyzer {
             return estimate(0.0);
         };
         if let Some(winner) = state.winner() {
-            return Evaluation::MateInN { winner, plies: 0 };
+            return mate_in(winner, 0);
         }
         let value = self.search.as_ref().map_or(0.0, Search::root_value) as f64;
         estimate(if state.active_player == Player::Alpha {
@@ -689,8 +689,21 @@ impl Analyzer for CherryAnalyzer {
     }
 }
 
+fn mate_in(winner: Player, plies: u32) -> Evaluation {
+    MateInN::new(winner, plies)
+        .expect("reported mate distance is within the supported range")
+        .into()
+}
+
 fn estimate(value: f64) -> Evaluation {
-    Evaluation::Estimate(EvaluationEstimate::new(value).expect("finite model evaluation"))
+    assert!(value.is_finite(), "model evaluation must be finite");
+    let millipoints = (value * 1_000.0).round().clamp(
+        f64::from(EvaluationEstimate::MIN.millipoints()),
+        f64::from(EvaluationEstimate::MAX.millipoints()),
+    ) as i32;
+    EvaluationEstimate::from_millipoints(millipoints)
+        .expect("clamped model evaluation is in range")
+        .into()
 }
 
 struct ActionBuffer {
@@ -1144,7 +1157,8 @@ pub mod training {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use snipe_core::{CardMultiset, initial_state};
+    use snipe_core::CardMultiset;
+    use snipe_prng::initial_state;
     use std::collections::HashSet;
 
     fn cards(entries: &[(Card, Player)]) -> CardMultiset {
@@ -1456,6 +1470,16 @@ mod tests {
             after = after.apply(action).unwrap();
         }
         assert!(after.active_player != player || after.winner().is_some());
+    }
+
+    #[test]
+    fn public_estimates_are_rounded_and_bounded_millipoints() {
+        assert_eq!(
+            estimate(0.1236),
+            EvaluationEstimate::from_millipoints(124).unwrap().into()
+        );
+        assert_eq!(estimate(1_000.0), EvaluationEstimate::MAX.into());
+        assert_eq!(estimate(-1_000.0), EvaluationEstimate::MIN.into());
     }
 
     #[test]

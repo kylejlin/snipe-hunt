@@ -1,10 +1,11 @@
 # Web architecture
 
-`web` is built directly on `snipe-core`.
+`web` is built on `snipe-core` through the Rust/WASM bridge.
 
 ## Authority boundaries
 
 - `snipe-core` is the only rules authority.
+- `snipe-prng` owns reproducible seeded deals; it does not define game rules.
 - `snipe-wasm` converts complete Core states and actions to a narrow,
   value-semantic JSON contract.
 - React renders engine snapshots and submits only engine-advertised turns. It

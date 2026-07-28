@@ -4,7 +4,8 @@
 //! code with any other agent.
 
 use snipe_core::{
-    Action, ActionWriter, Analyzer, Animal, Card, Evaluation, EvaluationEstimate, Player, State,
+    Action, ActionWriter, Analyzer, Animal, Card, Evaluation, EvaluationEstimate, MateInN, Player,
+    State,
 };
 
 #[derive(Clone)]
@@ -74,10 +75,9 @@ impl BlueberryAnalyzer {
     fn refresh(&mut self) {
         let Some(root) = &self.root else { return };
         if self.arms.is_empty() {
-            self.evaluation = root.winner().map_or_else(
-                || estimate(instinct(root)),
-                |winner| Evaluation::MateInN { winner, plies: 0 },
-            );
+            self.evaluation = root
+                .winner()
+                .map_or_else(|| estimate(instinct(root)), |winner| mate_in(winner, 0));
             return;
         }
         let maximizing = root.active_player == Player::Alpha;
@@ -104,10 +104,8 @@ impl BlueberryAnalyzer {
         };
         self.evaluation = arm.state.winner().map_or_else(
             || estimate(value),
-            |winner| Evaluation::MateInN {
-                winner,
-                plies: arm.actions.len(),
-            },
+            // Every arm is one complete ply, whether it takes one action or two.
+            |winner| mate_in(winner, 1),
         );
     }
 }
@@ -298,8 +296,21 @@ fn fingerprint(state: &State) -> u64 {
     hash
 }
 
+fn mate_in(winner: Player, plies: u32) -> Evaluation {
+    MateInN::new(winner, plies)
+        .expect("rollout distance is within the supported mate distance")
+        .into()
+}
+
 fn estimate(value: f64) -> Evaluation {
-    Evaluation::Estimate(EvaluationEstimate::new(value).expect("finite evaluation"))
+    assert!(value.is_finite(), "evaluation must be finite");
+    let millipoints = (value * 1_000.0).round().clamp(
+        f64::from(EvaluationEstimate::MIN.millipoints()),
+        f64::from(EvaluationEstimate::MAX.millipoints()),
+    ) as i32;
+    EvaluationEstimate::from_millipoints(millipoints)
+        .expect("clamped evaluation is in range")
+        .into()
 }
 
 fn animals() -> [Animal; 16] {
@@ -326,7 +337,7 @@ fn animals() -> [Animal; 16] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use snipe_core::InitialStateBuilder;
+    use snipe_core::{CardMultiset, InitialStateBuilder};
 
     #[test]
     fn recommendation_is_legal_before_and_after_thinking() {
@@ -353,5 +364,54 @@ mod tests {
         let mut line = Vec::new();
         analyzer.write_optimal_lop(&mut line);
         assert!(execute(state, &line).is_some());
+    }
+
+    #[test]
+    fn a_two_action_winning_turn_is_still_mate_in_one_ply() {
+        let cards = |entries: &[(Card, Player)]| {
+            entries
+                .iter()
+                .fold(CardMultiset::EMPTY, |cards, &(card, player)| {
+                    cards
+                        .checked_add(CardMultiset::singleton(card, player))
+                        .unwrap()
+                })
+        };
+        let state = State {
+            active_player: Player::Alpha,
+            reserves: CardMultiset::EMPTY,
+            r1: cards(&[(Card::Snipe, Player::Alpha)]),
+            r2: cards(&[
+                (Card::Animal(Animal::Mouse), Player::Alpha),
+                (Card::Animal(Animal::Rooster), Player::Alpha),
+            ]),
+            r3: cards(&[
+                (Card::Animal(Animal::Tiger), Player::Beta),
+                (Card::Snipe, Player::Beta),
+            ]),
+            r4: CardMultiset::EMPTY,
+            r5: CardMultiset::EMPTY,
+            r6: CardMultiset::EMPTY,
+            leading_action: None,
+        };
+        let mut analyzer = BlueberryAnalyzer::new();
+
+        analyzer.set_state(state);
+
+        assert_eq!(analyzer.arms[analyzer.best].actions.len(), 2);
+        assert_eq!(
+            analyzer.evaluation(),
+            MateInN::new(Player::Alpha, 1).unwrap().into()
+        );
+    }
+
+    #[test]
+    fn public_estimates_are_rounded_and_bounded_millipoints() {
+        assert_eq!(
+            estimate(1.2346),
+            EvaluationEstimate::from_millipoints(1_235).unwrap().into()
+        );
+        assert_eq!(estimate(1_000.0), EvaluationEstimate::MAX.into());
+        assert_eq!(estimate(-1_000.0), EvaluationEstimate::MIN.into());
     }
 }

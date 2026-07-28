@@ -887,84 +887,106 @@ const fn option_is(value: Option<Element>, target: Element) -> bool {
 }
 
 impl Evaluation {
-    /// Conceptually, Alpha-wins-in-N has the evaluation `Infinity - N`,
-    /// and Beta-wins-in-N has the evaluation `-Infinity + N`.
-    /// In other words, a faster win is better than a slower win.
-    pub(crate) fn partial_cmp_(&self, other: &Self) -> Option<Ordering> {
-        Some(match (self, other) {
-            (
-                Self::MateInN {
-                    winner: Player::Beta,
-                    plies: _,
-                },
-                Self::Estimate(_),
-            )
-            | (
-                Self::Estimate(_),
-                Self::MateInN {
-                    winner: Player::Alpha,
-                    plies: _,
-                },
-            )
-            | (
-                Self::MateInN {
-                    winner: Player::Beta,
-                    plies: _,
-                },
-                Self::MateInN {
-                    winner: Player::Alpha,
-                    plies: _,
-                },
-            ) => Ordering::Less,
+    pub(crate) fn cmp_(&self, other: &Self) -> Ordering {
+        self.compress().cmp(&other.compress())
+    }
 
-            (
-                Self::Estimate(_),
-                Self::MateInN {
-                    winner: Player::Beta,
-                    plies: _,
-                },
-            )
-            | (
-                Self::MateInN {
-                    winner: Player::Alpha,
-                    plies: _,
-                },
-                Self::Estimate(_),
-            )
-            | (
-                Self::MateInN {
-                    winner: Player::Alpha,
-                    plies: _,
-                },
-                Self::MateInN {
-                    winner: Player::Beta,
-                    plies: _,
-                },
-            ) => Ordering::Greater,
+    pub(crate) fn fmt_(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MateInN(evaluation) => evaluation.fmt(f),
+            Self::Estimate(evaluation) => evaluation.fmt(f),
+        }
+    }
 
-            (
-                Self::MateInN {
-                    winner: Player::Alpha,
-                    plies: left,
-                },
-                Self::MateInN {
-                    winner: Player::Alpha,
-                    plies: right,
-                },
-            ) => left.cmp(right).reverse(),
+    pub(crate) const fn compress_(self) -> CompressedEvaluation {
+        match self {
+            Self::MateInN(evaluation) => evaluation.compress(),
+            Self::Estimate(evaluation) => evaluation.compress(),
+        }
+    }
+}
 
-            (
-                Self::MateInN {
-                    winner: Player::Beta,
-                    plies: left,
-                },
-                Self::MateInN {
-                    winner: Player::Beta,
-                    plies: right,
-                },
-            ) => left.cmp(right),
+impl MateInN {
+    pub(crate) fn cmp_(&self, other: &Self) -> Ordering {
+        self.compress().cmp(&other.compress())
+    }
 
-            (Self::Estimate(left), Self::Estimate(right)) => left.partial_cmp(right)?,
+    pub(crate) fn fmt_(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let sign = match self.winner {
+            Player::Alpha => '+',
+            Player::Beta => '-',
+        };
+        write!(f, "{sign}#{}", self.plies)
+    }
+
+    pub(crate) const fn compress_(self) -> CompressedEvaluation {
+        let plies = self.plies as i32;
+        let raw = match self.winner {
+            Player::Alpha => 2_000_000 - plies,
+            Player::Beta => -2_000_000 + plies,
+        };
+        CompressedEvaluation { raw }
+    }
+}
+
+impl EvaluationEstimate {
+    pub(crate) fn fmt_(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let precision = f.precision().unwrap_or(3);
+        let sign = if self.millipoints < 0 { '-' } else { '+' };
+        let magnitude = self.millipoints.unsigned_abs();
+
+        if precision >= 3 {
+            write!(f, "{sign}{}.{:03}", magnitude / 1_000, magnitude % 1_000)?;
+            for _ in 3..precision {
+                f.write_str("0")?;
+            }
+            return Ok(());
+        }
+
+        let discarded_digits = 3 - precision;
+        let quantum = 10_u32.pow(discarded_digits as u32);
+        let rounded = (magnitude + quantum / 2) / quantum;
+        if precision == 0 {
+            return write!(f, "{sign}{rounded}");
+        }
+
+        let fractional_scale = 10_u32.pow(precision as u32);
+        write!(
+            f,
+            "{sign}{}.{:0width$}",
+            rounded / fractional_scale,
+            rounded % fractional_scale,
+            width = precision
+        )
+    }
+
+    pub(crate) const fn compress_(self) -> CompressedEvaluation {
+        CompressedEvaluation {
+            raw: self.millipoints,
+        }
+    }
+}
+
+impl CompressedEvaluation {
+    pub(crate) fn fmt_(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.decompress().fmt(f)
+    }
+
+    pub(crate) const fn decompress_(self) -> Evaluation {
+        if self.raw >= 1_000_000 {
+            return Evaluation::MateInN(MateInN {
+                winner: Player::Alpha,
+                plies: (2_000_000 - self.raw) as u32,
+            });
+        }
+        if self.raw <= -1_000_000 {
+            return Evaluation::MateInN(MateInN {
+                winner: Player::Beta,
+                plies: (2_000_000 + self.raw) as u32,
+            });
+        }
+        Evaluation::Estimate(EvaluationEstimate {
+            millipoints: self.raw,
         })
     }
 }
@@ -1005,6 +1027,89 @@ mod tests {
             r6: CardMultiset::EMPTY,
             leading_action: None,
         }
+    }
+
+    #[test]
+    fn evaluation_estimates_enforce_the_public_range() {
+        assert_eq!(
+            EvaluationEstimate::from_millipoints(-100_000),
+            Some(EvaluationEstimate::MIN)
+        );
+        assert_eq!(
+            EvaluationEstimate::from_millipoints(100_000),
+            Some(EvaluationEstimate::MAX)
+        );
+        assert_eq!(EvaluationEstimate::from_millipoints(-100_001), None);
+        assert_eq!(EvaluationEstimate::from_millipoints(100_001), None);
+    }
+
+    #[test]
+    fn evaluation_compression_round_trips_and_preserves_order() {
+        let beta_fast = MateInN::new(Player::Beta, 0).unwrap();
+        let beta_slow = MateInN::new(Player::Beta, MateInN::MAX_PLIES).unwrap();
+        let low_estimate = EvaluationEstimate::MIN;
+        let high_estimate = EvaluationEstimate::MAX;
+        let alpha_slow = MateInN::new(Player::Alpha, MateInN::MAX_PLIES).unwrap();
+        let alpha_fast = MateInN::new(Player::Alpha, 0).unwrap();
+        let evaluations = [
+            Evaluation::from(beta_fast),
+            Evaluation::from(beta_slow),
+            Evaluation::from(low_estimate),
+            Evaluation::from(high_estimate),
+            Evaluation::from(alpha_slow),
+            Evaluation::from(alpha_fast),
+        ];
+
+        for evaluation in evaluations {
+            let compressed = evaluation.compress();
+            assert_eq!(compressed.decompress(), evaluation);
+        }
+        assert!(evaluations.windows(2).all(|pair| pair[0] < pair[1]));
+        assert_eq!(evaluations[0].compress().raw, -2_000_000);
+        assert_eq!(evaluations[1].compress().raw, -1_000_000);
+        assert_eq!(evaluations[2].compress().raw, -100_000);
+        assert_eq!(evaluations[3].compress().raw, 100_000);
+        assert_eq!(evaluations[4].compress().raw, 1_000_000);
+        assert_eq!(evaluations[5].compress().raw, 2_000_000);
+        assert_eq!(MateInN::new(Player::Alpha, MateInN::MAX_PLIES + 1), None);
+
+        let beta_one = MateInN::new(Player::Beta, 1).unwrap();
+        let alpha_one = MateInN::new(Player::Alpha, 1).unwrap();
+        assert!(beta_fast < beta_one && beta_one < beta_slow);
+        assert!(alpha_slow < alpha_one && alpha_one < alpha_fast);
+        assert!(low_estimate < EvaluationEstimate::ZERO);
+        assert!(EvaluationEstimate::ZERO < high_estimate);
+    }
+
+    #[test]
+    fn evaluation_debug_format_is_stable_and_honors_precision() {
+        let negative = EvaluationEstimate::from_millipoints(-1_234).unwrap();
+        let positive = EvaluationEstimate::from_millipoints(78_900).unwrap();
+        let alpha_mate = MateInN::new(Player::Alpha, 12).unwrap();
+        let beta_mate = MateInN::new(Player::Beta, 3).unwrap();
+
+        assert_eq!(format!("{negative:?}"), "-1.234");
+        assert_eq!(format!("{positive:?}"), "+78.900");
+        assert_eq!(format!("{positive:.1?}"), "+78.9");
+        assert_eq!(format!("{negative:.2?}"), "-1.23");
+        assert_eq!(
+            format!(
+                "{:?}",
+                EvaluationEstimate::from_millipoints(99_999).unwrap()
+            ),
+            "+99.999"
+        );
+        assert_eq!(
+            format!(
+                "{:.2?}",
+                EvaluationEstimate::from_millipoints(99_999).unwrap()
+            ),
+            "+100.00"
+        );
+        assert_eq!(format!("{positive:.6?}"), "+78.900000");
+        assert_eq!(format!("{alpha_mate:?}"), "+#12");
+        assert_eq!(format!("{beta_mate:?}"), "-#3");
+        assert_eq!(format!("{:?}", positive.compress()), "+78.900");
     }
 
     #[test]

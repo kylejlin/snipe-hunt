@@ -1,4 +1,4 @@
-//! This crate meant to be an authoritative reference implementation.
+//! This crate is meant to be an authoritative reference implementation.
 //! It is NOT time-efficient or space-efficient.
 //! Instead, it prioritizes a clean interface and developer ergonomics.
 //!
@@ -43,7 +43,7 @@ pub enum Rank {
 /// in order to improve developer ergonomics.
 /// Consequently, it is not `Copy`.
 ///
-/// Also, it allows an `leading_action`, which further improves developer ergonomics
+/// Also, it allows a `leading_action`, which further improves developer ergonomics
 /// at the cost of performance.
 ///
 /// If you are implementing your own `Agent`, we recommend you create your own, more efficient representation.
@@ -98,59 +98,6 @@ impl InitialStateBuilder {
     pub const fn build(self) -> Option<State> {
         self.build_()
     }
-}
-
-/// Deals a reproducible initial position from a seed.
-///
-/// This is shared by the browser and self-play trainers so a seed always
-/// identifies exactly the same deal everywhere in the project.
-pub fn initial_state(seed: u64) -> State {
-    let animals = [
-        Animal::Mouse,
-        Animal::Ox,
-        Animal::Tiger,
-        Animal::Rabbit,
-        Animal::Dragon,
-        Animal::Snake,
-        Animal::Horse,
-        Animal::Ram,
-        Animal::Monkey,
-        Animal::Rooster,
-        Animal::Dog,
-        Animal::Boar,
-        Animal::Fish,
-        Animal::Elephant,
-        Animal::Squid,
-        Animal::Frog,
-    ];
-    let mut deck = [Animal::Mouse; 32];
-    for (index, slot) in deck.iter_mut().enumerate() {
-        *slot = animals[index % animals.len()];
-    }
-    let mut rng = seed ^ 0x9E37_79B9_7F4A_7C15;
-    for index in (1..deck.len()).rev() {
-        rng = splitmix64(rng);
-        deck.swap(index, (rng as usize) % (index + 1));
-    }
-    InitialStateBuilder {
-        alpha_reserve: [deck[0]],
-        r1: [deck[1], deck[2]],
-        r2: deck[3..15].try_into().expect("fixed slice"),
-        r3: [deck[15]],
-        r4: [deck[16]],
-        r5: deck[17..29].try_into().expect("fixed slice"),
-        r6: [deck[29], deck[30]],
-        beta_reserve: [deck[31]],
-    }
-    .build()
-    .expect("two copies of every animal")
-}
-
-fn splitmix64(mut value: u64) -> u64 {
-    value = value.wrapping_add(0x9E37_79B9_7F4A_7C15);
-    value = (value ^ (value >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    value = (value ^ (value >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-    value ^ (value >> 31)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -349,54 +296,180 @@ pub trait Analyzer {
     /// In practice, satisfying the first requirement will almost always automatically satisfy the second requirement.
     fn think_for_one_tick(&mut self);
 
-    /// If the game is already over, this must return `MateInN { plies: 0, ... }`.
+    /// Your implementation must be truthful about mates.
+    /// In other words, an implementation is only sound if it satisfies ALL of the following:
+    /// - If the game is over, you must return mate-in-zero.
+    /// - If you return mate-in-N, there must truly exist a forced win in N plies.
+    ///   - As a corollary, if you return mate-in-zero, the game must truly be over.
+    /// - If you return an estimate, the game must NOT be over.
     fn evaluation(&self) -> Evaluation;
 
     /// "LOP" stands for "line of play".
     /// This must only write legal actions.
-    /// If the game is not over, this must write enough actions to either complete the active player's ply,
+    /// Usually, the more actions this writes, the more helpful it is.
+    /// At a _minimum_, if the game is not over, this must write enough actions to either complete the active player's ply,
     /// or end the game.
     fn write_optimal_lop<W>(&self, w: &mut W)
     where
         W: ActionWriter;
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum Evaluation {
-    MateInN { winner: Player, plies: usize },
+    MateInN(MateInN),
     Estimate(EvaluationEstimate),
 }
-impl PartialOrd for Evaluation {
-    /// Conceptually, Alpha-wins-in-N has the evaluation `Infinity - N`,
-    /// and Beta-wins-in-N has the evaluation `-Infinity + N`.
-    /// In other words, a faster win is better than a slower win.
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.partial_cmp_(other)
+impl Ord for Evaluation {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.cmp_(other)
     }
 }
-impl PartialEq for Evaluation {
-    fn eq(&self, other: &Self) -> bool {
-        self.partial_cmp(other) == Some(Ordering::Equal)
+impl PartialOrd for Evaluation {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Debug for Evaluation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt_(f)
+    }
+}
+impl Evaluation {
+    pub const fn compress(self) -> CompressedEvaluation {
+        self.compress_()
+    }
+}
+impl From<MateInN> for Evaluation {
+    fn from(value: MateInN) -> Self {
+        Self::MateInN(value)
+    }
+}
+impl From<EvaluationEstimate> for Evaluation {
+    fn from(value: EvaluationEstimate) -> Self {
+        Self::Estimate(value)
+    }
+}
+impl From<CompressedEvaluation> for Evaluation {
+    fn from(value: CompressedEvaluation) -> Self {
+        value.decompress()
     }
 }
 
-/// This is always finite.
-/// The more positive, the more favorable for Alpha.
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct EvaluationEstimate {
-    /// INVARIANT: This must be finite.
-    raw: f64,
+/// "Mate-in-zero" means the game is already over.
+/// This can happen because a snipe was captured or because the active player has no legal actions.
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+pub struct MateInN {
+    winner: Player,
+    plies: u32,
 }
-impl EvaluationEstimate {
-    pub const fn new(raw: f64) -> Option<Self> {
-        if raw.is_finite() {
-            return Some(Self { raw });
+impl Ord for MateInN {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.cmp_(other)
+    }
+}
+impl PartialOrd for MateInN {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Debug for MateInN {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt_(f)
+    }
+}
+impl MateInN {
+    pub const MAX_PLIES: u32 = 1_000_000;
+
+    pub const fn new(winner: Player, plies: u32) -> Option<Self> {
+        if plies <= Self::MAX_PLIES {
+            return Some(Self { winner, plies });
         }
 
         None
     }
 
-    pub const fn raw(self) -> f64 {
-        self.raw
+    pub const fn winner(self) -> Player {
+        self.winner
+    }
+
+    pub const fn plies(self) -> u32 {
+        self.plies
+    }
+
+    pub const fn compress(self) -> CompressedEvaluation {
+        self.compress_()
+    }
+}
+
+/// `+100.000` is the most favorable score for Alpha;
+/// `-100.000` is the most favorable score for Beta.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct EvaluationEstimate {
+    /// INVARIANT: This must be within `-100_000..=100_000`.
+    millipoints: i32,
+}
+impl EvaluationEstimate {
+    pub const MIN: Self = Self {
+        millipoints: -100_000,
+    };
+
+    pub const MAX: Self = Self {
+        millipoints: 100_000,
+    };
+
+    pub const ZERO: Self = Self { millipoints: 0 };
+
+    pub const fn from_millipoints(millipoints: i32) -> Option<Self> {
+        if Self::MIN.millipoints <= millipoints && millipoints <= Self::MAX.millipoints {
+            return Some(Self { millipoints });
+        }
+
+        None
+    }
+
+    pub const fn millipoints(self) -> i32 {
+        self.millipoints
+    }
+
+    pub const fn compress(self) -> CompressedEvaluation {
+        self.compress_()
+    }
+}
+impl Debug for EvaluationEstimate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt_(f)
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CompressedEvaluation {
+    /// - If this is within `-100_000..=100_000`, it represents an EvaluationEstimate.
+    /// - If this is within `1_000_000..=2_000_000`, it represents mate-in-`2_000_000 - raw`, with Alpha winning.
+    /// - If this is within `-2_000_000..=-1_000_000`, it represents mate-in-`2_000_000 + raw`, with Beta winning.
+    raw: i32,
+}
+impl From<Evaluation> for CompressedEvaluation {
+    fn from(value: Evaluation) -> Self {
+        value.compress()
+    }
+}
+impl From<MateInN> for CompressedEvaluation {
+    fn from(value: MateInN) -> Self {
+        value.compress()
+    }
+}
+impl From<EvaluationEstimate> for CompressedEvaluation {
+    fn from(value: EvaluationEstimate) -> Self {
+        value.compress()
+    }
+}
+impl Debug for CompressedEvaluation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt_(f)
+    }
+}
+impl CompressedEvaluation {
+    pub const fn decompress(self) -> Evaluation {
+        self.decompress_()
     }
 }

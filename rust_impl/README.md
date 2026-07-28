@@ -3,6 +3,7 @@
 The active implementation is intentionally small and dependency-directed:
 
 - `crates/snipe-core` is the authoritative rules and public `Analyzer` contract.
+- `crates/snipe-prng` owns reproducible seeded deals and random mixing.
 - `crates/agent-avocado` is a deterministic, patient alpha-beta analyzer.
 - `crates/agent-blueberry` is an aggressive, policy-guided Monte Carlo analyzer.
 - `crates/agent-cherry` is a policy/value MCTS analyzer learned from rules-only

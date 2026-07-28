@@ -444,17 +444,18 @@ export function formatAlphaScore(score: number, turn: Player): string {
 }
 
 function evaluationValue(evaluation: EngineEvaluation): number {
-  if (evaluation.kind === "estimate") return evaluation.value;
+  if (evaluation.kind === "estimate") return evaluation.millipoints;
   return evaluation.winner === "Alpha"
     ? MATE_SCORE - evaluation.plies
     : -MATE_SCORE + evaluation.plies;
 }
 
-function formatEvaluation(evaluation: EngineEvaluation): string {
+export function formatEvaluation(evaluation: EngineEvaluation): string {
   if (evaluation.kind === "mate") {
     return `${evaluation.winner === "Alpha" ? "+" : "-"}#${evaluation.plies}`;
   }
-  return `${evaluation.value >= 0 ? "+" : ""}${evaluation.value.toFixed(1)}`;
+  const points = evaluation.millipoints / 1_000;
+  return `${points >= 0 ? "+" : ""}${points.toFixed(1)}`;
 }
 
 function GameApp() {

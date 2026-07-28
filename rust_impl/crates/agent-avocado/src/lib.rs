@@ -4,7 +4,8 @@
 //! independent. Only `snipe-core` types cross its public boundary.
 
 use snipe_core::{
-    Action, ActionWriter, Analyzer, Animal, Card, Evaluation, EvaluationEstimate, Player, State,
+    Action, ActionWriter, Analyzer, Animal, Card, Evaluation, EvaluationEstimate, MateInN, Player,
+    State,
 };
 use std::collections::HashMap;
 
@@ -26,7 +27,7 @@ pub struct AvocadoAnalyzer {
     cursor: usize,
     depth: usize,
     evaluation: Evaluation,
-    transpositions: HashMap<(u64, usize, usize), f64>,
+    transpositions: HashMap<(u64, usize, u32), f64>,
 }
 
 impl Default for AvocadoAnalyzer {
@@ -133,12 +134,12 @@ impl Analyzer for AvocadoAnalyzer {
 fn minimax(
     state: &State,
     depth: usize,
-    plies_from_root: usize,
+    plies_from_root: u32,
     mut alpha: f64,
     mut beta: f64,
     visited: &mut usize,
     budget: usize,
-    transpositions: &mut HashMap<(u64, usize, usize), f64>,
+    transpositions: &mut HashMap<(u64, usize, u32), f64>,
 ) -> f64 {
     *visited += 1;
     if let Some(score) = terminal_score(state, plies_from_root) {
@@ -305,7 +306,7 @@ fn apply_actions(mut state: State, actions: &[Action]) -> Option<State> {
     Some(state)
 }
 
-fn terminal_score(state: &State, distance: usize) -> Option<f64> {
+fn terminal_score(state: &State, distance: u32) -> Option<f64> {
     state.winner().map(|winner| {
         let score = MATE - distance as f64;
         if winner == Player::Alpha {
@@ -316,30 +317,40 @@ fn terminal_score(state: &State, distance: usize) -> Option<f64> {
     })
 }
 
-fn terminal_evaluation(state: &State, distance: usize) -> Option<Evaluation> {
-    state.winner().map(|winner| Evaluation::MateInN {
-        winner,
-        plies: distance,
-    })
+fn terminal_evaluation(state: &State, distance: u32) -> Option<Evaluation> {
+    state.winner().map(|winner| mate_in(winner, distance))
 }
 
 fn score_to_evaluation(score: f64) -> Evaluation {
     if score.abs() >= MATE - 128.0 {
-        Evaluation::MateInN {
-            winner: if score > 0.0 {
+        mate_in(
+            if score > 0.0 {
                 Player::Alpha
             } else {
                 Player::Beta
             },
-            plies: (MATE - score.abs()).max(0.0) as usize,
-        }
+            (MATE - score.abs()).max(0.0).round() as u32,
+        )
     } else {
         estimate(score)
     }
 }
 
+fn mate_in(winner: Player, plies: u32) -> Evaluation {
+    MateInN::new(winner, plies)
+        .expect("search depth is within the supported mate distance")
+        .into()
+}
+
 fn estimate(value: f64) -> Evaluation {
-    Evaluation::Estimate(EvaluationEstimate::new(value).expect("finite evaluation"))
+    assert!(value.is_finite(), "evaluation must be finite");
+    let millipoints = (value * 1_000.0).round().clamp(
+        f64::from(EvaluationEstimate::MIN.millipoints()),
+        f64::from(EvaluationEstimate::MAX.millipoints()),
+    ) as i32;
+    EvaluationEstimate::from_millipoints(millipoints)
+        .expect("clamped evaluation is in range")
+        .into()
 }
 
 fn animals() -> [Animal; 16] {
@@ -433,15 +444,22 @@ mod tests {
             r6: CardMultiset::EMPTY,
             leading_action: None,
         };
-        let expected = Evaluation::MateInN {
-            winner: Player::Alpha,
-            plies: 1,
-        };
+        let expected = MateInN::new(Player::Alpha, 1).unwrap().into();
         let mut analyzer = AvocadoAnalyzer::new();
 
         analyzer.set_state(state);
         assert_eq!(analyzer.evaluation(), expected);
         analyzer.think(32);
         assert_eq!(analyzer.evaluation(), expected);
+    }
+
+    #[test]
+    fn public_estimates_are_rounded_and_bounded_millipoints() {
+        assert_eq!(
+            estimate(1.2346),
+            EvaluationEstimate::from_millipoints(1_235).unwrap().into()
+        );
+        assert_eq!(estimate(1_000.0), EvaluationEstimate::MAX.into());
+        assert_eq!(estimate(-1_000.0), EvaluationEstimate::MIN.into());
     }
 }

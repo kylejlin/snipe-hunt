@@ -11,3 +11,4 @@ path = "src/main.rs"
 [dependencies]
 agent-cherry = { path = "../agent-cherry", features = ["training"] }
 snipe-core = { path = "../snipe-core" }
+snipe-prng = { path = "../snipe-prng" }

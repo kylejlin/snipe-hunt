@@ -107,6 +107,7 @@ impl ArenaAgent {
     fn depth(&self) -> Option<i8> {
         match self {
             Self::V1(agent) => Some(agent.completed_depth()),
+            Self::Avocado(agent) => i8::try_from(agent.completed_depth()).ok(),
             _ => None,
         }
     }

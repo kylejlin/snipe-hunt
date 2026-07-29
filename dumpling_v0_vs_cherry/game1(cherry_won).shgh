@@ -1,0 +1,39 @@
+// Beta: Cherry (10 seconds per ply)
+// Alpha: Dumpling v1 (5 seconds per ply)
+// Seed: 0
+
+0b. =Elephant; Horse Elephant Beta; Rat Rat Ox Tiger Rabbit Horse Monkey Rooster Dog Boar Fish Squid; Snake
+0a. =Dog; Monkey Rooster Alpha; Ox Tiger Rabbit Dragon Snake Ram Ram Boar Fish Squid Frog Frog; Dragon
+1b. Ox 4, Fish 4x
+2a. Rabbit *1, Dragon 3
+3b. Dog 4, Boar 4
+4a. Ox 3, Ram 3
+5b. Ox &3
+6a. Fish 3, Squid 3x
+7b. Boar 3, Squid 4x
+8a. Fish &2
+9b. Tiger 4, Horse 5
+10a. Ox &3
+11b. Boar 2, Squid 3
+12a. Ox &6
+13b. Boar 1, Rabbit 4
+14a. Monkey 2, Rabbit 2x
+15b. Tiger 3, Rat 4
+16a. Frog &5
+17b. Tiger 2, Elephant 5
+18a. Fish &6
+19b. Beta 5
+20a. Tiger &2
+21b. Dog &1
+22a. Alpha 2
+23b. Boar *2, Horse 4
+24a. Rabbit 3, Ox 4
+25b. Horse 3, Elephant 4x
+26a. Squid *2, Tiger 3x
+27b. Rat &3
+28a. Squid 3x, Frog 6x
+29b. Snake &3
+30a. Tiger &2
+31b. Elephant &2
+32a. Rooster 2, Tiger 3
+33b. Snake 2x-#0

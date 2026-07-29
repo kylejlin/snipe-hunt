@@ -5,12 +5,20 @@
 
 use snipe_core::{Animal, InitialStateBuilder, State};
 
-const ANIMALS: [Animal; 16] = [
+const MAJORS: [Animal; 8] = [
+    Animal::Tiger,
+    Animal::Dragon,
+    Animal::Fish,
+    Animal::Elephant,
+    Animal::Tiger,
+    Animal::Dragon,
+    Animal::Fish,
+    Animal::Elephant,
+];
+const MINORS: [Animal; 24] = [
     Animal::Mouse,
     Animal::Ox,
-    Animal::Tiger,
     Animal::Rabbit,
-    Animal::Dragon,
     Animal::Snake,
     Animal::Horse,
     Animal::Ram,
@@ -18,8 +26,18 @@ const ANIMALS: [Animal; 16] = [
     Animal::Rooster,
     Animal::Dog,
     Animal::Boar,
-    Animal::Fish,
-    Animal::Elephant,
+    Animal::Squid,
+    Animal::Frog,
+    Animal::Mouse,
+    Animal::Ox,
+    Animal::Rabbit,
+    Animal::Snake,
+    Animal::Horse,
+    Animal::Ram,
+    Animal::Monkey,
+    Animal::Rooster,
+    Animal::Dog,
+    Animal::Boar,
     Animal::Squid,
     Animal::Frog,
 ];
@@ -29,27 +47,40 @@ const ANIMALS: [Animal; 16] = [
 /// This is shared by the browser and self-play trainers so a seed always
 /// identifies exactly the same deal everywhere in the project.
 pub fn initial_state(seed: u64) -> State {
-    let mut deck = [Animal::Mouse; 32];
-    for (index, slot) in deck.iter_mut().enumerate() {
-        *slot = ANIMALS[index % ANIMALS.len()];
-    }
+    let mut majors = MAJORS;
+    let mut minors = MINORS;
     let mut rng = seed ^ 0x9E37_79B9_7F4A_7C15;
-    for index in (1..deck.len()).rev() {
-        rng = splitmix64(rng);
-        deck.swap(index, (rng as usize) % (index + 1));
-    }
+    shuffle(&mut majors, &mut rng);
+    shuffle(&mut minors, &mut rng);
+
+    let mut alpha = [Animal::Mouse; 16];
+    alpha[..12].copy_from_slice(&minors[..12]);
+    alpha[12..].copy_from_slice(&majors[..4]);
+    let mut beta = [Animal::Mouse; 16];
+    beta[..12].copy_from_slice(&minors[12..]);
+    beta[12..].copy_from_slice(&majors[4..]);
+    shuffle(&mut alpha, &mut rng);
+    shuffle(&mut beta, &mut rng);
+
     InitialStateBuilder {
-        alpha_reserve: [deck[0]],
-        r1: [deck[1], deck[2]],
-        r2: deck[3..15].try_into().expect("fixed slice"),
-        r3: [deck[15]],
-        r4: [deck[16]],
-        r5: deck[17..29].try_into().expect("fixed slice"),
-        r6: [deck[29], deck[30]],
-        beta_reserve: [deck[31]],
+        alpha_reserve: [alpha[0]],
+        r1: [alpha[1], alpha[2]],
+        r2: alpha[3..15].try_into().expect("fixed slice"),
+        r3: [alpha[15]],
+        r4: [beta[0]],
+        r5: beta[1..13].try_into().expect("fixed slice"),
+        r6: [beta[13], beta[14]],
+        beta_reserve: [beta[15]],
     }
     .build()
     .expect("two copies of every animal")
+}
+
+fn shuffle(deck: &mut [Animal], rng: &mut u64) {
+    for index in (1..deck.len()).rev() {
+        *rng = splitmix64(*rng);
+        deck.swap(index, (*rng as usize) % (index + 1));
+    }
 }
 
 /// Applies the SplitMix64 mixing function to `value`.
@@ -64,6 +95,25 @@ pub const fn splitmix64(mut value: u64) -> u64 {
 mod tests {
     use super::*;
     use snipe_core::{Card, CardMultiset, Player};
+
+    const ANIMALS: [Animal; 16] = [
+        Animal::Mouse,
+        Animal::Ox,
+        Animal::Tiger,
+        Animal::Rabbit,
+        Animal::Dragon,
+        Animal::Snake,
+        Animal::Horse,
+        Animal::Ram,
+        Animal::Monkey,
+        Animal::Rooster,
+        Animal::Dog,
+        Animal::Boar,
+        Animal::Fish,
+        Animal::Elephant,
+        Animal::Squid,
+        Animal::Frog,
+    ];
 
     fn assert_animals(cards: CardMultiset, player: Player, expected: &[Animal]) {
         for animal in ANIMALS {
@@ -137,53 +187,83 @@ mod tests {
 
         assert_eq!(first.active_player, Player::Beta);
         assert_eq!(first.leading_action, None);
-        assert_animals(first.reserves, Player::Alpha, &[Animal::Boar]);
-        assert_animals(
-            first.r1,
-            Player::Alpha,
-            &[Animal::Elephant, Animal::Rooster],
-        );
+        assert_animals(first.reserves, Player::Alpha, &[Animal::Rooster]);
+        assert_animals(first.r1, Player::Alpha, &[Animal::Mouse, Animal::Rabbit]);
         assert_animals(
             first.r2,
             Player::Alpha,
             &[
+                Animal::Mouse,
+                Animal::Ox,
+                Animal::Tiger,
+                Animal::Rabbit,
                 Animal::Dragon,
-                Animal::Squid,
-                Animal::Monkey,
-                Animal::Ox,
-                Animal::Ox,
-                Animal::Rooster,
-                Animal::Ram,
-                Animal::Ram,
-                Animal::Elephant,
+                Animal::Dragon,
                 Animal::Snake,
+                Animal::Horse,
+                Animal::Horse,
                 Animal::Monkey,
                 Animal::Boar,
+                Animal::Fish,
             ],
         );
-        assert_animals(first.r3, Player::Alpha, &[Animal::Tiger]);
-        assert_animals(first.r4, Player::Beta, &[Animal::Horse]);
+        assert_animals(first.r3, Player::Alpha, &[Animal::Ram]);
+        assert_animals(first.r4, Player::Beta, &[Animal::Frog]);
         assert_animals(
             first.r5,
             Player::Beta,
             &[
-                Animal::Dog,
-                Animal::Mouse,
+                Animal::Ox,
+                Animal::Tiger,
                 Animal::Snake,
-                Animal::Rabbit,
+                Animal::Ram,
+                Animal::Monkey,
                 Animal::Dog,
-                Animal::Frog,
-                Animal::Dragon,
+                Animal::Dog,
                 Animal::Fish,
-                Animal::Horse,
-                Animal::Fish,
+                Animal::Elephant,
                 Animal::Squid,
-                Animal::Mouse,
+                Animal::Squid,
+                Animal::Frog,
             ],
         );
-        assert_animals(first.r6, Player::Beta, &[Animal::Frog, Animal::Tiger]);
-        assert_animals(first.reserves, Player::Beta, &[Animal::Rabbit]);
+        assert_animals(first.r6, Player::Beta, &[Animal::Rooster, Animal::Elephant]);
+        assert_animals(first.reserves, Player::Beta, &[Animal::Boar]);
         assert_eq!(first.r1.count(Card::Snipe, Player::Alpha), 1);
         assert_eq!(first.r6.count(Card::Snipe, Player::Beta), 1);
+    }
+
+    #[test]
+    fn every_player_gets_exactly_four_major_animals() {
+        let major_animals = [
+            Animal::Tiger,
+            Animal::Dragon,
+            Animal::Fish,
+            Animal::Elephant,
+        ];
+        for seed in 0..1_000 {
+            let state = initial_state(seed);
+            let locations = [
+                state.reserves,
+                state.r1,
+                state.r2,
+                state.r3,
+                state.r4,
+                state.r5,
+                state.r6,
+            ];
+            for player in [Player::Alpha, Player::Beta] {
+                let major_count: u32 = locations
+                    .into_iter()
+                    .map(|cards| {
+                        major_animals
+                            .into_iter()
+                            .map(|animal| u32::from(cards.count(Card::Animal(animal), player)))
+                            .sum::<u32>()
+                    })
+                    .sum();
+                assert_eq!(major_count, 4, "seed {seed}, player {player:?}");
+            }
+        }
     }
 }

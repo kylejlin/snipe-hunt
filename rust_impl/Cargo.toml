@@ -6,6 +6,8 @@ members = [
     "crates/agent-avocado",
     "crates/agent-blueberry",
     "crates/agent-cherry",
+    "crates/agent-dumpling",
+    "crates/dumpling-arena",
     "crates/cherry-train",
     "crates/snipe-wasm",
 ]
@@ -22,3 +24,8 @@ codegen-units = 1
 opt-level = 3
 panic = "abort"
 strip = true
+
+[profile.profiling]
+inherits = "release"
+debug = true
+strip = false

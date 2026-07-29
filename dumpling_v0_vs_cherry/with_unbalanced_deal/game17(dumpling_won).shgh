@@ -1,0 +1,78 @@
+// Beta: Cherry (1 seconds per ply)
+// Alpha: Dumpling v1 (0.5 seconds per ply)
+// Seed: 0
+
+0b. =Dragon; Rooster Dog Beta; Rat Ox Tiger Rabbit Snake Ram Rooster Dog Boar Boar Fish Frog; Snake
+0a. =Horse; Dragon Fish Alpha; Rat Ox Tiger Rabbit Horse Ram Monkey Monkey Elephant Elephant Squid Squid; Frog
+1b. Rooster 4, Tiger 4
+2a. Ram 3, Dragon 2x
+3b. Rooster 3, Rat 4
+4a. Alpha 2
+5b. Rat 3, Tiger 3x
+6a. Tiger &6
+7b. Rooster &2
+8a. Alpha *1
+9b. Frog &1
+10a. Horse &1
+11b. Dragon &1
+12a. Horse 2x, Fish 2
+13b. Rooster 5, Dog 5x
+14a. Dragon &1
+15b. Rooster &2
+16a. Fish 3, Dragon 2x
+17b. Dog &2
+18a. Rat &4
+19b. Fish &2
+20a. Alpha 2
+21b. Snake &3
+22a. Alpha 3
+23b. Rabbit &3
+24a. Alpha 4
+25b. Snake 2x, Snake 3x
+26a. Rooster &5
+27b. Ram &4
+28a. Alpha 5
+29b. Dragon &5
+30a. Rat 5, Rooster 6
+31b. Beta 5
+32a. Elephant &4
+33b. Rabbit &3
+34a. Rat 6x, Elephant 5
+35b. Rat &6
+36a. Ox &5
+37b. Beta 4
+38a. Elephant 6, Ox 6x
+39b. Beta 3
+40a. Alpha 6
+41b. Snake 2, Rabbit *4
+42a. Tiger &2
+43b. Tiger &6
+44a. Squid &3
+45b. Beta *4
+46a. Rat &3
+47b. Beta *5
+48a. Elephant &5
+49b. Rabbit *5, Snake 1
+50a. Rabbit &3
+51b. Ram &4
+52a. Rooster &2
+53b. Ox &6
+54a. Rat *2x, Rabbit *2
+55b. Rabbit 4, Ram *5
+56a. Horse &5
+57b. Ram 4, Ram *5
+58a. Rooster &4
+59b. Dragon 4x, Ram 4
+60a. Tiger &4
+61b. Beta 4
+62a. Horse &4
+63b. Beta 3
+64a. Rat 3, Squid 4x
+65b. Fish &4
+66a. Elephant &2
+67b. Beta *4
+68a. Tiger &4
+69b. Beta 3
+70a. Ram &3
+71b. Beta 2
+72a. Rat *2, Ram *2x+#0

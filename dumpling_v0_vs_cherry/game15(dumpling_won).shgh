@@ -1,0 +1,108 @@
+// Beta: Cherry (0.4 seconds per ply)
+// Alpha: Dumpling v1 (0.2 seconds per ply)
+// Seed: 0
+
+0b. =Elephant; Horse Elephant Beta; Rat Rat Ox Tiger Rabbit Horse Monkey Rooster Dog Boar Fish Squid; Snake
+0a. =Dog; Monkey Rooster Alpha; Ox Tiger Rabbit Dragon Snake Ram Ram Boar Fish Squid Frog Frog; Dragon
+1b. Rooster 4, Tiger 4
+2a. Fish 3, Squid *1
+3b. Ox 4, Horse 4x
+4a. Rabbit *1, Snake 3
+5b. Tiger &1
+6a. Rooster 2x, Snake 4
+7b. Fish 4, Rabbit 4x
+8a. Rabbit 2, Squid 2
+9b. Horse &2
+10a. Alpha 2
+11b. Elephant &4
+12a. Boar &4
+13b. Rat 4x, Squid 4
+14a. Ram &2
+15b. Boar &3
+16a. Squid 3, Fish 4
+17b. Dog 4x, Boar 2
+18a. Rabbit 3, Squid 4
+19b. Rat &3
+20a. Ram &4
+21b. Rat 2, Dog 3
+22a. Monkey 2, Rabbit 4
+23b. Elephant &4
+24a. Squid 5, Dragon 4x
+25b. Elephant 5x, Horse 5
+26a. Dragon &3
+27b. Elephant 4, Rat 1
+28a. Frog &4
+29b. Snake &3
+30a. Rooster 3, Ram 3x
+31b. Snake &3
+32a. Dragon 5, Frog 5
+33b. Rabbit &4
+34a. Monkey 3, Ram *2
+35b. Rabbit *5x, Rat *2
+36a. Frog &2
+37b. Boar &3
+38a. Snake &2
+39b. Boar 2, Boar *3
+40a. Tiger &5
+41b. Boar 2, Boar *3
+42a. Rooster &5
+43b. Rat &4
+44a. Frog 3, Rooster 6
+45b. Beta 5
+46a. Dragon &5
+47b. Rooster &2
+48a. Ram &4
+49b. Snake *4x, Rabbit 4
+50a. Monkey 4, Frog 4
+51b. Beta 4
+52a. Alpha 3
+53b. Rat 1, Rabbit 3
+54a. Ram 3, Frog 5
+55b. Elephant &3
+56a. Alpha 4
+57b. Rabbit *4, Snake 3x
+58a. Snake 3, Frog 6
+59b. Beta 3
+60a. Ox &2
+61b. Ram &4
+62a. Alpha *3
+63b. Rat &3
+64a. Dog &3
+65b. Rabbit 3, Rat 2
+66a. Dog &2
+67b. Dragon &3
+68a. Elephant &2
+69b. Rat *3, Dragon 2x
+70a. Snake *2, Dragon 6x
+71b. Boar &3
+72a. Rabbit &3
+73b. Rat *4, Boar 2
+74a. Snake 3, Rabbit *2
+75b. Ram *5, Snake *4
+76a. Rabbit 3, Snake *2
+77b. Ram 4, Rat 3
+78a. Snake 3, Rabbit *2
+79b. Elephant &5
+80a. Rabbit 3, Tiger 6
+81b. Ram *5, Elephant 4
+82a. Frog &1
+83b. Elephant &6
+84a. Frog 2, Rabbit *2x
+85b. Elephant 3, Snake 3
+86a. Boar &4
+87b. Beta *4
+88a. Dragon &4
+89b. Boar &4
+90a. Alpha 4
+91b. Rabbit *4, Boar 3x
+92a. Frog &3
+93b. Beta 3
+94a. Dragon 5, Monkey 5x
+95b. Beta 2
+96a. Ram &3
+97b. Rat &4
+98a. Dragon &1
+99b. Beta *3
+100a. Dragon 2, Frog 4
+101b. Rabbit *5, Boar *4
+102a. Dragon 3, Rabbit 3x+#0

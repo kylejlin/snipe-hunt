@@ -25,6 +25,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent-dumpling"
+version = "0.1.0"
+dependencies = [
+ "snipe-core",
+ "snipe-prng",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -41,6 +49,18 @@ name = "cherry-train"
 version = "0.1.0"
 dependencies = [
  "agent-cherry",
+ "snipe-core",
+ "snipe-prng",
+]
+
+[[package]]
+name = "dumpling-arena"
+version = "0.1.0"
+dependencies = [
+ "agent-avocado",
+ "agent-blueberry",
+ "agent-cherry",
+ "agent-dumpling",
  "snipe-core",
  "snipe-prng",
 ]

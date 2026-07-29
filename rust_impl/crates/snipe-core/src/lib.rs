@@ -309,6 +309,9 @@ pub trait Analyzer {
     /// Usually, the more actions this writes, the more helpful it is.
     /// At a _minimum_, if the game is not over, this must write enough actions to either complete the active player's ply,
     /// or end the game.
+    ///
+    /// If `evaluation` returns a mate-in-N, it is **strongly** recommended (but technically not required)
+    /// that `write_optimal_lop` write the entire winning line of play.
     fn write_optimal_lop<W>(&self, w: &mut W)
     where
         W: ActionWriter;

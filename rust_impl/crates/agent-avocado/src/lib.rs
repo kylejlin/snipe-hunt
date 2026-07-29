@@ -17,6 +17,22 @@ struct Candidate {
     actions: Vec<Action>,
     state: State,
     score: f64,
+    continuation: Vec<Action>,
+}
+
+#[derive(Clone)]
+struct SearchResult {
+    score: f64,
+    line: Vec<Action>,
+}
+
+impl SearchResult {
+    fn leaf(score: f64) -> Self {
+        Self {
+            score,
+            line: Vec::new(),
+        }
+    }
 }
 
 /// A deterministic, positionally conservative analyzer.
@@ -27,7 +43,7 @@ pub struct AvocadoAnalyzer {
     cursor: usize,
     depth: usize,
     evaluation: Evaluation,
-    transpositions: HashMap<(u64, usize, u32), f64>,
+    transpositions: HashMap<(u64, usize, u32), SearchResult>,
 }
 
 impl Default for AvocadoAnalyzer {
@@ -79,6 +95,7 @@ impl Analyzer for AvocadoAnalyzer {
                     score: terminal_score(&child, 1).unwrap_or_else(|| evaluate(&child)),
                     actions,
                     state: child,
+                    continuation: Vec::new(),
                 })
             })
             .collect();
@@ -98,7 +115,7 @@ impl Analyzer for AvocadoAnalyzer {
         let index = self.cursor;
         let mut visited = 0;
         let state = self.candidates[index].state.clone();
-        self.candidates[index].score = minimax(
+        let result = minimax(
             &state,
             self.depth.saturating_sub(1),
             1,
@@ -108,6 +125,8 @@ impl Analyzer for AvocadoAnalyzer {
             384,
             &mut self.transpositions,
         );
+        self.candidates[index].score = result.score;
+        self.candidates[index].continuation = result.line;
         self.cursor += 1;
         if self.cursor == self.candidates.len() {
             self.cursor = 0;
@@ -122,8 +141,8 @@ impl Analyzer for AvocadoAnalyzer {
 
     fn write_optimal_lop<W: ActionWriter>(&self, writer: &mut W) {
         if let Some(candidate) = self.candidates.get(self.best) {
-            writer.reserve(candidate.actions.len());
-            for &action in &candidate.actions {
+            writer.reserve(candidate.actions.len() + candidate.continuation.len());
+            for &action in candidate.actions.iter().chain(&candidate.continuation) {
                 writer.push(action);
             }
         }
@@ -139,30 +158,30 @@ fn minimax(
     mut beta: f64,
     visited: &mut usize,
     budget: usize,
-    transpositions: &mut HashMap<(u64, usize, u32), f64>,
-) -> f64 {
+    transpositions: &mut HashMap<(u64, usize, u32), SearchResult>,
+) -> SearchResult {
     *visited += 1;
     if let Some(score) = terminal_score(state, plies_from_root) {
-        return score;
+        return SearchResult::leaf(score);
     }
     if depth == 0 || *visited >= budget {
-        return evaluate(state);
+        return SearchResult::leaf(evaluate(state));
     }
     let key = (fingerprint(state), depth, plies_from_root);
-    if let Some(&cached) = transpositions.get(&key) {
-        return cached;
+    if let Some(cached) = transpositions.get(&key) {
+        return cached.clone();
     }
     let moves = full_plies(state);
     if moves.is_empty() {
-        return evaluate(state);
+        return SearchResult::leaf(evaluate(state));
     }
     if state.active_player == Player::Alpha {
-        let mut value = -MATE;
+        let mut best = SearchResult::leaf(-MATE);
         for actions in moves {
             let Some(child) = apply_actions(state.clone(), &actions) else {
                 continue;
             };
-            value = value.max(minimax(
+            let child_result = minimax(
                 &child,
                 depth - 1,
                 plies_from_root + 1,
@@ -171,21 +190,29 @@ fn minimax(
                 visited,
                 budget,
                 transpositions,
-            ));
-            alpha = alpha.max(value);
+            );
+            if child_result.score > best.score {
+                let mut line = actions;
+                line.extend(child_result.line);
+                best = SearchResult {
+                    score: child_result.score,
+                    line,
+                };
+            }
+            alpha = alpha.max(best.score);
             if alpha >= beta || *visited >= budget {
                 break;
             }
         }
-        transpositions.insert(key, value);
-        value
+        transpositions.insert(key, best.clone());
+        best
     } else {
-        let mut value = MATE;
+        let mut best = SearchResult::leaf(MATE);
         for actions in moves {
             let Some(child) = apply_actions(state.clone(), &actions) else {
                 continue;
             };
-            value = value.min(minimax(
+            let child_result = minimax(
                 &child,
                 depth - 1,
                 plies_from_root + 1,
@@ -194,14 +221,22 @@ fn minimax(
                 visited,
                 budget,
                 transpositions,
-            ));
-            beta = beta.min(value);
+            );
+            if child_result.score < best.score {
+                let mut line = actions;
+                line.extend(child_result.line);
+                best = SearchResult {
+                    score: child_result.score,
+                    line,
+                };
+            }
+            beta = beta.min(best.score);
             if alpha >= beta || *visited >= budget {
                 break;
             }
         }
-        transpositions.insert(key, value);
-        value
+        transpositions.insert(key, best.clone());
+        best
     }
 }
 
@@ -377,7 +412,10 @@ fn animals() -> [Animal; 16] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use snipe_core::{CardMultiset, InitialStateBuilder};
+    use snipe_core::{
+        AnimalDrop, AnimalStep, CardMultiset, InitialStateBuilder, Rank, SnipeStep, StepDirection,
+    };
+    use snipe_prng::initial_state;
 
     fn cards(cards: &[(Card, Player)]) -> CardMultiset {
         cards
@@ -411,6 +449,114 @@ mod tests {
         .unwrap()
     }
 
+    fn animal(name: &str) -> Animal {
+        match name {
+            "Rat" => Animal::Mouse,
+            "Ox" => Animal::Ox,
+            "Tiger" => Animal::Tiger,
+            "Rabbit" => Animal::Rabbit,
+            "Dragon" => Animal::Dragon,
+            "Snake" => Animal::Snake,
+            "Horse" => Animal::Horse,
+            "Ram" => Animal::Ram,
+            "Monkey" => Animal::Monkey,
+            "Rooster" => Animal::Rooster,
+            "Dog" => Animal::Dog,
+            "Boar" => Animal::Boar,
+            "Fish" => Animal::Fish,
+            "Elephant" => Animal::Elephant,
+            "Squid" => Animal::Squid,
+            "Frog" => Animal::Frog,
+            _ => panic!("unknown animal {name}"),
+        }
+    }
+
+    fn rank(notation: &str) -> Rank {
+        match notation
+            .bytes()
+            .find(|byte| byte.is_ascii_digit())
+            .expect("move notation has a rank")
+        {
+            b'1' => Rank::R1,
+            b'2' => Rank::R2,
+            b'3' => Rank::R3,
+            b'4' => Rank::R4,
+            b'5' => Rank::R5,
+            b'6' => Rank::R6,
+            value => panic!("invalid rank {}", char::from(value)),
+        }
+    }
+
+    fn action(notation: &str) -> Action {
+        let (actor, movement) = notation
+            .split_once(' ')
+            .expect("move notation has an actor and movement");
+        let destination = rank(movement);
+        if actor == "Alpha" || actor == "Beta" {
+            Action::SnipeStep(SnipeStep { destination })
+        } else if movement.starts_with('&') {
+            Action::Drop(AnimalDrop {
+                actor: animal(actor),
+                destination,
+            })
+        } else {
+            Action::AnimalStep(AnimalStep {
+                actor: animal(actor),
+                direction: if movement.starts_with('*') {
+                    StepDirection::Retreat
+                } else {
+                    StepDirection::Advance
+                },
+                destination,
+            })
+        }
+    }
+
+    fn screenshot_position() -> State {
+        const HISTORY: &str = "\
+1b. Ox 4, Fish 4x
+2a. Dragon 3, Squid *1
+3b. Dog 4, Boar 4
+4a. Ram 3, Boar 3
+5b. Tiger 4x, Horse 5
+6a. Ox 3, Tiger 3
+7b. Elephant &6
+8a. Rabbit *1, Squid 2
+9b. Ox &4
+10a. Ram *1, Boar *2
+11b. Ox 3, Rooster 4
+12a. Fish 3, Squid 3x
+13b. Tiger 3, Rat 4
+14a. Snake 3, Squid 4
+15b. Dog &2
+16a. Tiger &2
+17b. Tiger 2x, Rat 3
+18a. Rooster 2, Squid 5
+19b. Boar &5
+20a. Rabbit 2, Rooster 3
+21b. Boar &3
+22a. Dragon &2
+23b. Rat 2, Boar 2x
+24a. Fish &6
+25b. Rat 4, Elephant 5x
+26a. Dragon &2
+27b. Rooster 3, Boar 1
+28a. Monkey 2, Snake 4
+29b. Dragon &1
+30a. Rooster 4, Snake 5
+31b. Horse &2";
+        let mut state = initial_state(0);
+        for line in HISTORY.lines() {
+            let (_, moves) = line.split_once(". ").expect("history line has a prefix");
+            for notation in moves.split(", ") {
+                state = state
+                    .apply(action(notation))
+                    .unwrap_or_else(|error| panic!("{line}: {notation} is illegal: {error:?}"));
+            }
+        }
+        state
+    }
+
     #[test]
     fn always_writes_a_legal_complete_ply() {
         let state = state();
@@ -422,6 +568,72 @@ mod tests {
         assert!(!line.is_empty());
         let child = apply_actions(state, &line).unwrap();
         assert!(child.active_player == Player::Alpha || child.winner().is_some());
+    }
+
+    #[test]
+    fn writes_the_searched_multi_ply_principal_variation() {
+        let state = state();
+        let root_player = state.active_player;
+        let candidate_count = full_plies(&state).len();
+        let mut analyzer = AvocadoAnalyzer::new();
+        analyzer.set_state(state.clone());
+
+        // Finish the one-ply pass, then search every root candidate deeply
+        // enough to choose and retain the opponent's reply.
+        analyzer.think(candidate_count * 2);
+
+        let mut line = Vec::new();
+        analyzer.write_optimal_lop(&mut line);
+        let mut replay = state;
+        let mut completed_plies = 0;
+        let mut active_player = root_player;
+        for action in line {
+            replay = replay.apply(action).unwrap();
+            if replay.winner().is_some() || replay.active_player != active_player {
+                completed_plies += 1;
+                active_player = replay.active_player;
+            }
+        }
+
+        assert!(
+            completed_plies >= 2 || replay.winner().is_some(),
+            "the line should include a searched reply, not only the root ply"
+        );
+    }
+
+    #[test]
+    fn mate_in_three_score_includes_the_three_ply_mating_line() {
+        let state = screenshot_position();
+        let candidate_count = full_plies(&state).len();
+        let mut analyzer = AvocadoAnalyzer::new();
+        analyzer.set_state(state.clone());
+
+        analyzer.think(candidate_count * 20);
+
+        let mate = match analyzer.evaluation() {
+            Evaluation::MateInN(mate) => mate,
+            Evaluation::Estimate(estimate) => {
+                panic!("expected mate-in-3, got estimate {estimate:?}")
+            }
+        };
+        assert_eq!(mate.winner(), Player::Alpha);
+        assert_eq!(mate.plies(), 3);
+
+        let mut line = Vec::new();
+        analyzer.write_optimal_lop(&mut line);
+        let mut replay = state;
+        let mut completed_plies = 0;
+        let mut active_player = replay.active_player;
+        for action in line {
+            replay = replay.apply(action).unwrap();
+            if replay.winner().is_some() || replay.active_player != active_player {
+                completed_plies += 1;
+                active_player = replay.active_player;
+            }
+        }
+
+        assert_eq!(completed_plies, mate.plies());
+        assert_eq!(replay.winner(), Some(mate.winner()));
     }
 
     #[test]

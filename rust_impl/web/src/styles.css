@@ -389,6 +389,7 @@ button {
 .sidebar {
   display: grid;
   gap: 14px;
+  min-width: 0;
 }
 
 .control-card {
@@ -529,6 +530,7 @@ input[type="text"] {
 }
 
 .history-card {
+  min-width: 0;
   min-height: 180px;
 }
 
@@ -729,6 +731,7 @@ input[type="text"] {
 .history-analysis__advice {
   display: grid;
   gap: 4px;
+  min-width: 0;
   margin-top: 10px;
   padding: 10px 0 11px;
   border-top: 1px solid rgba(83, 101, 126, 0.15);
@@ -736,14 +739,24 @@ input[type="text"] {
 
 .suggested-line {
   display: flex;
-  flex-wrap: wrap;
-  gap: 7px 12px;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
   margin: 0;
-  padding: 0;
+  padding: 3px 0 7px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-inline: contain;
+  scrollbar-color: rgba(83, 101, 126, 0.42) transparent;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
   list-style: none;
 }
 
 .suggested-line__ply {
+  flex: 0 0 auto;
   min-width: 0;
   font-size: 0.76rem;
   line-height: 1.35;

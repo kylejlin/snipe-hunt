@@ -1,0 +1,78 @@
+// Beta: Human
+// Alpha: Computer (Cherry) (10 seconds of thinking time per ply)
+// Export Date: 2026-07-28
+// Note that the Computer was given a material handicap: It started with 5 major animals, instead of the usual 4.
+// Likewise, the Human only had 3 major animals.
+// Despite this, the Human still won.
+
+0b. =Dragon; Rooster Dog Beta; Rat Ox Tiger Rabbit Snake Ram Rooster Dog Boar Boar Fish Frog; Snake
+0a. =Horse; Dragon Fish Alpha; Rat Ox Tiger Rabbit Horse Ram Monkey Monkey Elephant Elephant Squid Squid; Frog
+1b. Rabbit 4, Rat 4
+2a. Ox 3, Tiger 3
+3b. Ram 4, Snake 4
+4a. Ox 4, Rabbit 3
+5b. Tiger 4, Boar 4x
+6a. Frog 4, Squid 3
+7b. Fish 4, Ox 4x
+8a. Rabbit 4, Fish 2
+9b. Tiger &5
+10a. Squid 4, Rabbit *3
+11b. Tiger 4, Dog 4x
+12a. Rabbit 4, Horse 3
+13b. Tiger &5
+14a. Squid 3x, Rabbit 5
+15b. Boar *6, Dog 5x
+16a. Tiger &6
+17b. Tiger &5
+18a. Horse &5
+19b. Rooster 5x, Boar 5
+20a. Ram 3, Squid 4
+21b. Rat &5
+22a. Squid 5, Rat 3
+23b. Beta 5
+24a. Rat 4, Fish 3
+25b. Rat *6, Boar *6x
+26a. Fish 4, Elephant 3
+27b. Squid &5
+28a. Fish 5, Elephant 3
+29b. Fish &5
+30a. Elephant 4, Ram 4x
+31b. Rabbit &4
+32a. Squid 6, Ram *3
+33b. Beta *6
+34a. Dragon 2, Ram 4
+35b. Rabbit *5x, Boar 5
+36a. Rat &4
+37b. Rat &6
+38a. Elephant &6
+39b. Beta 5
+40a. Rat 5, Squid *5
+41b. Boar *6x, Rabbit *6
+42a. Horse &3
+43b. Beta *6
+44a. Squid 6, Elephant 4
+45b. Snake &6
+46a. Ram 5, Dragon 3
+47b. Fish &6
+48a. Dragon 4, Ram 6
+49b. Horse &6
+50a. Ram *5, Rat 6
+51b. Boar &3
+52a. Horse 4, Monkey 3
+53b. Rat &3
+54a. Elephant 5, Rat *5x
+55b. Rabbit &3
+56a. Horse 5, Rat 6
+57b. Ram &3
+58a. Dog &5
+59b. Fish 5, Snake 5x
+60a. Squid *5, Rat *5
+61b. Snake *6, Rat 2
+62a. Monkey 4, Rat 6
+63b. Ram *4x, Boar 2
+64a. Rat *5, Monkey 3
+65b. Tiger &1
+66a. Alpha 2
+67b. Tiger &3
+68a. Alpha 3
+69b. Rat *3, Boar *3x-#0

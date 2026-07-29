@@ -1,0 +1,37 @@
+// Export Date: 2026-07-28
+
+0b. =Elephant; Horse Elephant Beta; Rat Rat Ox Tiger Rabbit Horse Monkey Rooster Dog Boar Fish Squid; Snake
+0a. =Dog; Monkey Rooster Alpha; Ox Tiger Rabbit Dragon Snake Ram Ram Boar Fish Squid Frog Frog; Dragon
+1b. Ox 4, Fish 4x
+2a. Dragon 3, Squid *1
+3b. Dog 4, Boar 4
+4a. Ram 3, Boar 3
+5b. Tiger 4x, Horse 5
+6a. Ox 3, Tiger 3
+7b. Elephant &6
+8a. Rabbit *1, Squid 2
+9b. Ox &4
+10a. Ram *1, Boar *2
+11b. Ox 3, Rooster 4
+12a. Fish 3, Squid 3x
+13b. Tiger 3, Rat 4
+14a. Snake 3, Squid 4
+15b. Dog &2
+16a. Tiger &2
+17b. Tiger 2x, Rat 3
+18a. Rooster 2, Squid 5
+19b. Boar &5
+20a. Rabbit 2, Rooster 3
+21b. Boar &3
+22a. Dragon &2
+23b. Rat 2, Boar 2x
+24a. Fish &6
+25b. Rat 4, Elephant 5x
+26a. Dragon &2
+27b. Rooster 3, Boar 1
+28a. Monkey 2, Snake 4
+29b. Dragon &1
+30a. Rooster 4, Snake 5
+31b. Horse &2
+32a. Ram &4
+33b. Rabbit &3

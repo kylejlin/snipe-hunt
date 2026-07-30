@@ -1,0 +1,2 @@
+checkpoint,training_steps,opponent,seed,eel_side,result,plies,eel_ticks,older_ticks
+training/eel-main/latest.bin,40600,Avocado,0,Alpha,loss,19,1574186,27537

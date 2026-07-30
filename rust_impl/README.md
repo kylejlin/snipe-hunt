@@ -9,6 +9,12 @@ The active implementation is intentionally small and dependency-directed:
 - `crates/agent-cherry` is a policy/value MCTS analyzer learned from rules-only
   self-play.
 - `crates/cherry-train` is Cherry's resumable native self-play trainer.
+- `crates/agent-eel` is a wider, deeper residual policy/value MCTS analyzer.
+- `crates/eel-train` is Eel's resumable rules-only self-play trainer and
+  reproducible external tournament runner.
+- `crates/agent-fajita` is an independent fresh-weight clone of Eel's neural
+  architecture.
+- `crates/fajita-train` is Fajita's high-quality, rules-only self-play trainer.
 - `crates/snipe-wasm` is the browser bridge over Core and the three agents.
 - `web` is the React game and analysis UI.
 
@@ -101,10 +107,86 @@ cargo run --release -p cherry-train -- publish --run-dir training/cherry-main
 npm --prefix web run build:wasm
 ```
 
+## Train Eel
+
+Eel starts from deterministic fresh random weights. Its trainer does not load
+Cherry or Avocado weights, replay, evaluations, or training labels. Those older
+agents are available only to the explicit tournament command.
+
+```sh
+cargo run --release -p eel-train -- nightly \
+  --run-dir training/eel-main \
+  --hours 8 \
+  --simulations 128
+
+cargo run --release -p eel-train -- status --run-dir training/eel-main
+```
+
+Eel has a 256-unit trunk with four residual layers, compared with Cherry's
+128-unit trunk and one residual layer. The larger forward and backward passes
+are an intentional capacity-for-walltime tradeoff.
+
+After 200,000 optimizer steps the trainer halves its learning rate. If an
+internal arena candidate scores below 45% against the validated champion, the
+trainer restores that champion, resets Adam's moments, and retains the Eel-only
+replay window. The same recovery can be requested explicitly with
+`eel-train recover`.
+
+Run the requested paired-seed handicap tournaments with durable game logs:
+The runner fails fast after Eel's first loss or draw, because the required
+perfect result is no longer attainable.
+
+```sh
+cargo run --release -p eel-train -- tournament \
+  --run-dir training/eel-main \
+  --opponent cherry \
+  --checkpoint latest \
+  --pairs 10 \
+  --eel-ms 5000 \
+  --older-ms 10000 \
+  --log-dir ../eel_vs_cherry
+
+cargo run --release -p eel-train -- tournament \
+  --run-dir training/eel-main \
+  --opponent avocado \
+  --checkpoint latest \
+  --pairs 10 \
+  --eel-ms 5000 \
+  --older-ms 10000 \
+  --log-dir ../eel_vs_avocado
+```
+
 The run directory is ignored by Git; only an explicitly published checkpoint
 is shipped. Self-play and search treat a repeated position or 256-action game
 as a neutral training outcome so the workflow always terminates. This does not
 add a draw rule to Snipe Hunt itself.
+
+## Train Fajita
+
+Fajita has Eel's 256-unit trunk and four residual layers, but its model,
+optimizer, replay formats, initialization seed, and default run directory are
+independent. A fresh Fajita run cannot load Eel checkpoints and never consumes
+Eel, Cherry, or Avocado weights or training data.
+
+Fajita prioritizes self-play quality from game one. Its default search budget
+matches Cherry's trainer: 512 simulations per action, raised for wide positions
+to at least three times the legal branching factor and capped at 1,536.
+
+```sh
+cargo run --release -p fajita-train -- nightly \
+  --run-dir training/fajita-main \
+  --hours 8
+
+cargo run --release -p fajita-train -- status \
+  --run-dir training/fajita-main
+```
+
+Training checkpoints are resumable. Fajita uses only internal paired-seed
+arenas for champion promotion and regression recovery; external-agent
+tournaments are intentionally outside this training sprint.
+Fajita enters its lower-rate mature optimization phase after 150,000 updates,
+which keeps later champion branches stable without altering their weights or
+replay history.
 
 ## Browser behavior
 

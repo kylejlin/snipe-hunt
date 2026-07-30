@@ -1,0 +1,3 @@
+checkpoint,training_steps,opponent,seed,eel_side,result,plies,eel_ticks,older_ticks
+training/eel-main/latest.bin,40600,Cherry,0,Alpha,loss,15,1223016,19850079
+training/eel-main/latest.bin,40600,Cherry,0,Beta,loss,22,1861394,19446748

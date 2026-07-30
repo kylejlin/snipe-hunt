@@ -34,6 +34,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent-eel"
+version = "0.1.0"
+dependencies = [
+ "snipe-core",
+ "snipe-prng",
+]
+
+[[package]]
+name = "agent-fajita"
+version = "0.1.0"
+dependencies = [
+ "snipe-core",
+ "snipe-prng",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -62,6 +78,26 @@ dependencies = [
  "agent-blueberry",
  "agent-cherry",
  "agent-dumpling",
+ "snipe-core",
+ "snipe-prng",
+]
+
+[[package]]
+name = "eel-train"
+version = "0.1.0"
+dependencies = [
+ "agent-avocado",
+ "agent-cherry",
+ "agent-eel",
+ "snipe-core",
+ "snipe-prng",
+]
+
+[[package]]
+name = "fajita-train"
+version = "0.1.0"
+dependencies = [
+ "agent-fajita",
  "snipe-core",
  "snipe-prng",
 ]

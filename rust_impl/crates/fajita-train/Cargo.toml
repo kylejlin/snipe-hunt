@@ -1,0 +1,14 @@
+[package]
+name = "fajita-train"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[[bin]]
+name = "fajita-train"
+path = "src/main.rs"
+
+[dependencies]
+agent-fajita = { path = "../agent-fajita", features = ["training"] }
+snipe-core = { path = "../snipe-core" }
+snipe-prng = { path = "../snipe-prng" }

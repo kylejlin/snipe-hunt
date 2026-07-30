@@ -1,0 +1,31 @@
+// Beta: Eel (5 seconds per ply)
+// Alpha: Cherry (10 seconds per ply)
+// Seed: 0
+
+0b. =Elephant; Horse Elephant Beta; Rat Rat Ox Tiger Rabbit Horse Monkey Rooster Dog Boar Fish Squid; Snake
+0a. =Dog; Monkey Rooster Alpha; Ox Tiger Rabbit Dragon Snake Ram Ram Boar Fish Squid Frog Frog; Dragon
+1b. Rat 4, Fish 4
+2a. Dragon 3, Rooster 2
+3b. Fish 3, Rooster 4
+4a. Frog 3, Rabbit 3x
+5b. Rabbit 4, Horse 5x
+6a. Frog &6
+7b. Beta 5
+8a. Fish &4
+9b. Snake 3, Rooster 3
+10a. Fish 3x, Monkey 2
+11b. Elephant &3
+12a. Ox 3, Snake 3x
+13b. Boar &5
+14a. Ram 3, Snake 4x
+15b. Tiger &4
+16a. Fish &5
+17b. Horse 4, Boar 4x
+18a. Snake &4
+19b. Snake &3
+20a. Rabbit &4
+21b. Horse &2
+22a. Rabbit 5, Snake 5x+#0
+
+// Result: older agent won
+// Winner: Some(Alpha)

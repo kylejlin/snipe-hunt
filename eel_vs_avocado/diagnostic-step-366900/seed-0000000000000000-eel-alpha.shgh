@@ -1,0 +1,26 @@
+// Beta: Avocado (10 seconds per ply)
+// Alpha: Eel (5 seconds per ply)
+// Seed: 0
+
+0b. =Elephant; Horse Elephant Beta; Rat Rat Ox Tiger Rabbit Horse Monkey Rooster Dog Boar Fish Squid; Snake
+0a. =Dog; Monkey Rooster Alpha; Ox Tiger Rabbit Dragon Snake Ram Ram Boar Fish Squid Frog Frog; Dragon
+1b. Monkey 4, Horse 5x
+2a. Rabbit *1, Ox 3
+3b. Tiger &1
+4a. Dragon 4, Ram 3
+5b. Elephant 5, Horse 4x
+6a. Ram 3, Rooster 2x
+7b. Rooster &1
+8a. Dog &6
+9b. Dog &2
+10a. Alpha 2
+11b. Snake &3
+12a. Snake &3
+13b. Fish &3
+14a. Alpha 3
+15b. Ox &4
+16a. Ram 4, Monkey 2
+17b. Dog 1x, Ox 3x-#0
+
+// Result: older agent won
+// Winner: Some(Beta)

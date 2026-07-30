@@ -1,7 +1,6 @@
 mod history;
 
 use agent_avocado::AvocadoAnalyzer;
-use agent_blueberry::BlueberryAnalyzer;
 use agent_cherry::CherryAnalyzer;
 use agent_dumpling::v1::DumplingV1Analyzer;
 use snipe_core::{Action, Analyzer, Evaluation, Player, State};
@@ -24,7 +23,6 @@ const DEFAULT_MAX_PLIES: u32 = 256;
 enum AgentKind {
     V1,
     Avocado,
-    Blueberry,
     Cherry,
 }
 
@@ -33,7 +31,6 @@ impl AgentKind {
         match value.to_ascii_lowercase().as_str() {
             "v1" | "dumpling-v1" => Ok(Self::V1),
             "avocado" => Ok(Self::Avocado),
-            "blueberry" => Ok(Self::Blueberry),
             "cherry" => Ok(Self::Cherry),
             _ => Err(format!("unknown agent `{value}`")),
         }
@@ -43,7 +40,6 @@ impl AgentKind {
         match self {
             Self::V1 => "Dumpling v1",
             Self::Avocado => "Avocado",
-            Self::Blueberry => "Blueberry",
             Self::Cherry => "Cherry",
         }
     }
@@ -52,7 +48,6 @@ impl AgentKind {
         match self {
             Self::V1 => ArenaAgent::V1(Box::new(DumplingV1Analyzer::new())),
             Self::Avocado => ArenaAgent::Avocado(AvocadoAnalyzer::new()),
-            Self::Blueberry => ArenaAgent::Blueberry(BlueberryAnalyzer::new()),
             Self::Cherry => ArenaAgent::Cherry(CherryAnalyzer::new()),
         }
     }
@@ -61,7 +56,6 @@ impl AgentKind {
 enum ArenaAgent {
     V1(Box<DumplingV1Analyzer>),
     Avocado(AvocadoAnalyzer),
-    Blueberry(BlueberryAnalyzer),
     Cherry(CherryAnalyzer),
 }
 
@@ -70,7 +64,6 @@ impl ArenaAgent {
         match self {
             Self::V1(agent) => agent.set_state(state),
             Self::Avocado(agent) => agent.set_state(state),
-            Self::Blueberry(agent) => agent.set_state(state),
             Self::Cherry(agent) => agent.set_state(state),
         }
     }
@@ -79,7 +72,6 @@ impl ArenaAgent {
         match self {
             Self::V1(agent) => agent.think_for_one_tick(),
             Self::Avocado(agent) => agent.think_for_one_tick(),
-            Self::Blueberry(agent) => agent.think_for_one_tick(),
             Self::Cherry(agent) => agent.think_for_one_tick(),
         }
     }
@@ -88,7 +80,6 @@ impl ArenaAgent {
         match self {
             Self::V1(agent) => agent.evaluation(),
             Self::Avocado(agent) => agent.evaluation(),
-            Self::Blueberry(agent) => agent.evaluation(),
             Self::Cherry(agent) => agent.evaluation(),
         }
     }
@@ -98,7 +89,6 @@ impl ArenaAgent {
         match self {
             Self::V1(agent) => agent.write_optimal_lop(&mut line),
             Self::Avocado(agent) => agent.write_optimal_lop(&mut line),
-            Self::Blueberry(agent) => agent.write_optimal_lop(&mut line),
             Self::Cherry(agent) => agent.write_optimal_lop(&mut line),
         }
         line
@@ -219,7 +209,7 @@ fn parse<T: std::str::FromStr>(flag: &str, value: &str) -> Result<T, String> {
 }
 
 fn usage() -> &'static str {
-    "usage: dumpling-arena [--challenger v1] [--opponent avocado|blueberry|cherry|v1] \
+    "usage: dumpling-arena [--challenger v1] [--opponent avocado|cherry|v1] \
      [--pairs 10] [--challenger-ms 5000] [--older-ms 10000] [--seed-start 0] \
      [--max-plies 256] [--side alpha|beta] [--trace] [--trace-state]"
 }

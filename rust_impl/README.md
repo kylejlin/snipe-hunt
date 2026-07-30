@@ -5,14 +5,13 @@ The active implementation is intentionally small and dependency-directed:
 - `crates/snipe-core` is the authoritative rules and public `Analyzer` contract.
 - `crates/snipe-prng` owns reproducible seeded deals and random mixing.
 - `crates/agent-avocado` is a deterministic, patient alpha-beta analyzer.
-- `crates/agent-blueberry` is an aggressive, policy-guided Monte Carlo analyzer.
 - `crates/agent-cherry` is a policy/value MCTS analyzer learned from rules-only
   self-play.
 - `crates/cherry-train` is Cherry's resumable native self-play trainer.
 - `crates/agent-fajita` is a wide residual policy/value MCTS analyzer trained
   from independent fresh weights.
 - `crates/fajita-train` is Fajita's high-quality, rules-only self-play trainer.
-- `crates/snipe-wasm` is the browser bridge over Core and the four browser
+- `crates/snipe-wasm` is the browser bridge over Core and the three browser
   agents.
 - `web` is the React game and analysis UI.
 
@@ -57,7 +56,7 @@ npm run build
 
 Cherry starts from deterministic random weights and learns only from legal
 self-play and the final winner. It does not consume game logs, human strategy
-notes, Avocado evaluations, Blueberry evaluations, material scores, or any
+notes, other agent evaluations, material scores, or any
 other hand-authored Snipe Hunt heuristic.
 
 From `rust_impl`, start or resume the main run:

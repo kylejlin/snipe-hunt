@@ -5,7 +5,6 @@
 //! pieces in one location are interchangeable, exactly as they are in Core.
 
 use agent_avocado::AvocadoAnalyzer;
-use agent_blueberry::BlueberryAnalyzer;
 use agent_cherry::CherryAnalyzer;
 use agent_fajita::FajitaAnalyzer;
 use serde::{Deserialize, Serialize};
@@ -26,7 +25,6 @@ const BATCH_TICKS: usize = 8;
 #[serde(rename_all = "lowercase")]
 enum Strategy {
     Avocado,
-    Blueberry,
     Cherry,
     Fajita,
 }
@@ -35,7 +33,6 @@ impl Strategy {
     fn label(self) -> &'static str {
         match self {
             Self::Avocado => "Avocado",
-            Self::Blueberry => "Blueberry",
             Self::Cherry => "Cherry",
             Self::Fajita => "Fajita",
         }
@@ -44,7 +41,6 @@ impl Strategy {
 
 enum BrowserAnalyzer {
     Avocado(AvocadoAnalyzer),
-    Blueberry(BlueberryAnalyzer),
     Cherry(CherryAnalyzer),
     Fajita(FajitaAnalyzer),
 }
@@ -56,11 +52,6 @@ impl BrowserAnalyzer {
                 let mut analyzer = AvocadoAnalyzer::new();
                 analyzer.set_state(state);
                 Self::Avocado(analyzer)
-            }
-            Strategy::Blueberry => {
-                let mut analyzer = BlueberryAnalyzer::new();
-                analyzer.set_state(state);
-                Self::Blueberry(analyzer)
             }
             Strategy::Cherry => {
                 let mut analyzer = CherryAnalyzer::new();
@@ -78,7 +69,6 @@ impl BrowserAnalyzer {
     fn think(&mut self, ticks: usize) {
         match self {
             Self::Avocado(analyzer) => analyzer.think(ticks),
-            Self::Blueberry(analyzer) => analyzer.think(ticks),
             Self::Cherry(analyzer) => analyzer.think(ticks),
             Self::Fajita(analyzer) => analyzer.think(ticks),
         }
@@ -87,7 +77,6 @@ impl BrowserAnalyzer {
     fn evaluation(&self) -> Evaluation {
         match self {
             Self::Avocado(analyzer) => analyzer.evaluation(),
-            Self::Blueberry(analyzer) => analyzer.evaluation(),
             Self::Cherry(analyzer) => analyzer.evaluation(),
             Self::Fajita(analyzer) => analyzer.evaluation(),
         }
@@ -97,7 +86,6 @@ impl BrowserAnalyzer {
         let mut actions = Vec::new();
         match self {
             Self::Avocado(analyzer) => analyzer.write_optimal_lop(&mut actions),
-            Self::Blueberry(analyzer) => analyzer.write_optimal_lop(&mut actions),
             Self::Cherry(analyzer) => analyzer.write_optimal_lop(&mut actions),
             Self::Fajita(analyzer) => analyzer.write_optimal_lop(&mut actions),
         }
@@ -1257,10 +1245,10 @@ mod tests {
             position: state_to_dto(&state, 7_071, 1),
             time_limit_ms: 1,
             request_id: 1,
-            strategy: Strategy::Blueberry,
+            strategy: Strategy::Avocado,
             first_step: Some(action_selector(&state, first).unwrap()),
         };
-        let mut analyzer = BrowserAnalyzer::new(Strategy::Blueberry, after_first);
+        let mut analyzer = BrowserAnalyzer::new(Strategy::Avocado, after_first);
         analyzer.think(1);
 
         let update = analysis_update(&request, &state, Some(first), &analyzer, 1, 0.0).unwrap();

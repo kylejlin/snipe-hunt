@@ -71,7 +71,7 @@ const { services, move, applyMove } = vi.hoisted(() => {
     ticks: 1,
     elapsedMs: 1,
     recommendedLine: [move],
-    strategy: "blueberry",
+    strategy: "cherry",
     engineName: "test",
   });
   const applyMove = vi.fn(() => after);
@@ -204,14 +204,17 @@ describe("value-semantic card interaction", () => {
 describe("presentation contract", () => {
   it("shows the package version", () => {
     render(<App />);
-    expect(screen.getByText("Version 0.45.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.46.0")).toBeInTheDocument();
   });
 
-  it("offers Fajita as a strategy", () => {
+  it("lists the remaining strategies alphabetically", () => {
     render(<App />);
-    expect(
-      screen.getByRole("option", { name: "Fajita" }),
-    ).toBeInTheDocument();
+    const strategy = screen.getByLabelText("Strategy") as HTMLSelectElement;
+    expect(Array.from(strategy.options, ({ text }) => text)).toEqual([
+      "Avocado",
+      "Cherry",
+      "Fajita",
+    ]);
   });
 
   it("formats Alpha evaluations", () => {

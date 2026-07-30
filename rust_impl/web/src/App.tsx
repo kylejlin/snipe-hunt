@@ -61,12 +61,14 @@ const locations: Location[] = [
   "beta-reserve",
 ];
 const CARD_MOVE_DURATION_MS = 200;
+const strategies: ReadonlyArray<{ value: Strategy; label: string }> = [
+  { value: "avocado", label: "Avocado" },
+  { value: "cherry", label: "Cherry" },
+  { value: "fajita", label: "Fajita" },
+];
 
 function strategyLabel(strategy: Strategy): string {
-  if (strategy === "cherry") return "Cherry";
-  if (strategy === "blueberry") return "Blueberry";
-  if (strategy === "fajita") return "Fajita";
-  return "Avocado";
+  return strategies.find(({ value }) => value === strategy)?.label ?? strategy;
 }
 
 interface MovingCard {
@@ -1685,10 +1687,11 @@ function GameApp() {
                   }));
                 }}
               >
-                <option value="cherry">Cherry</option>
-                <option value="fajita">Fajita</option>
-                <option value="blueberry">Blueberry</option>
-                <option value="avocado">Avocado</option>
+                {strategies.map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
               </select>
             </label>
 

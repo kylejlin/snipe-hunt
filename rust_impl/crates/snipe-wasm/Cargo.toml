@@ -10,7 +10,6 @@ path = "src/lib.rs"
 
 [dependencies]
 agent-avocado = { path = "../agent-avocado" }
-agent-blueberry = { path = "../agent-blueberry" }
 agent-cherry = { path = "../agent-cherry" }
 agent-fajita = { path = "../agent-fajita" }
 js-sys = "0.3"

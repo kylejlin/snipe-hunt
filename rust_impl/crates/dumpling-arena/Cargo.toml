@@ -10,7 +10,6 @@ path = "src/main.rs"
 
 [dependencies]
 agent-avocado = { path = "../agent-avocado" }
-agent-blueberry = { path = "../agent-blueberry" }
 agent-cherry = { path = "../agent-cherry" }
 agent-dumpling = { path = "../agent-dumpling" }
 snipe-core = { path = "../snipe-core" }

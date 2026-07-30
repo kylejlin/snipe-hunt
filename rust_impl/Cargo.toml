@@ -4,7 +4,6 @@ members = [
     "crates/snipe-core",
     "crates/snipe-prng",
     "crates/agent-avocado",
-    "crates/agent-blueberry",
     "crates/agent-cherry",
     "crates/agent-fajita",
     "crates/agent-dumpling",

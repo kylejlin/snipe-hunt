@@ -194,6 +194,54 @@ Fajita enters its lower-rate mature optimization phase after 150,000 updates,
 which keeps later champion branches stable without altering their weights or
 replay history.
 
+### Train on a 13-inch Intel MacBook Pro
+
+From `rust_impl`, this thermal-conscious command caps both self-play and
+promotion arenas at three worker threads, leaving CPU headroom on a quad-core
+13-inch Intel MacBook Pro, and prevents idle system sleep:
+
+```sh
+caffeinate -i cargo run --release -p fajita-train -- nightly \
+  --run-dir training/fajita-main \
+  --hours 8 \
+  --workers 3 \
+  --progress-reports on
+```
+
+Keep the MacBook plugged in with its lid open and unobstructed ventilation.
+The display may sleep. `caffeinate -i` ends when the trainer exits, and the
+trainer writes a completion report after its training window finishes.
+
+### Move Fajita training between computers
+
+The resumable run is ignored by Git, so it must be transferred separately.
+Always stop the trainer before exporting or importing. From `rust_impl`, create
+a timestamped, checksummed archive:
+
+```sh
+./scripts/export-fajita-training.sh
+```
+
+By default the archive is written to the Git-ignored `training/exports/`
+directory. An explicit destination may be supplied instead:
+
+```sh
+./scripts/export-fajita-training.sh ~/Desktop/fajita-main.tar.gz
+```
+
+Upload that archive to Google Drive. After downloading it on the other
+computer, import it from that computer's `rust_impl` directory:
+
+```sh
+./scripts/import-fajita-training.sh ~/Downloads/fajita-main.tar.gz
+```
+
+The import checks every archived file, asks the local release trainer to load
+the run, and only then installs it as `training/fajita-main`. If a run already
+exists, it is retained under `training/backups/`. The workflow is symmetric:
+to move training back, export on the Intel MacBook and import the resulting
+archive on the original computer.
+
 Publishing validates the run's fresh-seed purity marker and requires at least
 one promoted champion. It always embeds `champion.bin`, never the potentially
 unvalidated `latest.bin`:

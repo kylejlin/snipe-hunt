@@ -517,6 +517,7 @@ fn train(
                         simulations,
                         run.games,
                         PROMOTION_PAIRS,
+                        workers,
                     );
                     let mut decision = ArenaDecision::Continued;
                     if result.lower_95 > 0.5 {
@@ -739,8 +740,9 @@ fn paired_arena(
     simulations: usize,
     round: u64,
     pairs: usize,
+    workers: usize,
 ) -> ArenaResult {
-    let worker_count = default_workers().min(pairs.max(1));
+    let worker_count = workers.max(1).min(pairs.max(1));
     let (sender, receiver) = mpsc::channel();
     thread::scope(|scope| {
         for worker in 0..worker_count {
@@ -828,7 +830,14 @@ fn model_match(
 
 fn evaluate(run_dir: &Path, pairs: usize, simulations: usize) -> io::Result<()> {
     let run = load_run(run_dir)?;
-    let result = paired_arena(&run.model, &run.champion, simulations, run.games, pairs);
+    let result = paired_arena(
+        &run.model,
+        &run.champion,
+        simulations,
+        run.games,
+        pairs,
+        default_workers(),
+    );
     println!(
         "latest step {} vs champion step {}: score={:.3}, lower95={:.3}, games={}",
         run.model.training_steps,

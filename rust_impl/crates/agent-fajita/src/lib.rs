@@ -1,8 +1,8 @@
 //! Fajita: a wide residual policy/value MCTS agent.
 //!
-//! Fajita has the same 256-unit, four-residual-layer architecture as Eel, but
-//! uses an independent initialization seed and incompatible checkpoint and
-//! optimizer formats. Its weights therefore always begin from a clean slate.
+//! Fajita uses a 256-unit, four-residual-layer architecture with its own
+//! initialization seed and checkpoint and optimizer formats. Its weights
+//! therefore always begin from a clean slate.
 
 use snipe_core::{
     Action, ActionWriter, Analyzer, Animal, Card, Evaluation, EvaluationEstimate, MateInN, Player,
@@ -1067,9 +1067,9 @@ mod tests {
     }
 
     #[test]
-    fn rejects_eel_checkpoint_format() {
+    fn rejects_checkpoint_with_foreign_magic() {
         let mut bytes = Model::seeded(INITIAL_SEED).to_bytes();
-        bytes[..8].copy_from_slice(b"EELNET01");
+        bytes[..8].copy_from_slice(b"OTHER001");
         assert!(Model::from_bytes(&bytes).is_err());
     }
 

@@ -6,12 +6,10 @@ members = [
     "crates/agent-avocado",
     "crates/agent-blueberry",
     "crates/agent-cherry",
-    "crates/agent-eel",
     "crates/agent-fajita",
     "crates/agent-dumpling",
     "crates/dumpling-arena",
     "crates/cherry-train",
-    "crates/eel-train",
     "crates/fajita-train",
     "crates/snipe-wasm",
 ]

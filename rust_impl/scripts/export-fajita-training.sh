@@ -53,9 +53,9 @@ done
 grep -qx 'purity=rules-only-fresh-seed' "$RUN_DIR/state.txt" ||
     fail "state.txt is missing Fajita's rules-only fresh-seed marker"
 
-unexpected=$(find "$RUN_DIR" ! -type f ! -type d -print -quit)
+unexpected=$(find "$RUN_DIR" ! -type f ! -type d -print)
 [[ -z $unexpected ]] || fail "run contains an unsupported file type: $unexpected"
-temporary=$(find "$RUN_DIR" -type f -name '*.tmp' -print -quit)
+temporary=$(find "$RUN_DIR" -type f -name '*.tmp' -print)
 [[ -z $temporary ]] || fail "run contains an unfinished temporary file: $temporary"
 
 timestamp=$(date -u '+%Y%m%dT%H%M%SZ')

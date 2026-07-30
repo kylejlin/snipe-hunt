@@ -70,7 +70,7 @@ done <"$work_dir/archive-contents.txt"
 
 tar -C "$work_dir" -xzf "$archive"
 
-unexpected=$(find "$work_dir/fajita-main" ! -type f ! -type d -print -quit 2>/dev/null || true)
+unexpected=$(find "$work_dir/fajita-main" ! -type f ! -type d -print 2>/dev/null || true)
 [[ -z $unexpected ]] || fail "archive contains an unsupported file type: $unexpected"
 [[ -f "$work_dir/MANIFEST.txt" ]] || fail "archive is missing MANIFEST.txt"
 [[ -f "$work_dir/SHA256SUMS" ]] || fail "archive is missing SHA256SUMS"

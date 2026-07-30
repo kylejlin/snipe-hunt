@@ -188,6 +188,18 @@ Fajita enters its lower-rate mature optimization phase after 150,000 updates,
 which keeps later champion branches stable without altering their weights or
 replay history.
 
+Publishing validates the run's fresh-seed purity marker and requires at least
+one promoted champion. It always embeds `champion.bin`, never the potentially
+unvalidated `latest.bin`:
+
+```sh
+cargo run --release -p fajita-train -- publish \
+  --run-dir training/fajita-main
+npm --prefix web run build:wasm
+```
+
+After rebuilding WASM, Fajita is available in the browser's strategy selector.
+
 ## Browser behavior
 
 - Rust/WASM is authoritative for dealing, legality, transitions, and analysis.

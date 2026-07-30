@@ -204,7 +204,14 @@ describe("value-semantic card interaction", () => {
 describe("presentation contract", () => {
   it("shows the package version", () => {
     render(<App />);
-    expect(screen.getByText("Version 0.44.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.45.0")).toBeInTheDocument();
+  });
+
+  it("offers Fajita as a strategy", () => {
+    render(<App />);
+    expect(
+      screen.getByRole("option", { name: "Fajita" }),
+    ).toBeInTheDocument();
   });
 
   it("formats Alpha evaluations", () => {

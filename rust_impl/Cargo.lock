@@ -252,6 +252,7 @@ dependencies = [
  "agent-avocado",
  "agent-blueberry",
  "agent-cherry",
+ "agent-fajita",
  "js-sys",
  "serde",
  "serde_json",

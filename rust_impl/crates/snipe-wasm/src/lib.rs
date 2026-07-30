@@ -7,6 +7,7 @@
 use agent_avocado::AvocadoAnalyzer;
 use agent_blueberry::BlueberryAnalyzer;
 use agent_cherry::CherryAnalyzer;
+use agent_fajita::FajitaAnalyzer;
 use serde::{Deserialize, Serialize};
 use snipe_core::{
     Action, Analyzer, Animal, AnimalDrop, AnimalStep, Card, CardMultiset, Evaluation, Player, Rank,
@@ -27,6 +28,7 @@ enum Strategy {
     Avocado,
     Blueberry,
     Cherry,
+    Fajita,
 }
 
 impl Strategy {
@@ -35,6 +37,7 @@ impl Strategy {
             Self::Avocado => "Avocado",
             Self::Blueberry => "Blueberry",
             Self::Cherry => "Cherry",
+            Self::Fajita => "Fajita",
         }
     }
 }
@@ -43,6 +46,7 @@ enum BrowserAnalyzer {
     Avocado(AvocadoAnalyzer),
     Blueberry(BlueberryAnalyzer),
     Cherry(CherryAnalyzer),
+    Fajita(FajitaAnalyzer),
 }
 
 impl BrowserAnalyzer {
@@ -63,6 +67,11 @@ impl BrowserAnalyzer {
                 analyzer.set_state(state);
                 Self::Cherry(analyzer)
             }
+            Strategy::Fajita => {
+                let mut analyzer = FajitaAnalyzer::new();
+                analyzer.set_state(state);
+                Self::Fajita(analyzer)
+            }
         }
     }
 
@@ -71,6 +80,7 @@ impl BrowserAnalyzer {
             Self::Avocado(analyzer) => analyzer.think(ticks),
             Self::Blueberry(analyzer) => analyzer.think(ticks),
             Self::Cherry(analyzer) => analyzer.think(ticks),
+            Self::Fajita(analyzer) => analyzer.think(ticks),
         }
     }
 
@@ -79,6 +89,7 @@ impl BrowserAnalyzer {
             Self::Avocado(analyzer) => analyzer.evaluation(),
             Self::Blueberry(analyzer) => analyzer.evaluation(),
             Self::Cherry(analyzer) => analyzer.evaluation(),
+            Self::Fajita(analyzer) => analyzer.evaluation(),
         }
     }
 
@@ -88,6 +99,7 @@ impl BrowserAnalyzer {
             Self::Avocado(analyzer) => analyzer.write_optimal_lop(&mut actions),
             Self::Blueberry(analyzer) => analyzer.write_optimal_lop(&mut actions),
             Self::Cherry(analyzer) => analyzer.write_optimal_lop(&mut actions),
+            Self::Fajita(analyzer) => analyzer.write_optimal_lop(&mut actions),
         }
         actions
     }
@@ -1261,6 +1273,15 @@ mod tests {
                 .any(|turn| action_id(turn) == update.best_move.id)
         );
         assert_eq!(update.recommended_line[0].id, update.best_move.id);
+    }
+
+    #[test]
+    fn fajita_strategy_has_the_browser_wire_name() {
+        assert_eq!(Strategy::Fajita.label(), "Fajita");
+        assert_eq!(
+            serde_json::to_string(&Strategy::Fajita).unwrap(),
+            "\"fajita\""
+        );
     }
 
     #[test]

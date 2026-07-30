@@ -44,12 +44,18 @@ pub struct Model {
 }
 
 struct Forward {
+    #[cfg_attr(not(feature = "training"), allow(dead_code))]
     activations: Vec<Vec<f32>>,
     logits: [f32; ACTION_SIZE],
     value: f32,
 }
 
 impl Model {
+    pub fn embedded() -> Self {
+        Self::from_bytes(include_bytes!(concat!(env!("OUT_DIR"), "/fajita.bin")))
+            .unwrap_or_else(|_| Self::seeded(INITIAL_SEED))
+    }
+
     pub fn seeded(seed: u64) -> Self {
         let mut rng = Rng::new(seed);
         let mut parameters = vec![0.0; PARAM_COUNT];
@@ -594,7 +600,7 @@ impl Default for FajitaAnalyzer {
 
 impl FajitaAnalyzer {
     pub fn new() -> Self {
-        Self::with_model(Model::seeded(INITIAL_SEED))
+        Self::with_model(Model::embedded())
     }
 
     pub fn with_model(model: Model) -> Self {

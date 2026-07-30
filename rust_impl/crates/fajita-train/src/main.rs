@@ -80,6 +80,10 @@ fn run() -> io::Result<bool> {
             recover(&run_dir)?;
             Ok(true)
         }
+        "publish" => {
+            publish(&run_dir)?;
+            Ok(true)
+        }
         "help" | "--help" | "-h" => {
             help();
             Ok(true)
@@ -120,6 +124,7 @@ fn help() {
          status        [--run-dir PATH]\n\
          evaluate      [--run-dir PATH] [--pairs N] [--simulations N]\n\
          recover       [--run-dir PATH]\n\
+         publish       [--run-dir PATH]\n\
          \n\
          A new run always starts from deterministic fresh weights. Training consumes only\n\
          legal self-play positions, MCTS visit policies, and final game outcomes.\n\
@@ -642,6 +647,64 @@ fn recover(run_dir: &Path) -> io::Result<()> {
     Ok(())
 }
 
+fn publish(run_dir: &Path) -> io::Result<()> {
+    publish_to(run_dir, Path::new("crates/agent-fajita/model/fajita.bin"))
+}
+
+fn publish_to(run_dir: &Path, destination: &Path) -> io::Result<()> {
+    let state_path = run_dir.join("state.txt");
+    let state = fs::read_to_string(&state_path)?;
+    if !state
+        .lines()
+        .any(|line| line == "purity=rules-only-fresh-seed")
+    {
+        return Err(io::Error::other(
+            "run is missing Fajita's rules-only fresh-seed purity marker",
+        ));
+    }
+
+    let read = |name: &str| {
+        state
+            .lines()
+            .find_map(|line| line.strip_prefix(&format!("{name}=")))
+            .and_then(|value| value.parse::<u64>().ok())
+    };
+    let promotions = read("promotions")
+        .ok_or_else(|| io::Error::other("run metadata is missing a valid promotions count"))?;
+    if promotions == 0 {
+        return Err(io::Error::other(
+            "run has no validated champion promotion to publish",
+        ));
+    }
+
+    let expected_champion_steps = read("champion_steps")
+        .ok_or_else(|| io::Error::other("run metadata is missing champion_steps"))?;
+    let source = run_dir.join("champion.bin");
+    let champion = Model::load(&source)?;
+    if champion.training_steps != expected_champion_steps {
+        return Err(io::Error::other(format!(
+            "champion checkpoint step {} does not match run metadata step {expected_champion_steps}",
+            champion.training_steps
+        )));
+    }
+    let latest = Model::load(run_dir.join("latest.bin"))?;
+    let Some(parent) = destination.parent() else {
+        return Err(io::Error::other("invalid publication path"));
+    };
+    fs::create_dir_all(parent)?;
+    atomic_write(destination, &champion.to_bytes())?;
+    println!(
+        "Published validated Fajita champion step {} from {} to {} (latest training step {}, promotions {})",
+        champion.training_steps,
+        source.display(),
+        destination.display(),
+        latest.training_steps,
+        promotions,
+    );
+    println!("Rebuild WASM to load the new checkpoint.");
+    Ok(())
+}
+
 fn load_run(run_dir: &Path) -> io::Result<RunState> {
     let meta = load_meta(&run_dir.join("state.txt"))?;
     let latest_path = run_dir.join("latest.bin");
@@ -950,5 +1013,67 @@ mod tests {
     fn mature_models_use_the_lower_learning_rate() {
         assert_eq!(learning_rate(MATURE_STEP - 1), INITIAL_LEARNING_RATE);
         assert_eq!(learning_rate(MATURE_STEP), MATURE_LEARNING_RATE);
+    }
+
+    #[test]
+    fn publish_exports_the_validated_champion_instead_of_latest() {
+        let root = test_directory("publish-champion");
+        let run_dir = root.join("run");
+        let destination = root.join("published/fajita.bin");
+        fs::create_dir_all(&run_dir).unwrap();
+
+        let mut champion = Model::seeded(INITIAL_SEED);
+        champion.training_steps = 560_000;
+        champion.save(run_dir.join("champion.bin")).unwrap();
+        let mut latest = Model::seeded(INITIAL_SEED);
+        latest.training_steps = 560_100;
+        latest.save(run_dir.join("latest.bin")).unwrap();
+        fs::write(
+            run_dir.join("state.txt"),
+            "purity=rules-only-fresh-seed\npromotions=41\nchampion_steps=560000\n",
+        )
+        .unwrap();
+
+        publish_to(&run_dir, &destination).unwrap();
+
+        let published = Model::load(destination).unwrap();
+        assert_eq!(published.training_steps, champion.training_steps);
+        assert_eq!(published.to_bytes(), champion.to_bytes());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn publish_rejects_an_unpromoted_run() {
+        let root = test_directory("publish-unpromoted");
+        let run_dir = root.join("run");
+        fs::create_dir_all(&run_dir).unwrap();
+        let model = Model::seeded(INITIAL_SEED);
+        model.save(run_dir.join("champion.bin")).unwrap();
+        model.save(run_dir.join("latest.bin")).unwrap();
+        fs::write(
+            run_dir.join("state.txt"),
+            "purity=rules-only-fresh-seed\npromotions=0\nchampion_steps=0\n",
+        )
+        .unwrap();
+
+        let error = publish_to(&run_dir, &root.join("published/fajita.bin")).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("no validated champion promotion")
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    fn test_directory(label: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        env::temp_dir().join(format!(
+            "fajita-train-{label}-{}-{nonce}",
+            std::process::id()
+        ))
     }
 }

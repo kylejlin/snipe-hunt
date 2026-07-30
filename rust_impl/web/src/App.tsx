@@ -65,6 +65,7 @@ const CARD_MOVE_DURATION_MS = 200;
 function strategyLabel(strategy: Strategy): string {
   if (strategy === "cherry") return "Cherry";
   if (strategy === "blueberry") return "Blueberry";
+  if (strategy === "fajita") return "Fajita";
   return "Avocado";
 }
 
@@ -1685,6 +1686,7 @@ function GameApp() {
                 }}
               >
                 <option value="cherry">Cherry</option>
+                <option value="fajita">Fajita</option>
                 <option value="blueberry">Blueberry</option>
                 <option value="avocado">Avocado</option>
               </select>

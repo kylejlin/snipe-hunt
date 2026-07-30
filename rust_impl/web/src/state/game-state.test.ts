@@ -97,6 +97,15 @@ describe("game-state invariants", () => {
     expect(rules.applyMove).toHaveBeenCalledWith(initial, move);
   });
 
+  it("persists Fajita as a selected strategy", () => {
+    const rules = engine();
+    const game = { ...newGame(initial), strategy: "fajita" as const };
+
+    const restored = restoreGame(saveGame(game), rules);
+
+    expect(restored.strategy).toBe("fajita");
+  });
+
   it("discards old schemas instead of attempting a migration", () => {
     const rules = engine();
     const restored = restoreGame(

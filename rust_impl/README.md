@@ -175,11 +175,17 @@ to at least three times the legal branching factor and capped at 1,536.
 ```sh
 cargo run --release -p fajita-train -- nightly \
   --run-dir training/fajita-main \
-  --hours 8
+  --hours 8 \
+  --progress-reports on
 
 cargo run --release -p fajita-train -- status \
   --run-dir training/fajita-main
 ```
+
+`--progress-reports` defaults to `on`. It prints timestamped, human-readable
+status reports every 500 games, with arena-specific promotion, recovery, or
+continuation reports every 1,000 games. Use `--progress-reports off` for quiet
+training; errors are still written to stderr.
 
 Training checkpoints are resumable. Fajita uses only internal paired-seed
 arenas for champion promotion and regression recovery; external-agent

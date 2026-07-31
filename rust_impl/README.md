@@ -62,7 +62,7 @@ other hand-authored Snipe Hunt heuristic.
 From `rust_impl`, start or resume the main run:
 
 ```sh
-cargo run --release -p cherry-train -- nightly \
+cargo run --release -p cherry-train -- train \
   --run-dir training/cherry-main \
   --hours 1000000 \
   --simulations 24
@@ -115,7 +115,7 @@ matches Cherry's trainer: 512 simulations per action, raised for wide positions
 to at least three times the legal branching factor and capped at 1,536.
 
 ```sh
-cargo run --release -p fajita-train -- nightly \
+cargo run --release -p fajita-train -- train \
   --run-dir training/fajita-main \
   --hours 1000000 \
   --progress-reports on
@@ -150,7 +150,7 @@ and prevents idle system sleep:
 
 ```sh
 RUSTFLAGS="-C target-cpu=native" \
-caffeinate -i cargo run --release -p fajita-train -- nightly \
+caffeinate -i cargo run --release -p fajita-train -- train \
   --run-dir training/fajita-main \
   --hours 1000000 \
   --progress-reports on

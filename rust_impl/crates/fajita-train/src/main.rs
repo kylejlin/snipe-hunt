@@ -58,7 +58,7 @@ fn run() -> io::Result<bool> {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(DEFAULT_RUN_DIR));
     match command {
-        "train" | "nightly" => {
+        "train" => {
             let hours = parse_option(&arguments, "--hours", DEFAULT_HOURS)?;
             let simulations = parse_option(&arguments, "--simulations", DEFAULT_SIMULATIONS)?;
             let workers = parse_option(&arguments, "--workers", default_workers())?;
@@ -146,8 +146,8 @@ fn help() {
     println!(
         "Fajita rules-only self-play trainer\n\
          \n\
-         train|nightly [--run-dir PATH] [--hours N] [--simulations N] [--workers N]\n\
-                       [--progress-reports on|off]\n\
+         train          [--run-dir PATH] [--hours N] [--simulations N] [--workers N]\n\
+                        [--progress-reports on|off]\n\
          status        [--run-dir PATH]\n\
          evaluate      [--run-dir PATH] [--pairs N] [--simulations N]\n\
          recover       [--run-dir PATH]\n\
@@ -1296,19 +1296,19 @@ mod tests {
 
     #[test]
     fn progress_reports_default_to_on_and_accept_explicit_toggles() {
-        let arguments = strings(&["nightly"]);
+        let arguments = strings(&["train"]);
         assert!(parse_on_off(&arguments, "--progress-reports", true).unwrap());
 
-        let arguments = strings(&["nightly", "--progress-reports", "OFF"]);
+        let arguments = strings(&["train", "--progress-reports", "OFF"]);
         assert!(!parse_on_off(&arguments, "--progress-reports", true).unwrap());
 
-        let arguments = strings(&["nightly", "--progress-reports", "yes"]);
+        let arguments = strings(&["train", "--progress-reports", "yes"]);
         assert!(parse_on_off(&arguments, "--progress-reports", false).unwrap());
     }
 
     #[test]
     fn progress_report_toggle_rejects_missing_and_invalid_values() {
-        let missing = strings(&["nightly", "--progress-reports"]);
+        let missing = strings(&["train", "--progress-reports"]);
         assert!(
             parse_on_off(&missing, "--progress-reports", true)
                 .unwrap_err()
@@ -1316,7 +1316,7 @@ mod tests {
                 .contains("requires on or off")
         );
 
-        let invalid = strings(&["nightly", "--progress-reports", "sometimes"]);
+        let invalid = strings(&["train", "--progress-reports", "sometimes"]);
         assert!(
             parse_on_off(&invalid, "--progress-reports", true)
                 .unwrap_err()

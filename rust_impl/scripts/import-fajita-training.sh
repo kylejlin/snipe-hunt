@@ -40,7 +40,7 @@ archive_parent=$(CDPATH= cd -- "$(dirname -- "$archive")" && pwd)
 archive="$archive_parent/$(basename -- "$archive")"
 
 if command -v pgrep >/dev/null 2>&1 &&
-    pgrep -f '(^|[ /])fajita-train([ /]|$).*(nightly|train)([ /]|$)' >/dev/null 2>&1; then
+    pgrep -f '(^|[ /])fajita-train([ /]|$).*train([ /]|$)' >/dev/null 2>&1; then
     fail "Fajita training appears to be running; stop it before importing"
 fi
 

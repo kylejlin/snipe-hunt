@@ -36,7 +36,7 @@ fi
 [[ -d $RUN_DIR ]] || fail "run directory not found: $RUN_DIR"
 
 if command -v pgrep >/dev/null 2>&1 &&
-    pgrep -f '(^|[ /])fajita-train([ /]|$).*(nightly|train)([ /]|$)' >/dev/null 2>&1; then
+    pgrep -f '(^|[ /])fajita-train([ /]|$).*train([ /]|$)' >/dev/null 2>&1; then
     fail "Fajita training appears to be running; stop it before exporting"
 fi
 

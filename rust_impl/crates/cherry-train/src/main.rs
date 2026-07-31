@@ -48,7 +48,7 @@ fn run() -> io::Result<()> {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(DEFAULT_RUN_DIR));
     match command {
-        "train" | "nightly" => {
+        "train" => {
             let hours = option(&arguments, "--hours")
                 .and_then(|value| value.parse().ok())
                 .unwrap_or(DEFAULT_HOURS);
@@ -91,7 +91,7 @@ fn help() {
     println!(
         "Cherry self-play trainer\n\
          \n\
-         train|nightly [--run-dir PATH] [--hours N] [--simulations N] [--workers N]\n\
+         train          [--run-dir PATH] [--hours N] [--simulations N] [--workers N]\n\
          status        [--run-dir PATH]\n\
          evaluate      [--run-dir PATH] [--simulations N]\n\
          audit         [--run-dir PATH] [--simulations N] [--pairs N]\n\

@@ -204,7 +204,7 @@ describe("value-semantic card interaction", () => {
 describe("presentation contract", () => {
   it("shows the package version", () => {
     render(<App />);
-    expect(screen.getByText("Version 0.46.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.47.0")).toBeInTheDocument();
   });
 
   it("lists the remaining strategies alphabetically", () => {

@@ -547,32 +547,58 @@ impl Search {
         true
     }
 
-    pub fn best_complete_ply(&self, model: &Model) -> Vec<Action> {
-        let player = self.root().state.active_player;
+    pub fn best_complete_line(&self, model: &Model) -> Vec<Action> {
+        let mut ply_player = self.root().state.active_player;
         let mut state = self.root().state.clone();
         let mut node = self.root;
-        let mut result = Vec::with_capacity(2);
-        while let Some(edge_index) = self.nodes[node].preferred_edge() {
+        let mut result = Vec::new();
+        let mut completed_actions = 0;
+        while result.len() < MAX_SEARCH_DEPTH {
+            let Some(edge_index) = self.nodes[node].preferred_edge() else {
+                break;
+            };
+            let child = self.nodes[node].edges[edge_index].child;
+            if completed_actions > 0 && child.is_none() {
+                break;
+            }
             let action = self.nodes[node].edges[edge_index].action;
             let Ok(next) = state.clone().apply(action) else {
                 break;
             };
             result.push(action);
             state = next;
-            if state.active_player != player || state.winner().is_some() {
+            if state.active_player != ply_player || state.winner().is_some() {
+                completed_actions = result.len();
+                ply_player = state.active_player;
+            }
+            if state.winner().is_some() {
                 break;
             }
-            if let Some(child) = self.nodes[node].edges[edge_index].child {
+            if let Some(child) = child {
                 node = child;
             } else {
+                if completed_actions > 0 {
+                    break;
+                }
+                // Preserve the Analyzer contract even before MCTS has visited
+                // enough actions to finish the root ply. Deeper speculative
+                // actions are deliberately omitted from the published line.
                 let mut continuation = Node::new(state.clone());
                 continuation.expand(model);
                 if let Some(index) = continuation.preferred_edge() {
-                    result.push(continuation.edges[index].action);
+                    let action = continuation.edges[index].action;
+                    if let Ok(next) = state.clone().apply(action) {
+                        result.push(action);
+                        state = next;
+                        if state.active_player != ply_player || state.winner().is_some() {
+                            completed_actions = result.len();
+                        }
+                    }
                 }
                 break;
             }
         }
+        result.truncate(completed_actions);
         result
     }
 }
@@ -643,7 +669,7 @@ impl Analyzer for FajitaAnalyzer {
         let Some(search) = &self.search else {
             return;
         };
-        let actions = search.best_complete_ply(&self.model);
+        let actions = search.best_complete_line(&self.model);
         writer.reserve(actions.len());
         for action in actions {
             writer.push(action);
@@ -1092,21 +1118,78 @@ mod tests {
     fn analyzer_returns_a_complete_legal_ply() {
         for seed in 0..8 {
             let mut state = initial_state(seed);
-            let player = state.active_player;
+            let mut ply_player = state.active_player;
             let mut analyzer = FajitaAnalyzer::new();
             analyzer.set_state(state.clone());
             analyzer.think(4);
             let mut line = Vec::new();
             analyzer.write_optimal_lop(&mut line);
             assert!(!line.is_empty());
-            for action in line {
+            let mut completed_actions = 0;
+            for (index, &action) in line.iter().enumerate() {
                 state = state.apply(action).unwrap();
-                if state.active_player != player || state.winner().is_some() {
-                    break;
+                if state.active_player != ply_player || state.winner().is_some() {
+                    completed_actions = index + 1;
+                    ply_player = state.active_player;
                 }
             }
-            assert!(state.active_player != player || state.winner().is_some());
+            assert_eq!(completed_actions, line.len());
         }
+    }
+
+    #[test]
+    fn best_line_follows_complete_plies_through_the_explored_tree() {
+        let model = Model::seeded(31);
+        let mut state = initial_state(7071);
+        let mut search = Search::new(state.clone(), &model);
+        let mut node = search.root;
+        let mut ply_player = state.active_player;
+        let mut completed_plies = 0;
+        let mut expected = Vec::new();
+
+        while completed_plies < 3 {
+            let edge_index = search.nodes[node].preferred_edge().unwrap();
+            let action = search.nodes[node].edges[edge_index].action;
+            let next = state
+                .clone()
+                .apply(action)
+                .expect("preferred action is legal");
+            assert_eq!(next.winner(), None, "fixture ended before three plies");
+            let child = search.nodes.len();
+            search.nodes.push(Node::new(next.clone()));
+            search.nodes[child].expand(&model);
+            let edge = &mut search.nodes[node].edges[edge_index];
+            edge.visits = 100;
+            edge.child = Some(child);
+            expected.push(action);
+            if next.active_player != ply_player {
+                completed_plies += 1;
+                ply_player = next.active_player;
+            }
+            state = next;
+            node = child;
+        }
+
+        assert_eq!(search.best_complete_line(&model), expected);
+    }
+
+    #[test]
+    fn thinking_builds_a_multi_ply_principal_line() {
+        let model = Model::seeded(31);
+        let mut state = initial_state(7071);
+        let mut search = Search::new(state.clone(), &model);
+        search.simulate_n(&model, 1_536);
+        let line = search.best_complete_line(&model);
+        let mut ply_player = state.active_player;
+        let mut completed_plies = 0;
+        for action in line {
+            state = state.apply(action).expect("published action is legal");
+            if state.active_player != ply_player || state.winner().is_some() {
+                completed_plies += 1;
+                ply_player = state.active_player;
+            }
+        }
+        assert!(completed_plies > 1);
     }
 
     #[cfg(feature = "training")]

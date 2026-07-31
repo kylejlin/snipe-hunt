@@ -596,32 +596,58 @@ impl Search {
         policy
     }
 
-    pub fn best_complete_ply(&self, model: &Model) -> Vec<Action> {
-        let player = self.root_node().state.active_player;
+    pub fn best_complete_line(&self, model: &Model) -> Vec<Action> {
+        let mut ply_player = self.root_node().state.active_player;
         let mut state = self.root_node().state.clone();
         let mut actions = Vec::new();
+        let mut completed_actions = 0;
         let mut current_index = self.root;
-        while let Some(index) = self.nodes[current_index].preferred_edge() {
+        while actions.len() < MAX_SEARCH_DEPTH {
+            let Some(index) = self.nodes[current_index].preferred_edge() else {
+                break;
+            };
+            let child = self.nodes[current_index].edges[index].child;
+            if completed_actions > 0 && child.is_none() {
+                break;
+            }
             let action = self.nodes[current_index].edges[index].action;
             let Ok(next) = state.clone().apply(action) else {
                 break;
             };
             actions.push(action);
             state = next;
-            if state.active_player != player || state.winner().is_some() {
+            if state.active_player != ply_player || state.winner().is_some() {
+                completed_actions = actions.len();
+                ply_player = state.active_player;
+            }
+            if state.winner().is_some() {
                 break;
             }
-            if let Some(child) = self.nodes[current_index].edges[index].child {
+            if let Some(child) = child {
                 current_index = child;
             } else {
+                if completed_actions > 0 {
+                    break;
+                }
+                // Preserve the Analyzer contract even before MCTS has visited
+                // enough actions to finish the root ply. Deeper speculative
+                // actions are deliberately omitted from the published line.
                 let mut temporary = Node::new(state.clone());
                 temporary.expand(model);
                 if let Some(next_index) = temporary.preferred_edge() {
-                    actions.push(temporary.edges[next_index].action);
+                    let action = temporary.edges[next_index].action;
+                    if let Ok(next) = state.clone().apply(action) {
+                        actions.push(action);
+                        state = next;
+                        if state.active_player != ply_player || state.winner().is_some() {
+                            completed_actions = actions.len();
+                        }
+                    }
                 }
                 break;
             }
         }
+        actions.truncate(completed_actions);
         actions
     }
 }
@@ -681,7 +707,7 @@ impl Analyzer for CherryAnalyzer {
 
     fn write_optimal_lop<W: ActionWriter>(&self, writer: &mut W) {
         let Some(search) = &self.search else { return };
-        let actions = search.best_complete_ply(&self.model);
+        let actions = search.best_complete_line(&self.model);
         writer.reserve(actions.len());
         for action in actions {
             writer.push(action);
@@ -1464,12 +1490,71 @@ mod tests {
         let mut actions = Vec::new();
         analyzer.write_optimal_lop(&mut actions);
         assert!(!actions.is_empty());
-        let player = state.active_player;
+        let mut ply_player = state.active_player;
         let mut after = state;
-        for action in actions {
+        let mut completed_actions = 0;
+        for (index, &action) in actions.iter().enumerate() {
             after = after.apply(action).unwrap();
+            if after.active_player != ply_player || after.winner().is_some() {
+                completed_actions = index + 1;
+                ply_player = after.active_player;
+            }
         }
-        assert!(after.active_player != player || after.winner().is_some());
+        assert_eq!(completed_actions, actions.len());
+    }
+
+    #[test]
+    fn best_line_follows_complete_plies_through_the_explored_tree() {
+        let model = Model::seeded(31);
+        let mut state = initial_state(7071);
+        let mut search = Search::new(state.clone(), &model);
+        let mut node = search.root;
+        let mut ply_player = state.active_player;
+        let mut completed_plies = 0;
+        let mut expected = Vec::new();
+
+        while completed_plies < 3 {
+            let edge_index = search.nodes[node].preferred_edge().unwrap();
+            let action = search.nodes[node].edges[edge_index].action;
+            let next = state
+                .clone()
+                .apply(action)
+                .expect("preferred action is legal");
+            assert_eq!(next.winner(), None, "fixture ended before three plies");
+            let child = search.allocate_node(next.clone());
+            search.nodes[child].expand(&model);
+            let edge = &mut search.nodes[node].edges[edge_index];
+            edge.visits = 100;
+            edge.child = Some(child);
+            expected.push(action);
+            if next.active_player != ply_player {
+                completed_plies += 1;
+                ply_player = next.active_player;
+            }
+            state = next;
+            node = child;
+        }
+
+        assert_eq!(search.best_complete_line(&model), expected);
+    }
+
+    #[test]
+    fn thinking_builds_a_multi_ply_principal_line() {
+        let model = Model::seeded(31);
+        let mut state = initial_state(7071);
+        let mut search = Search::new(state.clone(), &model);
+        search.simulate_n(&model, 512);
+        let line = search.best_complete_line(&model);
+        let mut ply_player = state.active_player;
+        let mut completed_plies = 0;
+        for action in line {
+            state = state.apply(action).expect("published action is legal");
+            if state.active_player != ply_player || state.winner().is_some() {
+                completed_plies += 1;
+                ply_player = state.active_player;
+            }
+        }
+        assert!(completed_plies > 1);
     }
 
     #[test]
@@ -1518,7 +1603,7 @@ mod tests {
         let model = Model::seeded(0x7AC7_1CA1);
         let mut search = Search::new(state.clone(), &model);
         search.simulate_n(&model, 2_048);
-        let actions = search.best_complete_ply(&model);
+        let actions = search.best_complete_line(&model);
         assert!(!actions.is_empty());
 
         let mut after = state;

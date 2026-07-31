@@ -64,7 +64,7 @@ From `rust_impl`, start or resume the main run:
 ```sh
 cargo run --release -p cherry-train -- nightly \
   --run-dir training/cherry-main \
-  --hours 8 \
+  --hours 1000000 \
   --simulations 24
 ```
 
@@ -117,7 +117,7 @@ to at least three times the legal branching factor and capped at 1,536.
 ```sh
 cargo run --release -p fajita-train -- nightly \
   --run-dir training/fajita-main \
-  --hours 8 \
+  --hours 1000000 \
   --progress-reports on
 
 cargo run --release -p fajita-train -- status \
@@ -139,20 +139,22 @@ replay history.
 ### Train on a 13-inch Intel MacBook Pro
 
 From `rust_impl`, this thermal-conscious command caps both self-play and
-promotion arenas at three worker threads, leaving CPU headroom on a quad-core
-13-inch Intel MacBook Pro, and prevents idle system sleep:
+promotion arenas at three worker threads, leaving CPU headroom on a dual-core
+2017 13-inch Intel MacBook Pro, compiles for its native AVX2/FMA-capable CPU,
+and prevents idle system sleep:
 
 ```sh
+RUSTFLAGS="-C target-cpu=native" \
 caffeinate -i cargo run --release -p fajita-train -- nightly \
   --run-dir training/fajita-main \
-  --hours 8 \
-  --workers 3 \
+  --hours 1000000 \
   --progress-reports on
 ```
 
 Keep the MacBook plugged in with its lid open and unobstructed ventilation.
-The display may sleep. `caffeinate -i` ends when the trainer exits, and the
-trainer writes a completion report after its training window finishes.
+The display may sleep. The million-hour training window is intentionally
+effectively unbounded; stop the trainer manually when it is time to move the
+run. `caffeinate -i` ends when the trainer exits.
 
 ### Move Fajita training between computers
 

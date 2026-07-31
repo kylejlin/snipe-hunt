@@ -84,7 +84,10 @@ export interface AnalysisResult {
   engineName: string;
 }
 
-export type LiveAnalysisUpdate = AnalysisResult;
+export type LiveAnalysisUpdate = AnalysisResult & {
+  /** The search stopped after this fully completed result was published. */
+  stoppedReason?: "memory-limit";
+};
 
 export interface RulesEngine {
   readonly name: string;

@@ -8,7 +8,7 @@ import type {
   TurnMove,
 } from "./engine/types";
 
-const { services, move, applyMove } = vi.hoisted(() => {
+const { services, move, applyMove, analysisRun, result } = vi.hoisted(() => {
   const rabbit = {
     pieceKey: "alpha:animal:3",
     animal: "Rabbit",
@@ -75,6 +75,11 @@ const { services, move, applyMove } = vi.hoisted(() => {
     engineName: "test",
   });
   const applyMove = vi.fn(() => after);
+  const analysisRun = vi.fn(({ requestId }, onProgress) => {
+    const update = result(requestId);
+    onProgress(update);
+    return Promise.resolve(update);
+  });
   const services = {
     rules: {
       name: "test",
@@ -90,15 +95,11 @@ const { services, move, applyMove } = vi.hoisted(() => {
       dispose: () => undefined,
     },
     analyzer: {
-      analyze: ({ requestId }, onProgress) => {
-        const update = result(requestId);
-        onProgress(update);
-        return Promise.resolve(update);
-      },
+      analyze: analysisRun,
       dispose: () => undefined,
     },
   } satisfies EngineServices;
-  return { services, move, applyMove };
+  return { services, move, applyMove, analysisRun, result };
 });
 
 vi.mock("./engine/engine-services", () => ({
@@ -113,6 +114,12 @@ afterEach(cleanup);
 beforeEach(() => {
   localStorage.clear();
   applyMove.mockClear();
+  analysisRun.mockReset();
+  analysisRun.mockImplementation(({ requestId }, onProgress) => {
+    const update = result(requestId);
+    onProgress(update);
+    return Promise.resolve(update);
+  });
 });
 
 describe("value-semantic card interaction", () => {
@@ -204,7 +211,29 @@ describe("value-semantic card interaction", () => {
 describe("presentation contract", () => {
   it("shows the package version", () => {
     render(<App />);
-    expect(screen.getByText("Version 0.47.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.48.0")).toBeInTheDocument();
+  });
+
+  it("shows the last completed result after the analyzer reaches its memory ceiling", async () => {
+    analysisRun.mockImplementationOnce(({ requestId }, onProgress) => {
+      const update = {
+        ...result(requestId),
+        stoppedReason: "memory-limit" as const,
+      };
+      onProgress(update);
+      return Promise.resolve(update);
+    });
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("switch", { name: "Analysis" }));
+
+    expect(
+      await screen.findByText(
+        "Memory ceiling reached. Showing the best completed result.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Suggested line")).toBeInTheDocument();
+    expect(screen.queryByText("unreachable")).not.toBeInTheDocument();
   });
 
   it("lists the remaining strategies alphabetically", () => {

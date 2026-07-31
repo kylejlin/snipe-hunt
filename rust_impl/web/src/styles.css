@@ -737,6 +737,12 @@ input[type="text"] {
   border-top: 1px solid rgba(83, 101, 126, 0.15);
 }
 
+.history-analysis__notice {
+  margin: 1px 0 2px;
+  color: var(--muted);
+  font: 400 0.59rem/1.45 "DM Mono", monospace;
+}
+
 .suggested-line {
   display: flex;
   align-items: center;

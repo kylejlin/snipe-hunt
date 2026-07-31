@@ -139,6 +139,7 @@ export class WasmLiveAnalyzer implements LiveAnalyzer {
     | {
         requestId: number;
         positionKey: string;
+        lastProgress: LiveAnalysisUpdate | null;
         onProgress: (update: LiveAnalysisUpdate) => void;
         resolve: (result: LiveAnalysisUpdate) => void;
         reject: (reason: Error) => void;
@@ -167,6 +168,7 @@ export class WasmLiveAnalyzer implements LiveAnalyzer {
       this.pending = {
         requestId: request.requestId,
         positionKey: request.position.positionKey,
+        lastProgress: null,
         onProgress,
         resolve,
         reject,
@@ -193,6 +195,7 @@ export class WasmLiveAnalyzer implements LiveAnalyzer {
       if (!this.pending || this.pending.requestId !== requestId) return;
       if (message.type === "analysis-progress") {
         if (message.payload.positionKey !== this.pending.positionKey) return;
+        this.pending.lastProgress = message.payload;
         this.pending.onProgress(message.payload);
       } else if (message.type === "analysis-complete") {
         if (message.payload.positionKey !== this.pending.positionKey) {
@@ -203,7 +206,24 @@ export class WasmLiveAnalyzer implements LiveAnalyzer {
         pending?.resolve(message.payload);
       } else if (message.type === "error") {
         const pending = this.takePending();
-        pending?.reject(new Error(message.message));
+        if (message.code === "memory-limit") {
+          worker.terminate();
+          if (this.worker === worker) this.worker = null;
+          if (pending?.lastProgress) {
+            pending.resolve({
+              ...pending.lastProgress,
+              stoppedReason: "memory-limit",
+            });
+          } else {
+            pending?.reject(
+              new Error(
+                "Analysis reached the browser memory ceiling before completing a result.",
+              ),
+            );
+          }
+        } else {
+          pending?.reject(new Error(message.message));
+        }
       }
     };
     worker.onerror = (event) => {

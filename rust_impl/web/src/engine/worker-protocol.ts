@@ -14,4 +14,9 @@ export type WorkerResponse =
   | { type: "agent-result"; payload: AnalysisResult }
   | { type: "analysis-progress"; payload: LiveAnalysisUpdate }
   | { type: "analysis-complete"; payload: LiveAnalysisUpdate }
-  | { type: "error"; requestId: number; message: string };
+  | {
+      type: "error";
+      requestId: number;
+      message: string;
+      code?: "memory-limit";
+    };

@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 
 import init, { analyze, analyze_live } from "../wasm/pkg/snipe_wasm.js";
+import { isWasmMemoryLimitTrap } from "./wasm-errors";
 import type { WorkerRequest, WorkerResponse } from "./worker-protocol";
 import type { AnalysisResult, LiveAnalysisUpdate } from "./types";
 
@@ -10,8 +11,9 @@ const ready = init();
 scope.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const message = event.data;
   if (message.type === "cancel") return;
+  let runtime: Awaited<typeof ready> | null = null;
   try {
-    await ready;
+    runtime = await ready;
     // Rust search is intentionally synchronous here. Cancellation is performed
     // by terminating this worker, since a busy worker cannot receive messages.
     if (message.type === "agent") {
@@ -34,6 +36,12 @@ scope.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       type: "error",
       requestId: message.payload.requestId,
       message: reason instanceof Error ? reason.message : String(reason),
+      ...(isWasmMemoryLimitTrap(
+        reason,
+        runtime?.memory.buffer.byteLength ?? 0,
+      )
+        ? { code: "memory-limit" as const }
+        : {}),
     };
     scope.postMessage(response);
   }

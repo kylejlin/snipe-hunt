@@ -5,6 +5,7 @@ The active implementation is intentionally small and dependency-directed:
 - `crates/snipe-core` is the authoritative rules and public `Analyzer` contract.
 - `crates/snipe-prng` owns reproducible seeded deals and random mixing.
 - `crates/agent-avocado` is a deterministic, patient alpha-beta analyzer.
+- `crates/agent-garlic` is Avocado's profile-guided, speed-focused successor.
 - `crates/agent-cherry` is a policy/value MCTS analyzer learned from rules-only
   self-play.
 - `crates/cherry-train` is Cherry's resumable native self-play trainer.
@@ -55,7 +56,7 @@ npm run build
 
 ## Run the browser-agent arena
 
-From `rust_impl`, run the published Avocado, Cherry, and Fajita agents in a
+From `rust_impl`, run the published Avocado, Cherry, Fajita, and Garlic agents in a
 round robin:
 
 ```sh
@@ -65,8 +66,8 @@ cargo run --release -p agent-arena -- \
   --save-games per-ply
 ```
 
-Each of the three matchups runs concurrently. A matchup plays every seed twice,
-with the agents swapping Alpha and Beta, so the command above plays 60 games.
+Each of the six matchups runs concurrently. A matchup plays every seed twice,
+with the agents swapping Alpha and Beta, so the command above plays 120 games.
 The final table awards one point per win and half a point per draw.
 
 `--save-games` has three modes:
@@ -80,9 +81,27 @@ The final table awards one point per win and half a point per draw.
 
 Saved histories default to `agent-arena-results/`. Every invocation creates a
 new `tournament-*` directory, with `avocado-vs-cherry`,
-`avocado-vs-fajita`, and `cherry-vs-fajita` subdirectories. Use
+`avocado-vs-fajita`, `avocado-vs-garlic`, `cherry-vs-fajita`,
+`cherry-vs-garlic`, and `fajita-vs-garlic` subdirectories. Use
 `--output-root PATH` to select another parent directory. `--seed-start` changes
 the first paired seed, and `--max-plies` changes the draw limit.
+
+## Benchmark Garlic
+
+Garlic retains Avocado's search order and evaluation semantics while optimizing
+the packed search path. Its strength benchmark requires both agents to reach the
+same depth on seeded positions, asserts identical tick counts, evaluations, and
+principal variations, then reports the wall-clock speedup:
+
+```sh
+cargo bench -p agent-garlic --bench strength
+```
+
+For sampling-profiler work, the longer fixed-search workload is:
+
+```sh
+cargo bench -p agent-garlic --bench search --profile profiling --no-run
+```
 
 ## Train Cherry
 

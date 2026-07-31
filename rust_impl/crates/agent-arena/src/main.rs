@@ -3,6 +3,7 @@ mod history;
 use agent_avocado::AvocadoAnalyzer;
 use agent_cherry::CherryAnalyzer;
 use agent_fajita::FajitaAnalyzer;
+use agent_garlic::GarlicAnalyzer;
 use snipe_core::{Action, Analyzer, Evaluation, Player, State};
 use snipe_prng::initial_state;
 use std::{
@@ -20,11 +21,19 @@ const DEFAULT_PAIRS: u64 = 10;
 const DEFAULT_MILLISECONDS: u64 = 10_000;
 const DEFAULT_MAX_PLIES: u32 = 256;
 const DEFAULT_OUTPUT_ROOT: &str = "agent-arena-results";
-const AGENTS: [AgentKind; 3] = [AgentKind::Avocado, AgentKind::Cherry, AgentKind::Fajita];
-const MATCHUPS: [(AgentKind, AgentKind); 3] = [
+const AGENTS: [AgentKind; 4] = [
+    AgentKind::Avocado,
+    AgentKind::Cherry,
+    AgentKind::Fajita,
+    AgentKind::Garlic,
+];
+const MATCHUPS: [(AgentKind, AgentKind); 6] = [
     (AgentKind::Avocado, AgentKind::Cherry),
     (AgentKind::Avocado, AgentKind::Fajita),
+    (AgentKind::Avocado, AgentKind::Garlic),
     (AgentKind::Cherry, AgentKind::Fajita),
+    (AgentKind::Cherry, AgentKind::Garlic),
+    (AgentKind::Fajita, AgentKind::Garlic),
 ];
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -32,6 +41,7 @@ enum AgentKind {
     Avocado,
     Cherry,
     Fajita,
+    Garlic,
 }
 
 impl AgentKind {
@@ -40,6 +50,7 @@ impl AgentKind {
             Self::Avocado => "Avocado",
             Self::Cherry => "Cherry",
             Self::Fajita => "Fajita",
+            Self::Garlic => "Garlic",
         }
     }
 
@@ -48,6 +59,7 @@ impl AgentKind {
             Self::Avocado => "avocado",
             Self::Cherry => "cherry",
             Self::Fajita => "fajita",
+            Self::Garlic => "garlic",
         }
     }
 
@@ -56,6 +68,7 @@ impl AgentKind {
             Self::Avocado => ArenaAgent::Avocado(AvocadoAnalyzer::new()),
             Self::Cherry => ArenaAgent::Cherry(CherryAnalyzer::new()),
             Self::Fajita => ArenaAgent::Fajita(FajitaAnalyzer::new()),
+            Self::Garlic => ArenaAgent::Garlic(GarlicAnalyzer::new()),
         }
     }
 }
@@ -64,6 +77,7 @@ enum ArenaAgent {
     Avocado(AvocadoAnalyzer),
     Cherry(CherryAnalyzer),
     Fajita(FajitaAnalyzer),
+    Garlic(GarlicAnalyzer),
 }
 
 impl ArenaAgent {
@@ -72,6 +86,7 @@ impl ArenaAgent {
             Self::Avocado(agent) => agent.set_state(state),
             Self::Cherry(agent) => agent.set_state(state),
             Self::Fajita(agent) => agent.set_state(state),
+            Self::Garlic(agent) => agent.set_state(state),
         }
     }
 
@@ -80,6 +95,7 @@ impl ArenaAgent {
             Self::Avocado(agent) => agent.think_for_one_tick(),
             Self::Cherry(agent) => agent.think_for_one_tick(),
             Self::Fajita(agent) => agent.think_for_one_tick(),
+            Self::Garlic(agent) => agent.think_for_one_tick(),
         }
     }
 
@@ -88,6 +104,7 @@ impl ArenaAgent {
             Self::Avocado(agent) => agent.evaluation(),
             Self::Cherry(agent) => agent.evaluation(),
             Self::Fajita(agent) => agent.evaluation(),
+            Self::Garlic(agent) => agent.evaluation(),
         }
     }
 
@@ -97,6 +114,7 @@ impl ArenaAgent {
             Self::Avocado(agent) => agent.write_optimal_lop(&mut line),
             Self::Cherry(agent) => agent.write_optimal_lop(&mut line),
             Self::Fajita(agent) => agent.write_optimal_lop(&mut line),
+            Self::Garlic(agent) => agent.write_optimal_lop(&mut line),
         }
         line
     }
@@ -257,7 +275,7 @@ fn usage() -> &'static str {
 
 fn run(config: Config) -> Result<(), String> {
     println!(
-        "round robin: Avocado, Cherry, Fajita; {} paired seeds; {:.3}s/ply",
+        "round robin: Avocado, Cherry, Fajita, Garlic; {} paired seeds; {:.3}s/ply",
         config.pairs,
         config.time_per_ply.as_secs_f64(),
     );

@@ -7,6 +7,7 @@
 use agent_avocado::AvocadoAnalyzer;
 use agent_cherry::CherryAnalyzer;
 use agent_fajita::FajitaAnalyzer;
+use agent_garlic::GarlicAnalyzer;
 use serde::{Deserialize, Serialize};
 use snipe_core::{
     Action, Analyzer, Animal, AnimalDrop, AnimalStep, Card, CardMultiset, Evaluation, Player, Rank,
@@ -27,6 +28,7 @@ enum Strategy {
     Avocado,
     Cherry,
     Fajita,
+    Garlic,
 }
 
 impl Strategy {
@@ -35,6 +37,7 @@ impl Strategy {
             Self::Avocado => "Avocado",
             Self::Cherry => "Cherry",
             Self::Fajita => "Fajita",
+            Self::Garlic => "Garlic",
         }
     }
 }
@@ -43,6 +46,7 @@ enum BrowserAnalyzer {
     Avocado(AvocadoAnalyzer),
     Cherry(CherryAnalyzer),
     Fajita(FajitaAnalyzer),
+    Garlic(GarlicAnalyzer),
 }
 
 impl BrowserAnalyzer {
@@ -63,6 +67,11 @@ impl BrowserAnalyzer {
                 analyzer.set_state(state);
                 Self::Fajita(analyzer)
             }
+            Strategy::Garlic => {
+                let mut analyzer = GarlicAnalyzer::new();
+                analyzer.set_state(state);
+                Self::Garlic(analyzer)
+            }
         }
     }
 
@@ -73,6 +82,7 @@ impl BrowserAnalyzer {
                 Self::Avocado(analyzer) => analyzer.think_for_one_tick(),
                 Self::Cherry(analyzer) => analyzer.think_for_one_tick(),
                 Self::Fajita(analyzer) => analyzer.think_for_one_tick(),
+                Self::Garlic(analyzer) => analyzer.think_for_one_tick(),
             }
             ticks += 1;
         }
@@ -84,6 +94,7 @@ impl BrowserAnalyzer {
             Self::Avocado(analyzer) => analyzer.is_fully_solved().is_some(),
             Self::Cherry(analyzer) => analyzer.is_fully_solved().is_some(),
             Self::Fajita(analyzer) => analyzer.is_fully_solved().is_some(),
+            Self::Garlic(analyzer) => analyzer.is_fully_solved().is_some(),
         }
     }
 
@@ -92,6 +103,7 @@ impl BrowserAnalyzer {
             Self::Avocado(analyzer) => analyzer.evaluation(),
             Self::Cherry(analyzer) => analyzer.evaluation(),
             Self::Fajita(analyzer) => analyzer.evaluation(),
+            Self::Garlic(analyzer) => analyzer.evaluation(),
         }
     }
 
@@ -101,6 +113,7 @@ impl BrowserAnalyzer {
             Self::Avocado(analyzer) => analyzer.write_optimal_lop(&mut actions),
             Self::Cherry(analyzer) => analyzer.write_optimal_lop(&mut actions),
             Self::Fajita(analyzer) => analyzer.write_optimal_lop(&mut actions),
+            Self::Garlic(analyzer) => analyzer.write_optimal_lop(&mut actions),
         }
         actions
     }
@@ -1228,7 +1241,12 @@ mod tests {
 
     #[test]
     fn every_browser_strategy_recognizes_terminal_positions_without_ticking() {
-        for strategy in [Strategy::Avocado, Strategy::Cherry, Strategy::Fajita] {
+        for strategy in [
+            Strategy::Avocado,
+            Strategy::Cherry,
+            Strategy::Fajita,
+            Strategy::Garlic,
+        ] {
             let mut analyzer = BrowserAnalyzer::new(strategy, terminal_alpha_win());
             assert!(analyzer.is_fully_solved());
             assert_eq!(analyzer.think(BATCH_TICKS), 0);
@@ -1353,6 +1371,15 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&Strategy::Fajita).unwrap(),
             "\"fajita\""
+        );
+    }
+
+    #[test]
+    fn garlic_strategy_has_the_browser_wire_name() {
+        assert_eq!(Strategy::Garlic.label(), "Garlic");
+        assert_eq!(
+            serde_json::to_string(&Strategy::Garlic).unwrap(),
+            "\"garlic\""
         );
     }
 

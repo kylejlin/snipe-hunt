@@ -1,5 +1,5 @@
 export type Player = "Alpha" | "Beta";
-export type Strategy = "avocado" | "cherry" | "fajita";
+export type Strategy = "avocado" | "cherry" | "fajita" | "garlic";
 export type Location =
   | "alpha-reserve"
   | "beta-reserve"

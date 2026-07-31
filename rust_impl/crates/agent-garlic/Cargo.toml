@@ -1,0 +1,23 @@
+[package]
+name = "agent-garlic"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+snipe-core = { path = "../snipe-core" }
+
+[dev-dependencies]
+agent-avocado = { path = "../agent-avocado" }
+snipe-prng = { path = "../snipe-prng" }
+
+[[bench]]
+name = "search"
+harness = false
+
+[[bench]]
+name = "strength"
+harness = false

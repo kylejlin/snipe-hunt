@@ -10,5 +10,6 @@ path = "src/main.rs"
 
 [dependencies]
 agent-fajita = { path = "../agent-fajita", features = ["training"] }
+ctrlc = "3.4"
 snipe-core = { path = "../snipe-core" }
 snipe-prng = { path = "../snipe-prng" }

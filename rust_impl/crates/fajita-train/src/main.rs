@@ -9,8 +9,11 @@ use std::{
     env, fs,
     io::{self, BufReader, BufWriter, Read, Write},
     path::{Path, PathBuf},
-    process::ExitCode,
-    sync::mpsc,
+    process::{self, ExitCode},
+    sync::{
+        atomic::{AtomicU8, Ordering},
+        mpsc,
+    },
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -35,6 +38,7 @@ const MATURE_STEP: u64 = 150_000;
 const REGRESSION_SCORE: f32 = 0.45;
 const PACKED_INPUT_SIZE: usize = INPUT_SIZE.div_ceil(4);
 const REPLAY_MAGIC: &[u8; 8] = b"FAJRPL01";
+static SHUTDOWN_REQUESTS: AtomicU8 = AtomicU8::new(0);
 
 fn main() -> ExitCode {
     match run() {
@@ -152,7 +156,9 @@ fn help() {
          A new run always starts from deterministic fresh weights. Training consumes only\n\
          legal self-play positions, MCTS visit policies, and final game outcomes.\n\
          The default 512 base and wide-root scaling exactly match Cherry's trainer.\n\
-         Timestamped progress reports are on by default and print every 500 games."
+         Timestamped progress reports are on by default and print every 500 games.\n\
+         Ctrl+C requests a graceful stop after the current self-play batch or arena and\n\
+         writes a full checkpoint. Press Ctrl+C again only to force an immediate exit."
     );
 }
 
@@ -405,6 +411,19 @@ fn format_completion_report(snapshot: ProgressSnapshot) -> String {
     )
 }
 
+fn format_shutdown_report(snapshot: ProgressSnapshot, run_dir: &Path) -> String {
+    format!(
+        "Graceful shutdown complete at game {}. Candidate step {}; champion step {}; {} promotions; {} recoveries; replay contains {} positions. A full resumable checkpoint was saved in {}.",
+        format_count(snapshot.games),
+        format_count(snapshot.candidate_steps),
+        format_count(snapshot.champion_steps),
+        format_count(snapshot.promotions),
+        format_count(snapshot.recoveries),
+        format_count(snapshot.replay_positions as u64),
+        run_dir.display(),
+    )
+}
+
 fn format_count(value: u64) -> String {
     let digits = value.to_string();
     let mut formatted = String::with_capacity(digits.len() + digits.len() / 3);
@@ -460,6 +479,7 @@ fn train(
         ));
     }
     fs::create_dir_all(run_dir)?;
+    install_shutdown_handler()?;
     let mut run = load_run(run_dir)?;
     let started = Instant::now();
     let mut batch = Vec::with_capacity(BATCH_SIZE);
@@ -475,7 +495,7 @@ fn train(
     let mut last_loss = 0.0;
     let mut last_arena = None;
 
-    while started.elapsed() < duration {
+    while started.elapsed() < duration && !shutdown_requested() {
         let snapshot = run.model.clone();
         let jobs = (0..workers)
             .map(|_| (run.rng.next_u64(), run.rng.next_u64()))
@@ -572,11 +592,34 @@ fn train(
         })?;
     }
     save_run(run_dir, &run, last_loss, last_arena, true)?;
-    print_progress(
-        progress_reports,
-        format_completion_report(ProgressSnapshot::from_run(&run)),
-    )?;
+    let snapshot = ProgressSnapshot::from_run(&run);
+    if shutdown_requested() {
+        print_progress(true, format_shutdown_report(snapshot, &absolute(run_dir)?))?;
+    } else {
+        print_progress(progress_reports, format_completion_report(snapshot))?;
+    }
     Ok(())
+}
+
+fn install_shutdown_handler() -> io::Result<()> {
+    SHUTDOWN_REQUESTS.store(0, Ordering::SeqCst);
+    ctrlc::set_handler(|| {
+        if SHUTDOWN_REQUESTS.fetch_add(1, Ordering::SeqCst) == 0 {
+            eprintln!(
+                "\nGraceful shutdown requested. Fajita will finish the current self-play batch \
+                 or arena, then save a full checkpoint. Press Ctrl+C again to force an immediate \
+                 exit without saving."
+            );
+        } else {
+            eprintln!("\nSecond interrupt received; exiting immediately without saving.");
+            process::exit(130);
+        }
+    })
+    .map_err(|error| io::Error::other(format!("could not install Ctrl+C handler: {error}")))
+}
+
+fn shutdown_requested() -> bool {
+    SHUTDOWN_REQUESTS.load(Ordering::SeqCst) != 0
 }
 
 fn learning_rate(training_steps: u64) -> f32 {

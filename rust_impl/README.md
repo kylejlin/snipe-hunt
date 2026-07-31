@@ -136,6 +136,11 @@ Fajita enters its lower-rate mature optimization phase after 150,000 updates,
 which keeps later champion branches stable without altering their weights or
 replay history.
 
+Press `Ctrl+C` once to request a graceful shutdown. Fajita finishes the current
+self-play batch or promotion arena, writes a full checkpoint including replay,
+prints confirmation, and exits. Press `Ctrl+C` a second time only when an
+immediate exit without saving is preferable to waiting.
+
 ### Train on a 13-inch Intel MacBook Pro
 
 From `rust_impl`, this thermal-conscious command caps both self-play and

@@ -10,6 +10,7 @@ The active implementation is intentionally small and dependency-directed:
 - `crates/cherry-train` is Cherry's resumable native self-play trainer.
 - `crates/agent-fajita` is a wide residual policy/value MCTS analyzer trained
   from independent fresh weights.
+- `crates/agent-arena` runs paired-seed round robins between the browser agents.
 - `crates/fajita-train` is Fajita's high-quality, rules-only self-play trainer.
 - `crates/snipe-wasm` is the browser bridge over Core and the three browser
   agents.
@@ -51,6 +52,37 @@ cd web
 npm test
 npm run build
 ```
+
+## Run the browser-agent arena
+
+From `rust_impl`, run the published Avocado, Cherry, and Fajita agents in a
+round robin:
+
+```sh
+cargo run --release -p agent-arena -- \
+  --pairs 10 \
+  --milliseconds 10000 \
+  --save-games per-ply
+```
+
+Each of the three matchups runs concurrently. A matchup plays every seed twice,
+with the agents swapping Alpha and Beta, so the command above plays 60 games.
+The final table awards one point per win and half a point per draw.
+
+`--save-games` has three modes:
+
+- `per-ply` is the default. The arena creates the game file before the first
+  ply, prefixes it with `// INCOMPLETE`, and atomically replaces it after every
+  ply. Normal game completion removes the marker. If the process is interrupted,
+  the marker and the last fully recorded ply remain.
+- `per-game` writes one complete `.shgh` file after each game finishes.
+- `off` does not create history directories or files.
+
+Saved histories default to `agent-arena-results/`. Every invocation creates a
+new `tournament-*` directory, with `avocado-vs-cherry`,
+`avocado-vs-fajita`, and `cherry-vs-fajita` subdirectories. Use
+`--output-root PATH` to select another parent directory. `--seed-start` changes
+the first paired seed, and `--max-plies` changes the draw limit.
 
 ## Train Cherry
 

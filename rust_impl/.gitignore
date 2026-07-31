@@ -4,4 +4,5 @@
 /web/src/wasm/pkg/
 /web/.vite/
 /training/
+/agent-arena-results/
 *.profraw

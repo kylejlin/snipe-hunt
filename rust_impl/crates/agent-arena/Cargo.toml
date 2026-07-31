@@ -1,0 +1,16 @@
+[package]
+name = "agent-arena"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[[bin]]
+name = "agent-arena"
+path = "src/main.rs"
+
+[dependencies]
+agent-avocado = { path = "../agent-avocado" }
+agent-cherry = { path = "../agent-cherry" }
+agent-fajita = { path = "../agent-fajita" }
+snipe-core = { path = "../snipe-core" }
+snipe-prng = { path = "../snipe-prng" }

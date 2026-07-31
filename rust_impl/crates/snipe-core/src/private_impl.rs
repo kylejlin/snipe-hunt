@@ -906,6 +906,19 @@ impl Evaluation {
     }
 }
 
+impl OptimalOutcome {
+    pub(crate) const fn as_evaluation_(self) -> Evaluation {
+        match self {
+            Self::Draw => Evaluation::Estimate(EvaluationEstimate::ZERO),
+            Self::MateInN(mate) => Evaluation::MateInN(mate),
+        }
+    }
+
+    pub(crate) fn cmp_(&self, other: &Self) -> Ordering {
+        self.as_evaluation().cmp(&other.as_evaluation())
+    }
+}
+
 impl MateInN {
     pub(crate) fn cmp_(&self, other: &Self) -> Ordering {
         self.compress().cmp(&other.compress())
@@ -1079,6 +1092,19 @@ mod tests {
         assert!(alpha_slow < alpha_one && alpha_one < alpha_fast);
         assert!(low_estimate < EvaluationEstimate::ZERO);
         assert!(EvaluationEstimate::ZERO < high_estimate);
+    }
+
+    #[test]
+    fn optimal_outcomes_use_game_theoretic_evaluation_order() {
+        let beta_mate = OptimalOutcome::MateInN(MateInN::new(Player::Beta, 3).unwrap());
+        let draw = OptimalOutcome::Draw;
+        let alpha_slow = OptimalOutcome::MateInN(MateInN::new(Player::Alpha, 5).unwrap());
+        let alpha_fast = OptimalOutcome::MateInN(MateInN::new(Player::Alpha, 3).unwrap());
+
+        assert!(beta_mate < draw);
+        assert!(draw < alpha_slow);
+        assert!(alpha_slow < alpha_fast);
+        assert_eq!(draw.as_evaluation(), EvaluationEstimate::ZERO.into());
     }
 
     #[test]

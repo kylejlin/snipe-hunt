@@ -66,11 +66,24 @@ impl BrowserAnalyzer {
         }
     }
 
-    fn think(&mut self, ticks: usize) {
+    fn think(&mut self, max_ticks: usize) -> usize {
+        let mut ticks = 0;
+        while ticks < max_ticks && !self.is_fully_solved() {
+            match self {
+                Self::Avocado(analyzer) => analyzer.think_for_one_tick(),
+                Self::Cherry(analyzer) => analyzer.think_for_one_tick(),
+                Self::Fajita(analyzer) => analyzer.think_for_one_tick(),
+            }
+            ticks += 1;
+        }
+        ticks
+    }
+
+    fn is_fully_solved(&self) -> bool {
         match self {
-            Self::Avocado(analyzer) => analyzer.think(ticks),
-            Self::Cherry(analyzer) => analyzer.think(ticks),
-            Self::Fajita(analyzer) => analyzer.think(ticks),
+            Self::Avocado(analyzer) => analyzer.is_fully_solved().is_some(),
+            Self::Cherry(analyzer) => analyzer.is_fully_solved().is_some(),
+            Self::Fajita(analyzer) => analyzer.is_fully_solved().is_some(),
         }
     }
 
@@ -410,9 +423,8 @@ fn run_analysis(
     let deadline = start + request.time_limit_ms.clamp(1, MAX_TIME_MS) as f64;
     let mut ticks = 0u64;
     let mut last_progress = start;
-    while js_sys::Date::now() < deadline {
-        analyzer.think(BATCH_TICKS);
-        ticks += BATCH_TICKS as u64;
+    while js_sys::Date::now() < deadline && !analyzer.is_fully_solved() {
+        ticks += analyzer.think(BATCH_TICKS) as u64;
         let now = js_sys::Date::now();
         if let Some(callback) = callback
             && now - last_progress >= 75.0
@@ -1154,6 +1166,78 @@ fn js_error(message: impl Into<String>) -> JsValue {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use snipe_core::MateInN;
+
+    fn cards(entries: &[(Card, Player)]) -> CardMultiset {
+        entries
+            .iter()
+            .fold(CardMultiset::EMPTY, |cards, &(card, player)| {
+                cards
+                    .checked_add(CardMultiset::singleton(card, player))
+                    .expect("test position has legal multiplicities")
+            })
+    }
+
+    fn immediate_alpha_mate() -> State {
+        State {
+            active_player: Player::Alpha,
+            reserves: CardMultiset::EMPTY,
+            r1: cards(&[
+                (Card::Snipe, Player::Alpha),
+                (Card::Animal(Animal::Mouse), Player::Alpha),
+            ]),
+            r2: cards(&[
+                (Card::Animal(Animal::Rooster), Player::Beta),
+                (Card::Animal(Animal::Tiger), Player::Beta),
+                (Card::Snipe, Player::Beta),
+            ]),
+            r3: CardMultiset::EMPTY,
+            r4: CardMultiset::EMPTY,
+            r5: CardMultiset::EMPTY,
+            r6: CardMultiset::EMPTY,
+            leading_action: None,
+        }
+    }
+
+    fn terminal_alpha_win() -> State {
+        State {
+            active_player: Player::Beta,
+            reserves: cards(&[(Card::Snipe, Player::Beta)]),
+            r1: cards(&[(Card::Snipe, Player::Alpha)]),
+            r2: CardMultiset::EMPTY,
+            r3: CardMultiset::EMPTY,
+            r4: CardMultiset::EMPTY,
+            r5: CardMultiset::EMPTY,
+            r6: CardMultiset::EMPTY,
+            leading_action: None,
+        }
+    }
+
+    #[test]
+    fn browser_batches_stop_on_the_tick_that_solves_a_position() {
+        let mut analyzer = BrowserAnalyzer::new(Strategy::Avocado, immediate_alpha_mate());
+        assert!(!analyzer.is_fully_solved());
+        assert_eq!(analyzer.think(BATCH_TICKS), 1);
+        assert!(analyzer.is_fully_solved());
+        assert_eq!(analyzer.think(BATCH_TICKS), 0);
+        assert_eq!(
+            analyzer.evaluation(),
+            MateInN::new(Player::Alpha, 1).unwrap().into()
+        );
+    }
+
+    #[test]
+    fn every_browser_strategy_recognizes_terminal_positions_without_ticking() {
+        for strategy in [Strategy::Avocado, Strategy::Cherry, Strategy::Fajita] {
+            let mut analyzer = BrowserAnalyzer::new(strategy, terminal_alpha_win());
+            assert!(analyzer.is_fully_solved());
+            assert_eq!(analyzer.think(BATCH_TICKS), 0);
+            assert_eq!(
+                analyzer.evaluation(),
+                MateInN::new(Player::Alpha, 0).unwrap().into()
+            );
+        }
+    }
 
     #[test]
     fn positions_round_trip_without_physical_card_identity() {
@@ -1249,7 +1333,7 @@ mod tests {
             first_step: Some(action_selector(&state, first).unwrap()),
         };
         let mut analyzer = BrowserAnalyzer::new(Strategy::Avocado, after_first);
-        analyzer.think(1);
+        let _ = analyzer.think(1);
 
         let update = analysis_update(&request, &state, Some(first), &analyzer, 1, 0.0).unwrap();
 

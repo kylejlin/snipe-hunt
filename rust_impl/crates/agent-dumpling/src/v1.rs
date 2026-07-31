@@ -3,10 +3,10 @@
 //! material/pressure/snipe-safety evaluation.
 
 use crate::search::{
-    SearchConfig, Searcher, analyzer_evaluation, analyzer_set_state, analyzer_think,
-    analyzer_write_lop, assert_analyzer,
+    SearchConfig, Searcher, analyzer_evaluation, analyzer_fully_solved, analyzer_set_state,
+    analyzer_think, analyzer_write_lop, assert_analyzer,
 };
-use snipe_core::{ActionWriter, Analyzer, Evaluation, State};
+use snipe_core::{ActionWriter, Analyzer, Evaluation, OptimalOutcome, State};
 
 const CONFIG: SearchConfig = SearchConfig {
     nodes_per_tick: 262_144,
@@ -83,11 +83,63 @@ impl Analyzer for DumplingV1Analyzer {
         analyzer_think(&mut self.searcher);
     }
 
+    fn is_fully_solved(&self) -> Option<OptimalOutcome> {
+        analyzer_fully_solved(&self.searcher)
+    }
+
     fn evaluation(&self) -> Evaluation {
         analyzer_evaluation(&self.searcher)
     }
 
     fn write_optimal_lop<W: ActionWriter>(&self, writer: &mut W) {
         analyzer_write_lop(&self.searcher, writer);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use snipe_core::{Card, CardMultiset, MateInN, Player};
+
+    fn cards(entries: &[(Card, Player)]) -> CardMultiset {
+        entries
+            .iter()
+            .fold(CardMultiset::EMPTY, |cards, &(card, player)| {
+                cards
+                    .checked_add(CardMultiset::singleton(card, player))
+                    .expect("test position has legal multiplicities")
+            })
+    }
+
+    #[test]
+    fn terminal_positions_are_stably_solved_without_thinking() {
+        let state = State {
+            active_player: Player::Beta,
+            reserves: cards(&[(Card::Snipe, Player::Beta)]),
+            r1: cards(&[(Card::Snipe, Player::Alpha)]),
+            r2: CardMultiset::EMPTY,
+            r3: CardMultiset::EMPTY,
+            r4: CardMultiset::EMPTY,
+            r5: CardMultiset::EMPTY,
+            r6: CardMultiset::EMPTY,
+            leading_action: None,
+        };
+        let mate = MateInN::new(Player::Alpha, 0).unwrap();
+        let solved = Some(OptimalOutcome::MateInN(mate));
+        let mut analyzer = DumplingV1Analyzer::new();
+        analyzer.set_state(state);
+
+        assert_eq!(analyzer.is_fully_solved(), solved);
+        assert_eq!(analyzer.evaluation(), mate.into());
+        let mut line = Vec::new();
+        analyzer.write_optimal_lop(&mut line);
+        assert!(line.is_empty());
+
+        analyzer.think_for_one_tick();
+        assert_eq!(analyzer.is_fully_solved(), solved);
+        assert_eq!(analyzer.evaluation(), mate.into());
+        let mut unchanged_line = Vec::new();
+        analyzer.write_optimal_lop(&mut unchanged_line);
+        assert_eq!(unchanged_line, line);
     }
 }

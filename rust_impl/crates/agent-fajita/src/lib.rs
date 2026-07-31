@@ -5,8 +5,8 @@
 //! therefore always begin from a clean slate.
 
 use snipe_core::{
-    Action, ActionWriter, Analyzer, Animal, Card, Evaluation, EvaluationEstimate, MateInN, Player,
-    Rank, State, StepDirection,
+    Action, ActionWriter, Analyzer, Animal, Card, Evaluation, EvaluationEstimate, MateInN,
+    OptimalOutcome, Player, Rank, State, StepDirection,
 };
 use std::{fs, io, path::Path};
 
@@ -645,9 +645,19 @@ impl Analyzer for FajitaAnalyzer {
     }
 
     fn think_for_one_tick(&mut self) {
+        if self.is_fully_solved().is_some() {
+            return;
+        }
         if let Some(search) = &mut self.search {
             search.simulate(&self.model);
         }
+    }
+
+    fn is_fully_solved(&self) -> Option<OptimalOutcome> {
+        let winner = self.state.as_ref()?.winner()?;
+        Some(OptimalOutcome::MateInN(
+            MateInN::new(winner, 0).expect("zero is a supported mate distance"),
+        ))
     }
 
     fn evaluation(&self) -> Evaluation {

@@ -6,7 +6,7 @@
 
 use snipe_core::{
     Action, ActionWriter, Analyzer, Animal, AnimalDrop, AnimalStep, Card, Evaluation,
-    EvaluationEstimate, MateInN, Player, Rank, SnipeStep, State, StepDirection,
+    EvaluationEstimate, MateInN, OptimalOutcome, Player, Rank, SnipeStep, State, StepDirection,
 };
 use std::{
     cmp::Reverse,
@@ -989,7 +989,6 @@ pub struct AvocadoAnalyzer {
     completed_depth: u16,
     published_pv: Vec<Ply>,
     evaluation: Evaluation,
-    terminal: bool,
 }
 
 impl Default for AvocadoAnalyzer {
@@ -1007,7 +1006,6 @@ impl AvocadoAnalyzer {
             completed_depth: 0,
             published_pv: Vec::with_capacity(16),
             evaluation: estimate(0),
-            terminal: false,
         }
     }
 
@@ -1023,12 +1021,10 @@ impl Analyzer for AvocadoAnalyzer {
         self.target_depth = 1;
         self.completed_depth = 0;
         self.published_pv.clear();
-        self.terminal = false;
 
         let position = Position::from_core(&state);
         if let Some(winner) = position.winner() {
             self.evaluation = mate_in(winner, 0);
-            self.terminal = true;
         } else {
             let mut actions = ActionBuffer::new();
             position.write_legal_actions(&mut actions);
@@ -1041,7 +1037,7 @@ impl Analyzer for AvocadoAnalyzer {
     }
 
     fn think_for_one_tick(&mut self) {
-        if self.terminal {
+        if self.is_fully_solved().is_some() {
             return;
         }
         let Some(root) = self.root else {
@@ -1073,6 +1069,13 @@ impl Analyzer for AvocadoAnalyzer {
         self.completed_depth = self.target_depth;
         self.target_depth = self.target_depth.saturating_add(1);
         self.search.begin_iteration(&self.published_pv);
+    }
+
+    fn is_fully_solved(&self) -> Option<OptimalOutcome> {
+        match self.evaluation {
+            Evaluation::MateInN(mate) => Some(OptimalOutcome::MateInN(mate)),
+            Evaluation::Estimate(_) => None,
+        }
     }
 
     fn evaluation(&self) -> Evaluation {
@@ -1506,6 +1509,25 @@ mod tests {
         assert_eq!(mate.winner(), Player::Alpha);
         assert_eq!(mate.plies(), 1);
         assert!(is_forced_mate(&state, mate.winner(), mate.plies()));
+
+        let solved = Some(OptimalOutcome::MateInN(mate));
+        assert_eq!(analyzer.is_fully_solved(), solved);
+        let completed_depth = analyzer.completed_depth();
+        let mut line = Vec::new();
+        analyzer.write_optimal_lop(&mut line);
+        let mut after = state;
+        for &action in &line {
+            after = after.apply(action).unwrap();
+        }
+        assert_eq!(after.winner(), Some(Player::Alpha));
+
+        analyzer.think(32);
+        let mut unchanged_line = Vec::new();
+        analyzer.write_optimal_lop(&mut unchanged_line);
+        assert_eq!(analyzer.is_fully_solved(), solved);
+        assert_eq!(analyzer.evaluation(), Evaluation::MateInN(mate));
+        assert_eq!(analyzer.completed_depth(), completed_depth);
+        assert_eq!(unchanged_line, line);
     }
 
     #[test]
@@ -1609,6 +1631,12 @@ mod tests {
         assert_eq!(
             analyzer.evaluation(),
             MateInN::new(Player::Alpha, 0).unwrap().into()
+        );
+        assert_eq!(
+            analyzer.is_fully_solved(),
+            Some(OptimalOutcome::MateInN(
+                MateInN::new(Player::Alpha, 0).unwrap()
+            ))
         );
         let mut line = Vec::new();
         analyzer.write_optimal_lop(&mut line);

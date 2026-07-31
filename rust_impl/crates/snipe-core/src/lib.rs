@@ -296,11 +296,23 @@ pub trait Analyzer {
     /// In practice, satisfying the first requirement will almost always automatically satisfy the second requirement.
     fn think_for_one_tick(&mut self);
 
+    /// If the analyzer has not fully solved the position yet, return `None`.
+    /// Otherwise, return `Some(o)`, where `o` is the optimal outcome.
+    /// In this case, the following invariants must be met:
+    /// - `evaluation() == o.as_evaluation()` must be true.
+    /// - `write_optimal_lop` must write a principal variation consistent with `o`, with every ply optimal for the acting player. As a corollary:
+    ///   - For a mate-in-N, it must reach the reported winner after N plies.
+    ///   - For a draw, every completed ply must preserve the draw.
+    /// - `is_fully_solved`, `evaluation()` and `write_optimal_lop` won't change until `set_state` is called again.
+    fn is_fully_solved(&self) -> Option<OptimalOutcome>;
+
     /// Your implementation must be truthful about mates.
     /// In other words, an implementation is only sound if it satisfies ALL of the following:
     /// - If the game is over, you must return mate-in-zero.
     /// - If you return mate-in-N, there must truly exist a forced win in N plies.
     ///   - As a corollary, if you return mate-in-zero, the game must truly be over.
+    ///   - Note that N need not be the shortest forced mate distance.
+    ///     In other words, this function is allowed to return mate-in-N even if there exists a shorter mate-in-M.
     /// - If you return an estimate, the game must NOT be over.
     fn evaluation(&self) -> Evaluation;
 
@@ -317,6 +329,40 @@ pub trait Analyzer {
         W: ActionWriter;
 }
 
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
+pub enum OptimalOutcome {
+    /// The shortest possible mate, assuming the winner tries to mate as quickly as possible,
+    /// and the loser tries to survive as long as possible.
+    MateInN(MateInN),
+
+    /// You will probably never construct this variant.
+    ///
+    /// This can only happen if the optimal line of play is infinite.
+    /// Snipe Hunt does not have stalemate (if you can't act, you lose),
+    /// insufficient material (material is conserved), draw-by-repetition, draw-by-ply-limits,
+    /// or any of the other common draw conditions found in other games.
+    /// Thus, games almost never end in a draw, in practice.
+    /// The author (Kyle) has never seen a draw in his life.
+    /// Furthermore, even if a drawn position exists, _proving_ that it's drawn
+    /// would probably require a search over an unrealistically large state space.
+    /// That said, since I haven't proven the impossibility of a draw, I'll leave this here, just for completeness.
+    Draw,
+}
+impl OptimalOutcome {
+    pub const fn as_evaluation(self) -> Evaluation {
+        self.as_evaluation_()
+    }
+}
+impl Ord for OptimalOutcome {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.cmp_(other)
+    }
+}
+impl PartialOrd for OptimalOutcome {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum Evaluation {
     MateInN(MateInN),

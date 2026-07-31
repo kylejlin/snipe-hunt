@@ -1,7 +1,9 @@
 use crate::packed::{
     GeneratedMoves, MAX_LINE, PackedMove, PackedState, PackedTurn, TurnList, player_sign,
 };
-use snipe_core::{ActionWriter, Analyzer, Evaluation, EvaluationEstimate, MateInN, Player, State};
+use snipe_core::{
+    ActionWriter, Analyzer, Evaluation, EvaluationEstimate, MateInN, OptimalOutcome, Player, State,
+};
 
 const MATE: i32 = 1_000_000;
 const INFINITY: i32 = 1_100_000;
@@ -550,6 +552,12 @@ impl Searcher {
             .into()
     }
 
+    pub(crate) fn fully_solved(&self) -> Option<OptimalOutcome> {
+        self.root_winner.map(|winner| {
+            OptimalOutcome::MateInN(MateInN::new(winner, 0).expect("zero is a valid mate distance"))
+        })
+    }
+
     pub(crate) fn write_optimal_lop<W: ActionWriter>(&self, writer: &mut W) {
         let Some(mut state) = self.root else {
             return;
@@ -691,6 +699,10 @@ pub(crate) fn analyzer_think(searcher: &mut Searcher) {
 
 pub(crate) fn analyzer_evaluation(searcher: &Searcher) -> Evaluation {
     searcher.evaluation()
+}
+
+pub(crate) fn analyzer_fully_solved(searcher: &Searcher) -> Option<OptimalOutcome> {
+    searcher.fully_solved()
 }
 
 pub(crate) fn analyzer_write_lop<W: ActionWriter>(searcher: &Searcher, writer: &mut W) {

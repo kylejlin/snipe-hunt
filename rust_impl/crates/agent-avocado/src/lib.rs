@@ -1072,6 +1072,11 @@ impl Analyzer for AvocadoAnalyzer {
     }
 
     fn is_fully_solved(&self) -> Option<OptimalOutcome> {
+        // Avocado publishes a mate only after completing a full-window root search over every
+        // legal ply. Mate scores include distance, so a shorter win (or longer defense) would
+        // have improved the root's minimax result within the same horizon. Therefore a published
+        // mate is the exact optimal outcome, not merely a sound mate certificate, and further
+        // thinking cannot improve it.
         match self.evaluation {
             Evaluation::MateInN(mate) => Some(OptimalOutcome::MateInN(mate)),
             Evaluation::Estimate(_) => None,

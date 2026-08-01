@@ -1058,7 +1058,7 @@ function GameApp() {
           game.cursor + index + 1,
           move.player,
         ),
-        notation: formatCompletedMove(move),
+        notation: formatCompletedMove(move, nextVariationPosition.winner),
       };
       variationPosition = nextVariationPosition;
       return item;
@@ -1178,7 +1178,8 @@ function GameApp() {
               position.turnNumber,
               position.turn,
               true,
-            )} ${formatCompletedMove({
+            )} ${formatCompletedMove(
+              {
                 id: "pending-subply",
                 positionKey: position.positionKey,
                 player: position.turn,
@@ -1190,7 +1191,9 @@ function GameApp() {
                     movePrefix.find((step) => step.capture.snipe)?.capture
                       .snipe ?? null,
                 },
-              })}, …`}
+              },
+              boardPosition.winner,
+            )}, …`}
           </small>
         </div>
       </li>
@@ -1225,7 +1228,10 @@ function GameApp() {
               {`${formatDisplayPlyPrefix(
                 timelineIndex,
                 move.player,
-              )} ${formatCompletedMove(move)}`}
+              )} ${formatCompletedMove(
+                move,
+                timelineEntry.position.winner,
+              )}`}
             </small>
           </button>
         </li>
@@ -1638,7 +1644,10 @@ function GameApp() {
                         {`${formatDisplayPlyPrefix(
                           timelineIndex,
                           move.player,
-                        )} ${formatCompletedMove(move)}`}
+                        )} ${formatCompletedMove(
+                          move,
+                          timelineEntry.position.winner,
+                        )}`}
                       </small>
                     </button>
                   </li>

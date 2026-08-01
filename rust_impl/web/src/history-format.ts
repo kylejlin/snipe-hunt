@@ -77,7 +77,10 @@ export function formatMove(move: TurnMove): string {
     .join(", ");
 }
 
-export function formatCompletedMove(move: TurnMove): string {
+export function formatCompletedMove(
+  move: TurnMove,
+  resultingWinner: Player | null,
+): string {
   const notation = move.steps
     .map(
       (_, stepIndex) =>
@@ -86,9 +89,12 @@ export function formatCompletedMove(move: TurnMove): string {
         }`,
     )
     .join(", ");
-  const capturedSnipe = move.steps.find((step) => step.capture.snipe)?.capture
-    .snipe;
-  const suffix = capturedSnipe === "Beta" ? "+#0" : capturedSnipe === "Alpha" ? "-#0" : "";
+  const suffix =
+    resultingWinner === "Alpha"
+      ? "+#0"
+      : resultingWinner === "Beta"
+        ? "-#0"
+        : "";
   return suffix ? `${notation}${suffix}` : notation;
 }
 
@@ -164,6 +170,7 @@ export function serializeHistory(
     lines.push(
       `${formatPlyPrefix(index, entry.move.player)} ${formatCompletedMove(
         entry.move,
+        entry.position.winner,
       )}`,
     );
   }
@@ -344,10 +351,10 @@ export function parseHistory(
         `Line ${lineNumber}: move could not be applied${reason instanceof Error ? ` (${reason.message})` : ""}.`,
       );
     }
-    const actual = formatCompletedMove(move);
+    const actual = formatCompletedMove(move, position.winner);
     if (actual !== body) {
       throw new Error(
-        `Line ${lineNumber}: capture annotations do not match the actual result (expected "${actual}").`,
+        `Line ${lineNumber}: move annotations do not match the actual result (expected "${actual}").`,
       );
     }
     timeline.push({ position, move });

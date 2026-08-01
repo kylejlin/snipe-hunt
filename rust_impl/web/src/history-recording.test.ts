@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { MoveStep, Position, TurnMove } from "./engine/types";
-import { parseHistory } from "./history-format";
+import { parseHistory, serializeHistory } from "./history-format";
 import {
   apply_move,
   canonicalize_position,
@@ -45,5 +45,22 @@ describe("native arena history recording", () => {
     const timeline = parseHistory(source, engine);
     expect(timeline).toHaveLength(28);
     expect(timeline.at(-1)?.position.winner).toBe("Beta");
+  });
+
+  it("imports and re-exports an immobilization win with its result marker", () => {
+    const source = readFileSync(
+      resolve("../../dumpling_v0_vs_cherry/game6(cherry_won).shgh"),
+      "utf8",
+    );
+    const timeline = parseHistory(source, engine);
+
+    expect(timeline).toHaveLength(122);
+    expect(timeline.at(-1)?.position.winner).toBe("Alpha");
+    expect(timeline.at(-1)?.move?.captures.snipe).toBeNull();
+    const exported = serializeHistory(timeline);
+    expect(exported).toMatch(/121b\. Rat 3\+#0\n$/);
+    expect(parseHistory(exported, engine).at(-1)?.position.winner).toBe(
+      "Alpha",
+    );
   });
 });

@@ -43,22 +43,28 @@ function move(capture: TurnMove["captures"]): TurnMove {
   };
 }
 
-describe("authoritative capture annotations", () => {
+describe("authoritative move annotations", () => {
   it("does not infer a capture from frontend card-array changes", () => {
     expect(
-      formatCompletedMove(move({ animals: [], snipe: null })),
+      formatCompletedMove(move({ animals: [], snipe: null }), null),
     ).toBe("Snake 4");
   });
 
   it("uses Core's animal capture fact", () => {
     expect(
-      formatCompletedMove(move({ animals: ["Squid"], snipe: null })),
+      formatCompletedMove(move({ animals: ["Squid"], snipe: null }), null),
     ).toBe("Snake 4x");
   });
 
-  it("uses the captured snipe's original owner for the result suffix", () => {
+  it("uses the resulting winner for a snipe-capture result suffix", () => {
     expect(
-      formatCompletedMove(move({ animals: [], snipe: "Alpha" })),
+      formatCompletedMove(move({ animals: [], snipe: "Alpha" }), "Beta"),
     ).toBe("Snake 4-#0");
+  });
+
+  it("uses the resulting winner for an immobilization result suffix", () => {
+    expect(
+      formatCompletedMove(move({ animals: [], snipe: null }), "Alpha"),
+    ).toBe("Snake 4+#0");
   });
 });

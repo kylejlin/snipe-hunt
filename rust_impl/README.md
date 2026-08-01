@@ -70,6 +70,21 @@ Each of the six matchups runs concurrently. A matchup plays every seed twice,
 with the agents swapping Alpha and Beta, so the command above plays 120 games.
 The final table awards one point per win and half a point per draw.
 
+To run only selected matchups, pass `--matchup AGENT-vs-AGENT` once per matchup.
+Agent names are `avocado`, `cherry`, `fajita`, and `garlic`; their order in the
+argument does not matter. For example, this runs only Avocado versus Garlic:
+
+```sh
+cargo run --release -p agent-arena -- \
+  --matchup avocado-vs-garlic \
+  --pairs 10 \
+  --milliseconds 10000 \
+  --save-games per-ply
+```
+
+Omitting `--matchup` preserves the full four-agent round robin. Repeat the flag
+to include multiple selected matchups.
+
 `--save-games` has three modes:
 
 - `per-ply` is the default. The arena creates the game file before the first

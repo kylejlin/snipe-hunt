@@ -27,14 +27,8 @@ const AGENTS: [AgentKind; 4] = [
     AgentKind::Fajita,
     AgentKind::Garlic,
 ];
-const MATCHUPS: [(AgentKind, AgentKind); 6] = [
-    (AgentKind::Avocado, AgentKind::Cherry),
-    (AgentKind::Avocado, AgentKind::Fajita),
-    (AgentKind::Avocado, AgentKind::Garlic),
-    (AgentKind::Cherry, AgentKind::Fajita),
-    (AgentKind::Cherry, AgentKind::Garlic),
-    (AgentKind::Fajita, AgentKind::Garlic),
-];
+
+type Matchup = (AgentKind, AgentKind);
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum AgentKind {
@@ -60,6 +54,18 @@ impl AgentKind {
             Self::Cherry => "cherry",
             Self::Fajita => "fajita",
             Self::Garlic => "garlic",
+        }
+    }
+
+    fn parse(value: &str) -> Result<Self, String> {
+        match value.to_ascii_lowercase().as_str() {
+            "avocado" => Ok(Self::Avocado),
+            "cherry" => Ok(Self::Cherry),
+            "fajita" => Ok(Self::Fajita),
+            "garlic" => Ok(Self::Garlic),
+            _ => Err(format!(
+                "unknown agent `{value}`; expected avocado, cherry, fajita, or garlic"
+            )),
         }
     }
 
@@ -128,6 +134,7 @@ struct Config {
     max_plies: u32,
     save_games: SaveMode,
     output_root: PathBuf,
+    matchups: Vec<Matchup>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -222,6 +229,14 @@ fn main() -> ExitCode {
 }
 
 fn parse_args() -> Result<Option<Config>, String> {
+    parse_args_from(env::args().skip(1))
+}
+
+fn parse_args_from<I, S>(args: I) -> Result<Option<Config>, String>
+where
+    I: IntoIterator<Item = S>,
+    S: Into<String>,
+{
     let mut config = Config {
         pairs: DEFAULT_PAIRS,
         time_per_ply: Duration::from_millis(DEFAULT_MILLISECONDS),
@@ -229,8 +244,9 @@ fn parse_args() -> Result<Option<Config>, String> {
         max_plies: DEFAULT_MAX_PLIES,
         save_games: SaveMode::PerPly,
         output_root: PathBuf::from(DEFAULT_OUTPUT_ROOT),
+        matchups: Vec::new(),
     };
-    let mut args = env::args().skip(1);
+    let mut args = args.into_iter().map(Into::into);
     while let Some(flag) = args.next() {
         if flag == "--help" || flag == "-h" {
             println!("{}", usage());
@@ -246,6 +262,17 @@ fn parse_args() -> Result<Option<Config>, String> {
             "--max-plies" => config.max_plies = parse(&flag, &value)?,
             "--save-games" => config.save_games = SaveMode::parse(&value)?,
             "--output-root" => config.output_root = PathBuf::from(value),
+            "--matchup" => {
+                let matchup = parse_matchup(&value)?;
+                if config.matchups.contains(&matchup) {
+                    return Err(format!(
+                        "duplicate matchup `{}-vs-{}`",
+                        matchup.0.slug(),
+                        matchup.1.slug()
+                    ));
+                }
+                config.matchups.push(matchup);
+            }
             _ => return Err(format!("unknown option `{flag}`\n{}", usage())),
         }
     }
@@ -258,7 +285,40 @@ fn parse_args() -> Result<Option<Config>, String> {
     if config.max_plies == 0 {
         return Err("`--max-plies` must be positive".to_owned());
     }
+    if config.matchups.is_empty() {
+        config.matchups = default_matchups();
+    }
     Ok(Some(config))
+}
+
+fn parse_matchup(value: &str) -> Result<Matchup, String> {
+    let normalized = value.to_ascii_lowercase();
+    let (first, second) = normalized.split_once("-vs-").ok_or_else(|| {
+        format!(
+            "invalid matchup `{value}`; expected AGENT-vs-AGENT (for example, avocado-vs-garlic)"
+        )
+    })?;
+    let mut first = AgentKind::parse(first)?;
+    let mut second = AgentKind::parse(second)?;
+    if first == second {
+        return Err(format!(
+            "invalid matchup `{value}`; an agent cannot play itself"
+        ));
+    }
+    if second < first {
+        std::mem::swap(&mut first, &mut second);
+    }
+    Ok((first, second))
+}
+
+fn default_matchups() -> Vec<Matchup> {
+    let mut matchups = Vec::new();
+    for (index, &first) in AGENTS.iter().enumerate() {
+        for &second in &AGENTS[index + 1..] {
+            matchups.push((first, second));
+        }
+    }
+    matchups
 }
 
 fn parse<T: std::str::FromStr>(flag: &str, value: &str) -> Result<T, String> {
@@ -270,12 +330,21 @@ fn parse<T: std::str::FromStr>(flag: &str, value: &str) -> Result<T, String> {
 fn usage() -> &'static str {
     "usage: agent-arena [--pairs 10] [--milliseconds 10000] \
      [--seed-start 0] [--max-plies 256] \
-     [--save-games off|per-ply|per-game] [--output-root agent-arena-results]"
+     [--save-games off|per-ply|per-game] [--output-root agent-arena-results] \
+     [--matchup AGENT-vs-AGENT]...\n\
+     agents: avocado, cherry, fajita, garlic\n\
+     omit --matchup to run the full round robin; repeat it to select multiple matchups"
 }
 
 fn run(config: Config) -> Result<(), String> {
+    let matchup_labels = config
+        .matchups
+        .iter()
+        .map(|(first, second)| format!("{}–{}", first.label(), second.label()))
+        .collect::<Vec<_>>()
+        .join(", ");
     println!(
-        "round robin: Avocado, Cherry, Fajita, Garlic; {} paired seeds; {:.3}s/ply",
+        "matchups: {matchup_labels}; {} paired seeds; {:.3}s/ply",
         config.pairs,
         config.time_per_ply.as_secs_f64(),
     );
@@ -294,8 +363,8 @@ fn run(config: Config) -> Result<(), String> {
         None => println!("game saving: off"),
     }
     let started = Instant::now();
-    let mut handles = Vec::with_capacity(MATCHUPS.len());
-    for (first, second) in MATCHUPS {
+    let mut handles = Vec::with_capacity(config.matchups.len());
+    for &(first, second) in &config.matchups {
         let matchup_directory = tournament_directory
             .as_ref()
             .map(|directory| create_matchup_directory(directory, first, second))
@@ -305,7 +374,7 @@ fn run(config: Config) -> Result<(), String> {
             run_matchup(worker_config, first, second, matchup_directory)
         }));
     }
-    let mut results = Vec::with_capacity(MATCHUPS.len());
+    let mut results = Vec::with_capacity(config.matchups.len());
     for handle in handles {
         let result = handle
             .join()
@@ -670,10 +739,11 @@ const fn player_slug(player: Player) -> &'static str {
 
 fn print_summary(results: &[MatchupResult], elapsed: Duration) {
     let mut standings = BTreeMap::new();
-    for agent in AGENTS {
-        standings.insert(agent, Standing::default());
-    }
     for result in results {
+        standings.entry(result.first).or_insert(Standing::default());
+        standings
+            .entry(result.second)
+            .or_insert(Standing::default());
         let first = standings
             .get_mut(&result.first)
             .expect("all agents have standings");
@@ -688,7 +758,7 @@ fn print_summary(results: &[MatchupResult], elapsed: Duration) {
         second.draws += result.draws;
     }
 
-    let mut ranked = AGENTS.map(|agent| (agent, standings[&agent])).to_vec();
+    let mut ranked = standings.into_iter().collect::<Vec<_>>();
     ranked.sort_by(|(left_agent, left), (right_agent, right)| {
         right
             .points()
@@ -725,6 +795,58 @@ mod tests {
         assert_eq!(SaveMode::parse("Per-Ply"), Ok(SaveMode::PerPly));
         assert_eq!(SaveMode::parse("per_game"), Ok(SaveMode::PerGame));
         assert!(SaveMode::parse("sometimes").is_err());
+    }
+
+    #[test]
+    fn matchup_values_are_case_insensitive_and_canonicalized() {
+        assert_eq!(
+            parse_matchup("Garlic-vs-Avocado"),
+            Ok((AgentKind::Avocado, AgentKind::Garlic))
+        );
+        assert!(parse_matchup("avocado-vs-avocado").is_err());
+        assert!(parse_matchup("avocado-garlic").is_err());
+        assert!(parse_matchup("avocado-vs-potato").is_err());
+    }
+
+    #[test]
+    fn omitted_matchups_use_the_full_round_robin() {
+        let config = parse_args_from(Vec::<String>::new())
+            .unwrap()
+            .expect("default arguments should run the arena");
+        assert_eq!(config.matchups, default_matchups());
+        assert_eq!(config.matchups.len(), 6);
+    }
+
+    #[test]
+    fn repeated_matchup_flags_select_only_those_matches() {
+        let config = parse_args_from([
+            "--matchup",
+            "garlic-vs-avocado",
+            "--matchup",
+            "cherry-vs-fajita",
+        ])
+        .unwrap()
+        .expect("selected matchups should run the arena");
+        assert_eq!(
+            config.matchups,
+            vec![
+                (AgentKind::Avocado, AgentKind::Garlic),
+                (AgentKind::Cherry, AgentKind::Fajita),
+            ]
+        );
+    }
+
+    #[test]
+    fn duplicate_matchup_flags_are_rejected_regardless_of_order() {
+        let error = parse_args_from([
+            "--matchup",
+            "avocado-vs-garlic",
+            "--matchup",
+            "garlic-vs-avocado",
+        ])
+        .err()
+        .expect("duplicate matchup should fail");
+        assert!(error.contains("duplicate matchup `avocado-vs-garlic`"));
     }
 
     #[test]

@@ -11,6 +11,7 @@ export type WorkerRequest =
   | { type: "cancel"; requestId: number };
 
 export type WorkerResponse =
+  | { type: "agent-progress"; payload: AnalysisResult }
   | { type: "agent-result"; payload: AnalysisResult }
   | { type: "analysis-progress"; payload: LiveAnalysisUpdate }
   | { type: "analysis-complete"; payload: LiveAnalysisUpdate }

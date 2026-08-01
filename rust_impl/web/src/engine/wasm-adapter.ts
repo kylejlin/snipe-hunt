@@ -49,6 +49,7 @@ export class WasmComputerAgent implements ComputerAgent {
     | {
         requestId: number;
         positionKey: string;
+        lastProgress: AnalysisResult | null;
         resolve: (result: AnalysisResult) => void;
         reject: (reason: Error) => void;
         removeAbortListener: () => void;
@@ -72,6 +73,7 @@ export class WasmComputerAgent implements ComputerAgent {
       this.pending = {
         requestId: request.requestId,
         positionKey: request.position.positionKey,
+        lastProgress: null,
         resolve,
         reject,
         removeAbortListener: () => signal.removeEventListener("abort", abort),
@@ -95,7 +97,10 @@ export class WasmComputerAgent implements ComputerAgent {
       const requestId =
         message.type === "error" ? message.requestId : message.payload.requestId;
       if (!this.pending || this.pending.requestId !== requestId) return;
-      if (message.type === "agent-result") {
+      if (message.type === "agent-progress") {
+        if (message.payload.positionKey !== this.pending.positionKey) return;
+        this.pending.lastProgress = message.payload;
+      } else if (message.type === "agent-result") {
         if (message.payload.positionKey !== this.pending.positionKey) {
           this.rejectPending(new Error("Computer returned a stale position."));
           return;
@@ -104,7 +109,21 @@ export class WasmComputerAgent implements ComputerAgent {
         pending?.resolve(message.payload);
       } else if (message.type === "error") {
         const pending = this.takePending();
-        pending?.reject(new Error(message.message));
+        if (message.code === "memory-limit") {
+          worker.terminate();
+          if (this.worker === worker) this.worker = null;
+          if (pending?.lastProgress) {
+            pending.resolve(pending.lastProgress);
+          } else {
+            pending?.reject(
+              new Error(
+                "Computer reached the browser memory ceiling before completing a move.",
+              ),
+            );
+          }
+        } else {
+          pending?.reject(new Error(message.message));
+        }
       }
     };
     worker.onerror = (event) => {

@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-import init, { analyze, analyze_live } from "../wasm/pkg/snipe_wasm.js";
+import init, { analyze_live } from "../wasm/pkg/snipe_wasm.js";
 import { isWasmMemoryLimitTrap } from "./wasm-errors";
 import type { WorkerRequest, WorkerResponse } from "./worker-protocol";
 import type { AnalysisResult, LiveAnalysisUpdate } from "./types";
@@ -17,7 +17,13 @@ scope.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     // Rust search is intentionally synchronous here. Cancellation is performed
     // by terminating this worker, since a busy worker cannot receive messages.
     if (message.type === "agent") {
-      const result = JSON.parse(analyze(JSON.stringify(message.payload))) as AnalysisResult;
+      const result = JSON.parse(
+        analyze_live(JSON.stringify(message.payload), (json: string) => {
+          const payload = JSON.parse(json) as AnalysisResult;
+          const progress: WorkerResponse = { type: "agent-progress", payload };
+          scope.postMessage(progress);
+        }),
+      ) as AnalysisResult;
       const response: WorkerResponse = { type: "agent-result", payload: result };
       scope.postMessage(response);
     } else {

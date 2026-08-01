@@ -1,0 +1,35 @@
+// Beta: Human
+// Alpha: Computer (10 seconds of thinking time per ply)
+// Export Date: 2026-07-31
+
+0b. =Tiger; Dragon Fish Beta; Rabbit Horse Horse Ram Monkey Rooster Dog Boar Boar Elephant Squid Squid; Rat
+0a. =Rat; Rooster Fish Alpha; Ox Ox Tiger Rabbit Dragon Snake Snake Ram Monkey Elephant Frog Frog; Dog
+1b. Dragon 5x, Fish 5
+2a. Dragon 3, Frog 3
+3b. Rabbit &6
+4a. Frog 4, Monkey 3
+5b. Ram &6
+6a. Snake 3, Elephant 3
+7b. Boar &6
+8a. Monkey 4, Dragon 4x
+9b. Squid &6
+10a. Snake 4, Ox 3
+11b. Horse &6
+12a. Rooster 2, Elephant 4
+13b. Monkey &6
+14a. Frog &4
+15b. Horse &6
+16a. Monkey &6
+17b. Squid &6
+18a. Snake 3, Fish 2x
+19b. Boar &6
+20a. Rat &3
+21b. Rooster &6
+22a. Rat 4, Snake 4
+23b. Squid 5, Squid 5
+24a. Tiger &6
+25b. Tiger &6
+26a. Rabbit &3
+27b. Rooster 5, Horse 5x
+28a. Snake *3, Ox 4x
+29b. Squid &6

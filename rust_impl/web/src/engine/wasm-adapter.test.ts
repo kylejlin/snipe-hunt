@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
+  AnalysisRequest,
   LiveAnalysisRequest,
   LiveAnalysisUpdate,
   Position,
@@ -15,7 +16,7 @@ vi.mock("./wasm-runtime", () => ({
   wasmPreviewFirstStep: vi.fn(),
 }));
 
-import { WasmLiveAnalyzer } from "./wasm-adapter";
+import { WasmComputerAgent, WasmLiveAnalyzer } from "./wasm-adapter";
 
 class MockWorker {
   static instances: MockWorker[] = [];
@@ -77,6 +78,8 @@ const request: LiveAnalysisRequest = {
   requestId: 7,
   strategy: "avocado",
 };
+
+const agentRequest: AnalysisRequest = request;
 
 const update: LiveAnalysisUpdate = {
   requestId: request.requestId,
@@ -146,6 +149,45 @@ describe("WasmLiveAnalyzer", () => {
     worker.emit({
       type: "error",
       requestId: request.requestId,
+      message: "generated ply is illegal",
+    });
+
+    await expect(result).rejects.toThrow("generated ply is illegal");
+  });
+});
+
+describe("WasmComputerAgent", () => {
+  it("plays the last completed move when WASM reaches its memory limit", async () => {
+    const agent = new WasmComputerAgent();
+    const result = agent.chooseMove(
+      agentRequest,
+      new AbortController().signal,
+    );
+    const worker = MockWorker.instances[0];
+
+    worker.emit({ type: "agent-progress", payload: update });
+    worker.emit({
+      type: "error",
+      requestId: agentRequest.requestId,
+      message: "unreachable",
+      code: "memory-limit",
+    });
+
+    await expect(result).resolves.toEqual(update);
+    expect(worker.terminated).toBe(true);
+  });
+
+  it("keeps ordinary worker failures as errors", async () => {
+    const agent = new WasmComputerAgent();
+    const result = agent.chooseMove(
+      agentRequest,
+      new AbortController().signal,
+    );
+    const worker = MockWorker.instances[0];
+
+    worker.emit({
+      type: "error",
+      requestId: agentRequest.requestId,
       message: "generated ply is illegal",
     });
 

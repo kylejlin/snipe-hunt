@@ -125,7 +125,8 @@ function assertGameState(value: unknown): asserts value is GameState {
     game.strategy !== "avocado" &&
     game.strategy !== "cherry" &&
     game.strategy !== "fajita" &&
-    game.strategy !== "garlic"
+    game.strategy !== "garlic" &&
+    game.strategy !== "honey"
   ) {
     throw new Error("invalid strategy");
   }

@@ -8,6 +8,7 @@ use agent_avocado::AvocadoAnalyzer;
 use agent_cherry::CherryAnalyzer;
 use agent_fajita::FajitaAnalyzer;
 use agent_garlic::GarlicAnalyzer;
+use agent_honey::HoneyAnalyzer;
 use serde::{Deserialize, Serialize};
 use snipe_core::{
     Action, Analyzer, Animal, AnimalDrop, AnimalStep, Card, CardMultiset, Evaluation, Player, Rank,
@@ -29,6 +30,7 @@ enum Strategy {
     Cherry,
     Fajita,
     Garlic,
+    Honey,
 }
 
 impl Strategy {
@@ -38,6 +40,7 @@ impl Strategy {
             Self::Cherry => "Cherry",
             Self::Fajita => "Fajita",
             Self::Garlic => "Garlic",
+            Self::Honey => "Honey",
         }
     }
 }
@@ -47,6 +50,7 @@ enum BrowserAnalyzer {
     Cherry(CherryAnalyzer),
     Fajita(FajitaAnalyzer),
     Garlic(GarlicAnalyzer),
+    Honey(Box<HoneyAnalyzer>),
 }
 
 impl BrowserAnalyzer {
@@ -72,17 +76,32 @@ impl BrowserAnalyzer {
                 analyzer.set_state(state);
                 Self::Garlic(analyzer)
             }
+            Strategy::Honey => {
+                let mut analyzer = HoneyAnalyzer::new();
+                analyzer.set_state(state);
+                Self::Honey(Box::new(analyzer))
+            }
         }
     }
 
     fn think(&mut self, max_ticks: usize) -> usize {
+        // Honey does substantially more useful work per tick than the general
+        // playing agents.  Returning to the browser clock after every Honey
+        // tick keeps a wall-clock request within one short atomic tick of its
+        // deadline instead of the shared eight-tick batch.
+        let max_ticks = if matches!(self, Self::Honey(_)) {
+            max_ticks.min(1)
+        } else {
+            max_ticks
+        };
         let mut ticks = 0;
-        while ticks < max_ticks && !self.is_fully_solved() {
+        while ticks < max_ticks && !self.is_finished() {
             match self {
                 Self::Avocado(analyzer) => analyzer.think_for_one_tick(),
                 Self::Cherry(analyzer) => analyzer.think_for_one_tick(),
                 Self::Fajita(analyzer) => analyzer.think_for_one_tick(),
                 Self::Garlic(analyzer) => analyzer.think_for_one_tick(),
+                Self::Honey(analyzer) => analyzer.think_for_one_tick(),
             }
             ticks += 1;
         }
@@ -95,7 +114,13 @@ impl BrowserAnalyzer {
             Self::Cherry(analyzer) => analyzer.is_fully_solved().is_some(),
             Self::Fajita(analyzer) => analyzer.is_fully_solved().is_some(),
             Self::Garlic(analyzer) => analyzer.is_fully_solved().is_some(),
+            Self::Honey(analyzer) => analyzer.is_fully_solved().is_some(),
         }
+    }
+
+    fn is_finished(&self) -> bool {
+        self.is_fully_solved()
+            || matches!(self, Self::Honey(analyzer) if analyzer.resource_exhausted())
     }
 
     fn evaluation(&self) -> Evaluation {
@@ -104,6 +129,7 @@ impl BrowserAnalyzer {
             Self::Cherry(analyzer) => analyzer.evaluation(),
             Self::Fajita(analyzer) => analyzer.evaluation(),
             Self::Garlic(analyzer) => analyzer.evaluation(),
+            Self::Honey(analyzer) => analyzer.evaluation(),
         }
     }
 
@@ -114,6 +140,7 @@ impl BrowserAnalyzer {
             Self::Cherry(analyzer) => analyzer.write_optimal_lop(&mut actions),
             Self::Fajita(analyzer) => analyzer.write_optimal_lop(&mut actions),
             Self::Garlic(analyzer) => analyzer.write_optimal_lop(&mut actions),
+            Self::Honey(analyzer) => analyzer.write_optimal_lop(&mut actions),
         }
         actions
     }
@@ -436,7 +463,7 @@ fn run_analysis(
     let deadline = start + request.time_limit_ms.clamp(1, MAX_TIME_MS) as f64;
     let mut ticks = 0u64;
     let mut last_progress = start;
-    while js_sys::Date::now() < deadline && !analyzer.is_fully_solved() {
+    while js_sys::Date::now() < deadline && !analyzer.is_finished() {
         ticks += analyzer.think(BATCH_TICKS) as u64;
         let now = js_sys::Date::now();
         if let Some(callback) = callback
@@ -1246,6 +1273,7 @@ mod tests {
             Strategy::Cherry,
             Strategy::Fajita,
             Strategy::Garlic,
+            Strategy::Honey,
         ] {
             let mut analyzer = BrowserAnalyzer::new(strategy, terminal_alpha_win());
             assert!(analyzer.is_fully_solved());
@@ -1380,6 +1408,15 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&Strategy::Garlic).unwrap(),
             "\"garlic\""
+        );
+    }
+
+    #[test]
+    fn honey_strategy_has_the_browser_wire_name() {
+        assert_eq!(Strategy::Honey.label(), "Honey");
+        assert_eq!(
+            serde_json::to_string(&Strategy::Honey).unwrap(),
+            "\"honey\""
         );
     }
 

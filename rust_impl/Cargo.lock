@@ -10,6 +10,7 @@ dependencies = [
  "agent-cherry",
  "agent-fajita",
  "agent-garlic",
+ "agent-honey",
  "snipe-core",
  "snipe-prng",
 ]
@@ -51,6 +52,15 @@ name = "agent-garlic"
 version = "0.1.0"
 dependencies = [
  "agent-avocado",
+ "snipe-core",
+ "snipe-prng",
+]
+
+[[package]]
+name = "agent-honey"
+version = "0.1.0"
+dependencies = [
+ "agent-garlic",
  "snipe-core",
  "snipe-prng",
 ]
@@ -326,6 +336,7 @@ dependencies = [
  "agent-cherry",
  "agent-fajita",
  "agent-garlic",
+ "agent-honey",
  "js-sys",
  "serde",
  "serde_json",

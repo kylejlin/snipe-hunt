@@ -5,6 +5,7 @@ members = [
     "crates/snipe-prng",
     "crates/agent-avocado",
     "crates/agent-garlic",
+    "crates/agent-honey",
     "crates/agent-cherry",
     "crates/agent-fajita",
     "crates/agent-arena",

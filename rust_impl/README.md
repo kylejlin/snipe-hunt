@@ -6,6 +6,7 @@ The active implementation is intentionally small and dependency-directed:
 - `crates/snipe-prng` owns reproducible seeded deals and random mixing.
 - `crates/agent-avocado` is a deterministic, patient alpha-beta analyzer.
 - `crates/agent-garlic` is Avocado's profile-guided, speed-focused successor.
+- `crates/agent-honey` is a mate-only proof-number and threat-space analyzer.
 - `crates/agent-cherry` is a policy/value MCTS analyzer learned from rules-only
   self-play.
 - `crates/cherry-train` is Cherry's resumable native self-play trainer.
@@ -13,7 +14,7 @@ The active implementation is intentionally small and dependency-directed:
   from independent fresh weights.
 - `crates/agent-arena` runs paired-seed round robins between the browser agents.
 - `crates/fajita-train` is Fajita's high-quality, rules-only self-play trainer.
-- `crates/snipe-wasm` is the browser bridge over Core and the three browser
+- `crates/snipe-wasm` is the browser bridge over Core and the five browser
   agents.
 - `web` is the React game and analysis UI.
 
@@ -56,8 +57,8 @@ npm run build
 
 ## Run the browser-agent arena
 
-From `rust_impl`, run the published Avocado, Cherry, Fajita, and Garlic agents in a
-round robin:
+From `rust_impl`, run the published Avocado, Cherry, Fajita, Garlic, and Honey
+agents in a round robin:
 
 ```sh
 cargo run --release -p agent-arena -- \
@@ -66,13 +67,14 @@ cargo run --release -p agent-arena -- \
   --save-games per-ply
 ```
 
-Each of the six matchups runs concurrently. A matchup plays every seed twice,
-with the agents swapping Alpha and Beta, so the command above plays 120 games.
+Each of the ten matchups runs concurrently. A matchup plays every seed twice,
+with the agents swapping Alpha and Beta, so the command above plays 200 games.
 The final table awards one point per win and half a point per draw.
 
 To run only selected matchups, pass `--matchup AGENT-vs-AGENT` once per matchup.
-Agent names are `avocado`, `cherry`, `fajita`, and `garlic`; their order in the
-argument does not matter. For example, this runs only Avocado versus Garlic:
+Agent names are `avocado`, `cherry`, `fajita`, `garlic`, and `honey`; their
+order in the argument does not matter. For example, this runs only Avocado
+versus Garlic:
 
 ```sh
 cargo run --release -p agent-arena -- \
@@ -82,7 +84,7 @@ cargo run --release -p agent-arena -- \
   --save-games per-ply
 ```
 
-Omitting `--matchup` preserves the full four-agent round robin. Repeat the flag
+Omitting `--matchup` preserves the full five-agent round robin. Repeat the flag
 to include multiple selected matchups.
 
 `--save-games` has three modes:
@@ -95,11 +97,25 @@ to include multiple selected matchups.
 - `off` does not create history directories or files.
 
 Saved histories default to `agent-arena-results/`. Every invocation creates a
-new `tournament-*` directory, with `avocado-vs-cherry`,
-`avocado-vs-fajita`, `avocado-vs-garlic`, `cherry-vs-fajita`,
-`cherry-vs-garlic`, and `fajita-vs-garlic` subdirectories. Use
+new `tournament-*` directory with one subdirectory for each selected pairing,
+including the four `*-vs-honey` pairings in the default round robin. Use
 `--output-root PATH` to select another parent directory. `--seed-start` changes
 the first paired seed, and `--max-plies` changes the draw limit.
+
+## Benchmark Honey
+
+Honey deliberately has no material or positional evaluation. Its native
+benchmark replays positions from completed Cherry–Fajita games, measures exact
+shortest-mate proofs against Garlic under the same wall-clock limit, and reports
+Honey's slowest atomic tick and retained search state:
+
+```sh
+cargo bench -p agent-honey --bench mate_search -- --milliseconds 5000
+```
+
+Pass `--scan` to scan all completed Cherry–Fajita, Cherry–Garlic, and
+Fajita–Garlic histories under `agent-arena-results`; weaker-agent games are
+excluded from that corpus.
 
 ## Benchmark Garlic
 

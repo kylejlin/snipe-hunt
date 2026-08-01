@@ -134,7 +134,24 @@ preferable to waiting. Rerunning the same command resumes rather than starting
 over. Self-play defaults to all but one available CPU core; pass `--workers N`
 to cap both self-play and promotion arenas.
 
-### Train Cherry on a 13-inch Intel MacBook Pro
+### Train Cherry on a 2021 14-inch M1 Pro MacBook Pro
+
+From `rust_impl`, this command lets Cherry choose its default worker count,
+compiles for the native M1 Pro CPU, and prevents idle system sleep:
+
+```sh
+caffeinate -i cargo run --release -p cherry-train -- train \
+  --run-dir training/cherry-main \
+  --hours 1000000 \
+  --simulations 512
+```
+
+Keep the MacBook plugged in with its lid open and unobstructed ventilation.
+The display may sleep. The million-hour training window is intentionally
+effectively unbounded; press `Ctrl+C` once when it is time to move the run.
+`caffeinate -i` ends after Cherry finishes its checkpoint and exits.
+
+### Train Cherry on a 2017 13-inch Intel MacBook Pro
 
 From `rust_impl`, this command lets Cherry choose its default worker count,
 compiles for the native AVX2/FMA-capable CPU in a 2017 13-inch Intel MacBook
@@ -247,7 +264,24 @@ self-play batch or promotion arena, writes a full checkpoint including replay,
 prints confirmation, and exits. Press `Ctrl+C` a second time only when an
 immediate exit without saving is preferable to waiting.
 
-### Train on a 13-inch Intel MacBook Pro
+### Train Fajita on a 2021 14-inch M1 Pro MacBook Pro
+
+From `rust_impl`, this command lets Fajita choose its default worker count,
+compiles for the native M1 Pro CPU, and prevents idle system sleep:
+
+```sh
+caffeinate -i cargo run --release -p fajita-train -- train \
+  --run-dir training/fajita-main \
+  --hours 1000000 \
+  --progress-reports on
+```
+
+Keep the MacBook plugged in with its lid open and unobstructed ventilation.
+The display may sleep. The million-hour training window is intentionally
+effectively unbounded; stop the trainer manually when it is time to move the
+run. `caffeinate -i` ends when the trainer exits.
+
+### Train Fajita on a 2017 13-inch Intel MacBook Pro
 
 From `rust_impl`, this command lets Fajita choose its default worker count,
 compiles for the native AVX2/FMA-capable CPU in a 2017 13-inch Intel MacBook

@@ -67,6 +67,7 @@ const strategies: ReadonlyArray<{ value: Strategy; label: string }> = [
   { value: "fajita", label: "Fajita" },
   { value: "garlic", label: "Garlic" },
   { value: "honey", label: "Honey" },
+  { value: "iceberg", label: "Iceberg" },
 ];
 
 function strategyLabel(strategy: Strategy): string {

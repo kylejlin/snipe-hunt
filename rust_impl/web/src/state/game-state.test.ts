@@ -124,6 +124,15 @@ describe("game-state invariants", () => {
     expect(restored.strategy).toBe("honey");
   });
 
+  it("persists Iceberg as a selected strategy", () => {
+    const rules = engine();
+    const game = { ...newGame(initial), strategy: "iceberg" as const };
+
+    const restored = restoreGame(saveGame(game), rules);
+
+    expect(restored.strategy).toBe("iceberg");
+  });
+
   it("discards old schemas instead of attempting a migration", () => {
     const rules = engine();
     const restored = restoreGame(

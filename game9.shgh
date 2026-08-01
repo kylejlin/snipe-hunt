@@ -1,5 +1,6 @@
 // Export Date: 2026-07-31
-// I'm pretty sure this is a forced win for Alpha, but none of the current engines report such a result.
+// Alpha has a forced win from the position after ply 39, but none of the current engines report such a result.
+// Ply 40 below is one way for Alpha to initiate the mating attack; a mating expert should discover it itself.
 // Intuitively, Beta must respond to the check by either moving to rank 5 (which the engines report as +#5)
 // or by moving the Elephant to rank 5 (to remove the pressure on Rank 6).
 // In this situation, all the possible "move Elephant plus something else" plies ultimately come down to 2 patterns: capturing and non-capturing.

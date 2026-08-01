@@ -7,6 +7,7 @@ The active implementation is intentionally small and dependency-directed:
 - `crates/agent-avocado` is a deterministic, patient alpha-beta analyzer.
 - `crates/agent-garlic` is Avocado's profile-guided, speed-focused successor.
 - `crates/agent-honey` is a mate-only proof-number and threat-space analyzer.
+- `crates/agent-iceberg` is a pressure-aware exact shortest-mate specialist.
 - `crates/agent-cherry` is a policy/value MCTS analyzer learned from rules-only
   self-play.
 - `crates/cherry-train` is Cherry's resumable native self-play trainer.
@@ -14,7 +15,7 @@ The active implementation is intentionally small and dependency-directed:
   from independent fresh weights.
 - `crates/agent-arena` runs paired-seed round robins between the browser agents.
 - `crates/fajita-train` is Fajita's high-quality, rules-only self-play trainer.
-- `crates/snipe-wasm` is the browser bridge over Core and the five browser
+- `crates/snipe-wasm` is the browser bridge over Core and the six browser
   agents.
 - `web` is the React game and analysis UI.
 
@@ -57,8 +58,8 @@ npm run build
 
 ## Run the browser-agent arena
 
-From `rust_impl`, run the published Avocado, Cherry, Fajita, Garlic, and Honey
-agents in a round robin:
+From `rust_impl`, run the published Avocado, Cherry, Fajita, Garlic, Honey, and
+Iceberg agents in a round robin:
 
 ```sh
 cargo run --release -p agent-arena -- \
@@ -67,14 +68,14 @@ cargo run --release -p agent-arena -- \
   --save-games per-ply
 ```
 
-Each of the ten matchups runs concurrently. A matchup plays every seed twice,
-with the agents swapping Alpha and Beta, so the command above plays 200 games.
+Each of the fifteen matchups runs concurrently. A matchup plays every seed
+twice, with the agents swapping Alpha and Beta, so the command above plays 300 games.
 The final table awards one point per win and half a point per draw.
 
 To run only selected matchups, pass `--matchup AGENT-vs-AGENT` once per matchup.
-Agent names are `avocado`, `cherry`, `fajita`, `garlic`, and `honey`; their
-order in the argument does not matter. For example, this runs only Avocado
-versus Garlic:
+Agent names are `avocado`, `cherry`, `fajita`, `garlic`, `honey`, and `iceberg`;
+their order in the argument does not matter. For example, this runs only
+Avocado versus Garlic:
 
 ```sh
 cargo run --release -p agent-arena -- \
@@ -84,7 +85,7 @@ cargo run --release -p agent-arena -- \
   --save-games per-ply
 ```
 
-Omitting `--matchup` preserves the full five-agent round robin. Repeat the flag
+Omitting `--matchup` preserves the full six-agent round robin. Repeat the flag
 to include multiple selected matchups.
 
 `--save-games` has three modes:
@@ -98,9 +99,10 @@ to include multiple selected matchups.
 
 Saved histories default to `agent-arena-results/`. Every invocation creates a
 new `tournament-*` directory with one subdirectory for each selected pairing,
-including the four `*-vs-honey` pairings in the default round robin. Use
-`--output-root PATH` to select another parent directory. `--seed-start` changes
-the first paired seed, and `--max-plies` changes the draw limit.
+including the five `*-vs-honey` and five `*-vs-iceberg` pairings in the default
+round robin. Use `--output-root PATH` to select another parent directory.
+`--seed-start` changes the first paired seed, and `--max-plies` changes the draw
+limit.
 
 ## Benchmark Honey
 
@@ -116,6 +118,19 @@ cargo bench -p agent-honey --bench mate_search -- --milliseconds 5000
 Pass `--scan` to scan all completed Cherry–Fajita, Cherry–Garlic, and
 Fajita–Garlic histories under `agent-arena-results`; weaker-agent games are
 excluded from that corpus.
+
+## Benchmark Iceberg
+
+Iceberg ignores opening strength, material, and ordinary positional play. Its
+tactical scout searches pressure-building attacks for a sound mate upper bound;
+its exact search then disproves every shorter bound before reporting the
+shortest mate as fully solved. The `game9` workload starts after ply 39—before
+the annotated Alpha move—and prints both stages plus a concrete principal
+variation:
+
+```sh
+cargo run --release -p agent-iceberg --example game9 -- 30000 --require-mate
+```
 
 ## Benchmark Garlic
 

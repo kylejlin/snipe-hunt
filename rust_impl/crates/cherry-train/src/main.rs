@@ -9,8 +9,11 @@ use std::{
     env, fs,
     io::{self, BufReader, BufWriter, Read, Write},
     path::{Path, PathBuf},
-    process::ExitCode,
-    sync::mpsc,
+    process::{self, ExitCode},
+    sync::{
+        atomic::{AtomicU8, Ordering},
+        mpsc,
+    },
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -30,6 +33,7 @@ const ROOT_NOISE_FRACTION: f32 = 0.25;
 const PACKED_INPUT_SIZE: usize = INPUT_SIZE.div_ceil(4);
 const REPLAY_MAGIC_V1: &[u8; 8] = b"CHREPLAY";
 const REPLAY_MAGIC_V2: &[u8; 8] = b"CHREPL02";
+static SHUTDOWN_REQUESTS: AtomicU8 = AtomicU8::new(0);
 
 fn main() -> ExitCode {
     match run() {
@@ -99,7 +103,8 @@ fn help() {
          \n\
          Simulations is a base; wide positions automatically receive at least 3x legal actions.\n\
          Weights and optimizer checkpoint after every completed game; compact replay every 25.\n\
-         Stop with Ctrl-C and rerun the same command to resume."
+         Ctrl+C requests a graceful stop after the current self-play batch or arena and\n\
+         writes a full checkpoint. Press Ctrl+C again only to force an immediate exit."
     );
 }
 
@@ -187,10 +192,19 @@ fn default_workers() -> usize {
 }
 
 fn train(run_dir: &Path, duration: Duration, simulations: usize, workers: usize) -> io::Result<()> {
+    if simulations == 0 || workers == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "simulations and workers must both be positive",
+        ));
+    }
     fs::create_dir_all(run_dir)?;
+    install_shutdown_handler()?;
     let mut run = load_run(run_dir, true)?;
     let started = Instant::now();
     let mut training_batch = Vec::with_capacity(BATCH_SIZE);
+    let mut last_loss = 0.0;
+    let mut last_arena = None;
     println!(
         "Cherry training resumed: games={}, steps={}, replay={}, base simulations/action={}, workers={}",
         run.games,
@@ -200,9 +214,9 @@ fn train(run_dir: &Path, duration: Duration, simulations: usize, workers: usize)
         workers
     );
     println!("Run directory: {}", absolute(run_dir)?.display());
-    println!("Stop safely with Ctrl-C; completed games are already durable.");
+    println!("Press Ctrl+C once for a graceful stop and full checkpoint.");
 
-    while started.elapsed() < duration {
+    while started.elapsed() < duration && !shutdown_requested() {
         let batch_started = Instant::now();
         let model = run.model.clone();
         let jobs = (0..workers.max(1))
@@ -239,6 +253,7 @@ fn train(run_dir: &Path, duration: Duration, simulations: usize, workers: usize)
                     }
                     loss /= BATCHES_PER_GAME as f32;
                 }
+                last_loss = loss;
 
                 let mut arena_result = None;
                 if run.games % PROMOTION_INTERVAL == 0 {
@@ -248,6 +263,7 @@ fn train(run_dir: &Path, duration: Duration, simulations: usize, workers: usize)
                         simulations,
                         run.games,
                         PROMOTION_PAIRS,
+                        workers,
                     );
                     if result.lower_bound > 0.5
                         && passes_league_guard(
@@ -256,6 +272,7 @@ fn train(run_dir: &Path, duration: Duration, simulations: usize, workers: usize)
                             &run.champion,
                             simulations.max(8),
                             run.games,
+                            workers,
                         )?
                     {
                         run.champion = run.model.clone();
@@ -265,6 +282,7 @@ fn train(run_dir: &Path, duration: Duration, simulations: usize, workers: usize)
                     append_arena_report(run_dir, &run, result)?;
                     arena_result = Some(result);
                 }
+                last_arena = arena_result;
                 save_run(
                     run_dir,
                     &run,
@@ -293,11 +311,42 @@ fn train(run_dir: &Path, duration: Duration, simulations: usize, workers: usize)
             Ok::<(), io::Error>(())
         })?;
     }
-    println!(
-        "Training window complete: games={}, steps={}, promotions={}",
-        run.games, run.model.training_steps, run.promotions
-    );
+    save_run(run_dir, &run, last_loss, last_arena, true)?;
+    if shutdown_requested() {
+        println!(
+            "Cherry stopped gracefully at game {} and step {}. Full checkpoint saved to {}.",
+            run.games,
+            run.model.training_steps,
+            absolute(run_dir)?.display()
+        );
+    } else {
+        println!(
+            "Training window complete: games={}, steps={}, promotions={}",
+            run.games, run.model.training_steps, run.promotions
+        );
+    }
     Ok(())
+}
+
+fn install_shutdown_handler() -> io::Result<()> {
+    SHUTDOWN_REQUESTS.store(0, Ordering::SeqCst);
+    ctrlc::set_handler(|| {
+        if SHUTDOWN_REQUESTS.fetch_add(1, Ordering::SeqCst) == 0 {
+            eprintln!(
+                "\nGraceful shutdown requested. Cherry will finish the current self-play batch \
+                 or arena, then save a full checkpoint. Press Ctrl+C again to force an immediate \
+                 exit without saving."
+            );
+        } else {
+            eprintln!("\nSecond interrupt received; exiting immediately without saving.");
+            process::exit(130);
+        }
+    })
+    .map_err(|error| io::Error::other(format!("could not install Ctrl+C handler: {error}")))
+}
+
+fn shutdown_requested() -> bool {
+    SHUTDOWN_REQUESTS.load(Ordering::SeqCst) != 0
 }
 
 fn self_play(
@@ -450,8 +499,9 @@ fn arena(
     simulations: usize,
     round: u64,
     pairs: usize,
+    workers: usize,
 ) -> ArenaResult {
-    let worker_count = default_workers().min(pairs.max(1));
+    let worker_count = workers.max(1).min(pairs.max(1));
     let (sender, receiver) = mpsc::channel();
     thread::scope(|scope| {
         for worker in 0..worker_count {
@@ -587,7 +637,14 @@ fn evaluate_command(run_dir: &Path, arguments: &[String]) -> io::Result<()> {
         .and_then(|value| value.parse().ok())
         .unwrap_or(64);
     let run = load_run(run_dir, false)?;
-    let result = arena(&run.model, &run.champion, simulations, run.games + 1, pairs);
+    let result = arena(
+        &run.model,
+        &run.champion,
+        simulations,
+        run.games + 1,
+        pairs,
+        default_workers(),
+    );
     println!(
         "latest vs staged champion: score={:.3}, lower99={:.3}, games={}, base simulations/action={simulations}",
         result.score, result.lower_bound, result.games
@@ -793,6 +850,7 @@ fn passes_league_guard(
     incumbent: &Model,
     simulations: usize,
     round: u64,
+    workers: usize,
 ) -> io::Result<bool> {
     // Deliberately ignore the legacy `league/` directory: those checkpoints
     // include promotions decided by four-game arenas and are not trustworthy
@@ -816,8 +874,8 @@ fn passes_league_guard(
     for (index, path) in checkpoints.iter().enumerate() {
         let anchor = Model::load(path)?;
         let arena_round = round ^ (index as u64).rotate_left(29);
-        candidate_score += arena(candidate, &anchor, simulations, arena_round, 24).score;
-        incumbent_score += arena(incumbent, &anchor, simulations, arena_round, 24).score;
+        candidate_score += arena(candidate, &anchor, simulations, arena_round, 24, workers).score;
+        incumbent_score += arena(incumbent, &anchor, simulations, arena_round, 24, workers).score;
     }
     candidate_score /= checkpoints.len() as f32;
     incumbent_score /= checkpoints.len() as f32;

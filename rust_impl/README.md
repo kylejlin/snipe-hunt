@@ -120,11 +120,61 @@ cargo run --release -p cherry-train -- train \
 ```
 
 The trainer makes the latest weights and run metadata durable after every
-completed game, and flushes the replay window every ten games. Stop it with
-Ctrl-C at any time; rerunning the same command resumes rather than starting
-over. No completed weight update is lost, while up to nine games may be absent
-from the restored replay window. Self-play defaults to all but one available
-CPU core; pass `--workers N` to override it.
+completed game, and flushes the replay window every 25 games. Press `Ctrl+C`
+once to request a graceful shutdown: Cherry finishes the current self-play
+batch or promotion arena, writes a full checkpoint including replay, and exits.
+Press `Ctrl+C` a second time only when an immediate exit without saving is
+preferable to waiting. Rerunning the same command resumes rather than starting
+over. Self-play defaults to all but one available CPU core; pass `--workers N`
+to cap both self-play and promotion arenas.
+
+### Train Cherry on a 13-inch Intel MacBook Pro
+
+From `rust_impl`, this thermal-conscious command caps Cherry at three worker
+threads, leaves CPU headroom on a dual-core 2017 13-inch Intel MacBook Pro,
+compiles for its native AVX2/FMA-capable CPU, and prevents idle system sleep:
+
+```sh
+RUSTFLAGS="-C target-cpu=native" \
+caffeinate -i cargo run --release -p cherry-train -- train \
+  --run-dir training/cherry-main \
+  --hours 1000000 \
+  --simulations 24 \
+  --workers 3
+```
+
+Keep the MacBook plugged in with its lid open and unobstructed ventilation.
+The display may sleep. The million-hour training window is intentionally
+effectively unbounded; press `Ctrl+C` once when it is time to move the run.
+`caffeinate -i` ends after Cherry finishes its checkpoint and exits.
+
+### Move Cherry training between computers
+
+The resumable run is ignored by Git, so stop Cherry and export it separately.
+From `rust_impl`, create a timestamped, checksummed archive:
+
+```sh
+./scripts/export-cherry-training.sh
+```
+
+The archive defaults to the Git-ignored `training/exports/` directory. To put
+it somewhere else, provide an explicit destination:
+
+```sh
+./scripts/export-cherry-training.sh ~/Desktop/cherry-main.tar.gz
+```
+
+After transferring the archive to the other computer, import it from that
+computer's `rust_impl` directory:
+
+```sh
+./scripts/import-cherry-training.sh ~/Downloads/cherry-main.tar.gz
+```
+
+The import verifies every archived file, asks the local release trainer to
+load the run, and only then installs it as `training/cherry-main`. If a local
+run already exists, it is preserved under `training/backups/`. The workflow is
+symmetric, so the same commands move the run back from the Intel MacBook.
 
 Inspect or run a fresh paired arena:
 

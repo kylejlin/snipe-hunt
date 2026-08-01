@@ -93,6 +93,7 @@ name = "cherry-train"
 version = "0.1.0"
 dependencies = [
  "agent-cherry",
+ "ctrlc",
  "snipe-core",
  "snipe-prng",
 ]

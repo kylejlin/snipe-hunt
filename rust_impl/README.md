@@ -116,7 +116,7 @@ From `rust_impl`, start or resume the main run:
 cargo run --release -p cherry-train -- train \
   --run-dir training/cherry-main \
   --hours 1000000 \
-  --simulations 24
+  --simulations 512
 ```
 
 The trainer makes the latest weights and run metadata durable after every
@@ -139,7 +139,7 @@ RUSTFLAGS="-C target-cpu=native" \
 caffeinate -i cargo run --release -p cherry-train -- train \
   --run-dir training/cherry-main \
   --hours 1000000 \
-  --simulations 24 \
+  --simulations 512 \
   --workers 3
 ```
 

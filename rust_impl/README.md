@@ -136,17 +136,16 @@ to cap both self-play and promotion arenas.
 
 ### Train Cherry on a 13-inch Intel MacBook Pro
 
-From `rust_impl`, this thermal-conscious command caps Cherry at three worker
-threads, leaves CPU headroom on a dual-core 2017 13-inch Intel MacBook Pro,
-compiles for its native AVX2/FMA-capable CPU, and prevents idle system sleep:
+From `rust_impl`, this command lets Cherry choose its default worker count,
+compiles for the native AVX2/FMA-capable CPU in a 2017 13-inch Intel MacBook
+Pro, and prevents idle system sleep:
 
 ```sh
 RUSTFLAGS="-C target-cpu=native" \
 caffeinate -i cargo run --release -p cherry-train -- train \
   --run-dir training/cherry-main \
   --hours 1000000 \
-  --simulations 512 \
-  --workers 3
+  --simulations 512
 ```
 
 Keep the MacBook plugged in with its lid open and unobstructed ventilation.
@@ -250,10 +249,9 @@ immediate exit without saving is preferable to waiting.
 
 ### Train on a 13-inch Intel MacBook Pro
 
-From `rust_impl`, this thermal-conscious command caps both self-play and
-promotion arenas at three worker threads, leaving CPU headroom on a dual-core
-2017 13-inch Intel MacBook Pro, compiles for its native AVX2/FMA-capable CPU,
-and prevents idle system sleep:
+From `rust_impl`, this command lets Fajita choose its default worker count,
+compiles for the native AVX2/FMA-capable CPU in a 2017 13-inch Intel MacBook
+Pro, and prevents idle system sleep:
 
 ```sh
 RUSTFLAGS="-C target-cpu=native" \

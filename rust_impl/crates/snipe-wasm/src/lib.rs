@@ -95,7 +95,7 @@ impl BrowserAnalyzer {
             max_ticks
         };
         let mut ticks = 0;
-        while ticks < max_ticks && !self.is_finished() {
+        while ticks < max_ticks && !self.is_fully_solved() {
             match self {
                 Self::Avocado(analyzer) => analyzer.think_for_one_tick(),
                 Self::Cherry(analyzer) => analyzer.think_for_one_tick(),
@@ -116,11 +116,6 @@ impl BrowserAnalyzer {
             Self::Garlic(analyzer) => analyzer.is_fully_solved().is_some(),
             Self::Honey(analyzer) => analyzer.is_fully_solved().is_some(),
         }
-    }
-
-    fn is_finished(&self) -> bool {
-        self.is_fully_solved()
-            || matches!(self, Self::Honey(analyzer) if analyzer.resource_exhausted())
     }
 
     fn evaluation(&self) -> Evaluation {
@@ -463,7 +458,7 @@ fn run_analysis(
     let deadline = start + request.time_limit_ms.clamp(1, MAX_TIME_MS) as f64;
     let mut ticks = 0u64;
     let mut last_progress = start;
-    while js_sys::Date::now() < deadline && !analyzer.is_finished() {
+    while js_sys::Date::now() < deadline && !analyzer.is_fully_solved() {
         ticks += analyzer.think(BATCH_TICKS) as u64;
         let now = js_sys::Date::now();
         if let Some(callback) = callback

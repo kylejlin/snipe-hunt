@@ -125,10 +125,6 @@ impl ArenaAgent {
         }
     }
 
-    fn resource_exhausted(&self) -> bool {
-        matches!(self, Self::Honey(agent) if agent.resource_exhausted())
-    }
-
     fn line(&self) -> Vec<Action> {
         let mut line = Vec::new();
         match self {
@@ -529,7 +525,7 @@ fn play_game(
         loop {
             agent.think_for_one_tick();
             *ticks += 1;
-            if started.elapsed() >= time_per_ply || agent.resource_exhausted() {
+            if started.elapsed() >= time_per_ply {
                 break;
             }
         }

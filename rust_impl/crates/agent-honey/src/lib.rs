@@ -24,7 +24,6 @@ const WORK_PER_TICK: usize = 64;
 const FORCING_QUIET_PLIES: u8 = 4;
 const MAX_DEFENSE_FIRST_ACTIONS: usize = 96;
 const MAX_FORCING_FIRST_ACTIONS: usize = 20;
-const MAX_RETAINED_ENTRIES: usize = 8_000_000;
 
 const ANIMALS: [Animal; 16] = [
     Animal::Mouse,
@@ -1511,7 +1510,6 @@ pub struct HoneyAnalyzer {
     solved: Option<OptimalOutcome>,
     line: Vec<Action>,
     line_error: Option<String>,
-    resource_exhausted: bool,
 }
 
 impl HoneyAnalyzer {
@@ -1527,7 +1525,6 @@ impl HoneyAnalyzer {
             solved: None,
             line: Vec::new(),
             line_error: None,
-            resource_exhausted: false,
         }
     }
 
@@ -1556,7 +1553,7 @@ impl HoneyAnalyzer {
             .map(|searches| format!("{}; {}", describe(&searches[0]), describe(&searches[1])))
             .unwrap_or_else(|| "terminal".to_owned());
         format!(
-            "full[{full}] force[{forcing}] actions={} action_nodes={} turns={} evasions={} threats={} capture_tests={} horizons={} retained={} capped={} line_error={:?}",
+            "full[{full}] force[{forcing}] actions={} action_nodes={} turns={} evasions={} threats={} capture_tests={} horizons={} retained={} line_error={:?}",
             self.moves.actions.len(),
             self.moves.action_choices.len(),
             self.moves.complete_turns.len(),
@@ -1565,16 +1562,8 @@ impl HoneyAnalyzer {
             self.moves.capture_mates.len(),
             self.moves.one_ply_resolutions.len(),
             self.retained_entries(),
-            self.resource_exhausted,
             self.line_error,
         )
-    }
-
-    /// True when Honey has reached its retained-search-state safety cap.  The
-    /// analyzer remains truthful (neutral estimate plus legal fallback), but
-    /// callers with an external deadline can stop ticking it early.
-    pub fn resource_exhausted(&self) -> bool {
-        self.resource_exhausted
     }
 
     fn retained_entries(&self) -> usize {
@@ -1593,13 +1582,6 @@ impl HoneyAnalyzer {
             + self.moves.forcing_turns.len()
             + self.moves.capture_mates.len()
             + self.moves.one_ply_resolutions.len()
-    }
-
-    fn finish_tick(&mut self) {
-        self.finish_if_solved();
-        if self.solved.is_none() && self.retained_entries() >= MAX_RETAINED_ENTRIES {
-            self.resource_exhausted = true;
-        }
     }
 
     fn finish_if_solved(&mut self) {
@@ -1725,7 +1707,6 @@ impl Analyzer for HoneyAnalyzer {
         self.forcing_seeded = [false; 2];
         self.root_state = Some(state.clone());
         self.line_error = None;
-        self.resource_exhausted = false;
 
         if let Some(winner) = state.winner() {
             let mate = MateInN::new(winner, 0).expect("mate zero is representable");
@@ -1752,7 +1733,7 @@ impl Analyzer for HoneyAnalyzer {
     }
 
     fn think_for_one_tick(&mut self) {
-        if self.solved.is_some() || self.resource_exhausted {
+        if self.solved.is_some() {
             return;
         }
         let Some(root) = self.root else {
@@ -1769,7 +1750,7 @@ impl Analyzer for HoneyAnalyzer {
             };
             searches[1 - index].table.clear();
             searches[index].think(root, &mut self.moves, WORK_PER_TICK);
-            self.finish_tick();
+            self.finish_if_solved();
             return;
         }
         if let Some(index) = self.forcing_seeded.iter().position(|&seeded| seeded) {
@@ -1777,7 +1758,7 @@ impl Analyzer for HoneyAnalyzer {
                 return;
             };
             searches[index].think(root, &mut self.moves, WORK_PER_TICK);
-            self.finish_tick();
+            self.finish_if_solved();
             return;
         }
 
@@ -1803,7 +1784,7 @@ impl Analyzer for HoneyAnalyzer {
             };
             searches[index].think(root, &mut self.moves, WORK_PER_TICK);
         }
-        self.finish_tick();
+        self.finish_if_solved();
     }
 
     fn is_fully_solved(&self) -> Option<OptimalOutcome> {

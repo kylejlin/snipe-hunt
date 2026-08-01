@@ -135,10 +135,7 @@ fn run_honey(name: &str, state: State, limit: Duration) {
     let start = Instant::now();
     let mut ticks = 0_u64;
     let mut slowest_tick = Duration::ZERO;
-    while start.elapsed() < limit
-        && analyzer.is_fully_solved().is_none()
-        && !analyzer.resource_exhausted()
-    {
+    while start.elapsed() < limit && analyzer.is_fully_solved().is_none() {
         let tick_start = Instant::now();
         analyzer.think_for_one_tick();
         slowest_tick = slowest_tick.max(tick_start.elapsed());
@@ -197,10 +194,7 @@ fn scan_histories(limit: Duration) {
             honey.set_state(state);
             let start = Instant::now();
             let mut slowest_tick = Duration::ZERO;
-            while start.elapsed() < limit
-                && honey.is_fully_solved().is_none()
-                && !honey.resource_exhausted()
-            {
+            while start.elapsed() < limit && honey.is_fully_solved().is_none() {
                 let tick_start = Instant::now();
                 honey.think_for_one_tick();
                 slowest_tick = slowest_tick.max(tick_start.elapsed());

@@ -26,6 +26,7 @@ const MAX_ATOMIC_ACTIONS: usize = 256;
 const BATCH_SIZE: usize = 32;
 const BATCHES_PER_GAME: usize = 6;
 const REPLAY_SAVE_INTERVAL: u64 = 25;
+const PROGRESS_REPORT_INTERVAL: u64 = 500;
 const PROMOTION_INTERVAL: u64 = 1_000;
 const PROMOTION_PAIRS: usize = 96;
 const DIRICHLET_ALPHA: f32 = 0.3;
@@ -39,7 +40,7 @@ fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("Cherry trainer error: {error}");
+            eprintln!("cherry-train: {error}");
             ExitCode::FAILURE
         }
     }
@@ -62,11 +63,13 @@ fn run() -> io::Result<()> {
             let workers = option(&arguments, "--workers")
                 .and_then(|value| value.parse().ok())
                 .unwrap_or_else(default_workers);
+            let progress_reports = parse_on_off(&arguments, "--progress-reports", true)?;
             train(
                 &run_dir,
                 Duration::from_secs_f64((hours * 3600.0).max(1.0)),
                 simulations,
                 workers,
+                progress_reports,
             )
         }
         "publish" => publish(&run_dir),
@@ -91,11 +94,32 @@ fn option<'a>(arguments: &'a [String], name: &str) -> Option<&'a str> {
         .map(|pair| pair[1].as_str())
 }
 
+fn parse_on_off(arguments: &[String], name: &str, default: bool) -> io::Result<bool> {
+    let Some(index) = arguments.iter().position(|argument| argument == name) else {
+        return Ok(default);
+    };
+    let value = arguments.get(index + 1).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{name} requires on or off"),
+        )
+    })?;
+    match value.to_ascii_lowercase().as_str() {
+        "on" | "true" | "yes" | "1" => Ok(true),
+        "off" | "false" | "no" | "0" => Ok(false),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid value {value:?} for {name}; expected on or off"),
+        )),
+    }
+}
+
 fn help() {
     println!(
         "Cherry self-play trainer\n\
          \n\
          train          [--run-dir PATH] [--hours N] [--simulations N] [--workers N]\n\
+                        [--progress-reports on|off]\n\
          status        [--run-dir PATH]\n\
          evaluate      [--run-dir PATH] [--simulations N]\n\
          audit         [--run-dir PATH] [--simulations N] [--pairs N]\n\
@@ -103,6 +127,7 @@ fn help() {
          \n\
          Simulations is a base; wide positions automatically receive at least 3x legal actions.\n\
          Weights and optimizer checkpoint after every completed game; compact replay every 25.\n\
+         Timestamped progress reports are on by default and print every 500 games.\n\
          Ctrl+C requests a graceful stop after the current self-play batch or arena and\n\
          writes a full checkpoint. Press Ctrl+C again only to force an immediate exit."
     );
@@ -191,7 +216,220 @@ fn default_workers() -> usize {
         .max(1)
 }
 
-fn train(run_dir: &Path, duration: Duration, simulations: usize, workers: usize) -> io::Result<()> {
+#[derive(Clone, Copy)]
+struct ProgressSnapshot {
+    games: u64,
+    candidate_steps: u64,
+    champion_steps: u64,
+    promotions: u64,
+    replay_positions: usize,
+}
+
+impl ProgressSnapshot {
+    fn from_run(run: &RunState) -> Self {
+        Self {
+            games: run.games,
+            candidate_steps: run.model.training_steps,
+            champion_steps: run.champion.training_steps,
+            promotions: run.promotions,
+            replay_positions: run.replay.len(),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum ArenaDecision {
+    Promoted,
+    LeagueGuardRejected,
+    Continued,
+}
+
+fn print_progress(enabled: bool, message: String) -> io::Result<()> {
+    if enabled {
+        let mut output = io::stdout().lock();
+        writeln!(
+            output,
+            "{}",
+            timestamped_report(SystemTime::now(), &message)
+        )?;
+        output.flush()?;
+    }
+    Ok(())
+}
+
+fn timestamped_report(time: SystemTime, message: &str) -> String {
+    format!("[{}] {message}", utc_timestamp(time))
+}
+
+fn format_start_report(
+    snapshot: ProgressSnapshot,
+    simulations: usize,
+    workers: usize,
+    run_dir: &Path,
+) -> String {
+    format!(
+        "Cherry training resumed at game {}, candidate step {}, with champion step {}. Totals: {} promotions and {} replay positions. Base simulations/action: {}; workers: {}; run directory: {}.",
+        format_count(snapshot.games),
+        format_count(snapshot.candidate_steps),
+        format_count(snapshot.champion_steps),
+        format_count(snapshot.promotions),
+        format_count(snapshot.replay_positions as u64),
+        format_count(simulations as u64),
+        format_count(workers as u64),
+        run_dir.display(),
+    )
+}
+
+fn format_periodic_report(
+    snapshot: ProgressSnapshot,
+    last_loss: f32,
+    winner: Option<Player>,
+    actions: usize,
+) -> String {
+    let next_arena = snapshot.games.div_ceil(PROMOTION_INTERVAL) * PROMOTION_INTERVAL;
+    let next_arena = if next_arena == snapshot.games {
+        next_arena + PROMOTION_INTERVAL
+    } else {
+        next_arena
+    };
+    let latest_game = winner.map_or_else(
+        || format!("The latest self-play game was drawn after {actions} actions."),
+        |winner| {
+            format!(
+                "{} won the latest self-play game after {actions} actions.",
+                if winner == Player::Alpha {
+                    "Alpha"
+                } else {
+                    "Beta"
+                }
+            )
+        },
+    );
+    format!(
+        "Cherry is training normally through game {}. Candidate step {}; champion step {}; {} promotions; replay contains {} positions; latest loss {:.4}. {latest_game} The next arena is at game {}.",
+        format_count(snapshot.games),
+        format_count(snapshot.candidate_steps),
+        format_count(snapshot.champion_steps),
+        format_count(snapshot.promotions),
+        format_count(snapshot.replay_positions as u64),
+        last_loss,
+        format_count(next_arena),
+    )
+}
+
+fn format_arena_report(
+    snapshot: ProgressSnapshot,
+    candidate_steps: u64,
+    incumbent_steps: u64,
+    result: ArenaResult,
+    decision: ArenaDecision,
+) -> String {
+    let score = result.score * 100.0;
+    let lower_99 = result.lower_bound * 100.0;
+    match decision {
+        ArenaDecision::Promoted => format!(
+            "Promotion {} at game {}: candidate step {} scored {:.1}% ({:.1}% lower 99% confidence bound), passed the validated league guard, and became the new champion. Training continues with {} replay positions.",
+            format_count(snapshot.promotions),
+            format_count(snapshot.games),
+            format_count(candidate_steps),
+            score,
+            lower_99,
+            format_count(snapshot.replay_positions as u64),
+        ),
+        ArenaDecision::LeagueGuardRejected => format!(
+            "At game {}, candidate step {} scored {:.1}% ({:.1}% lower 99% confidence bound) against champion step {}, but did not pass the validated league guard. No promotion occurred; training continues with {} promotions and {} replay positions.",
+            format_count(snapshot.games),
+            format_count(candidate_steps),
+            score,
+            lower_99,
+            format_count(incumbent_steps),
+            format_count(snapshot.promotions),
+            format_count(snapshot.replay_positions as u64),
+        ),
+        ArenaDecision::Continued => format!(
+            "At game {}, candidate step {} scored {:.1}% ({:.1}% lower 99% confidence bound) against champion step {}. No promotion occurred; training continues with {} promotions and {} replay positions.",
+            format_count(snapshot.games),
+            format_count(candidate_steps),
+            score,
+            lower_99,
+            format_count(incumbent_steps),
+            format_count(snapshot.promotions),
+            format_count(snapshot.replay_positions as u64),
+        ),
+    }
+}
+
+fn format_completion_report(snapshot: ProgressSnapshot) -> String {
+    format!(
+        "Training window complete at game {}. Candidate step {}; champion step {}; {} promotions; replay contains {} positions.",
+        format_count(snapshot.games),
+        format_count(snapshot.candidate_steps),
+        format_count(snapshot.champion_steps),
+        format_count(snapshot.promotions),
+        format_count(snapshot.replay_positions as u64),
+    )
+}
+
+fn format_shutdown_report(snapshot: ProgressSnapshot, run_dir: &Path) -> String {
+    format!(
+        "Graceful shutdown complete at game {}. Candidate step {}; champion step {}; {} promotions; replay contains {} positions. A full resumable checkpoint was saved in {}.",
+        format_count(snapshot.games),
+        format_count(snapshot.candidate_steps),
+        format_count(snapshot.champion_steps),
+        format_count(snapshot.promotions),
+        format_count(snapshot.replay_positions as u64),
+        run_dir.display(),
+    )
+}
+
+fn format_count(value: u64) -> String {
+    let digits = value.to_string();
+    let mut formatted = String::with_capacity(digits.len() + digits.len() / 3);
+    for (index, chunk) in digits.as_bytes().rchunks(3).rev().enumerate() {
+        if index > 0 {
+            formatted.push(',');
+        }
+        formatted.push_str(std::str::from_utf8(chunk).expect("decimal digits are valid UTF-8"));
+    }
+    formatted
+}
+
+fn utc_timestamp(time: SystemTime) -> String {
+    let seconds = time
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let days = seconds.div_euclid(86_400);
+    let day_seconds = seconds.rem_euclid(86_400);
+    let hour = day_seconds / 3_600;
+    let minute = day_seconds % 3_600 / 60;
+    let second = day_seconds % 60;
+    let (year, month, day) = civil_date_from_unix_days(days);
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z")
+}
+
+fn civil_date_from_unix_days(days: i64) -> (i64, i64, i64) {
+    let shifted = days + 719_468;
+    let era = shifted.div_euclid(146_097);
+    let day_of_era = shifted - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let mut year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_prime = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_prime + 2) / 5 + 1;
+    let month = month_prime + if month_prime < 10 { 3 } else { -9 };
+    year += i64::from(month <= 2);
+    (year, month, day)
+}
+
+fn train(
+    run_dir: &Path,
+    duration: Duration,
+    simulations: usize,
+    workers: usize,
+    progress_reports: bool,
+) -> io::Result<()> {
     if simulations == 0 || workers == 0 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -205,19 +443,17 @@ fn train(run_dir: &Path, duration: Duration, simulations: usize, workers: usize)
     let mut training_batch = Vec::with_capacity(BATCH_SIZE);
     let mut last_loss = 0.0;
     let mut last_arena = None;
-    println!(
-        "Cherry training resumed: games={}, steps={}, replay={}, base simulations/action={}, workers={}",
-        run.games,
-        run.model.training_steps,
-        run.replay.len(),
-        simulations,
-        workers
-    );
-    println!("Run directory: {}", absolute(run_dir)?.display());
-    println!("Press Ctrl+C once for a graceful stop and full checkpoint.");
+    print_progress(
+        progress_reports,
+        format_start_report(
+            ProgressSnapshot::from_run(&run),
+            simulations,
+            workers,
+            &absolute(run_dir)?,
+        ),
+    )?;
 
     while started.elapsed() < duration && !shutdown_requested() {
-        let batch_started = Instant::now();
         let model = run.model.clone();
         let jobs = (0..workers.max(1))
             .map(|_| (run.rng.next_u64(), run.rng.next_u64()))
@@ -256,7 +492,10 @@ fn train(run_dir: &Path, duration: Duration, simulations: usize, workers: usize)
                 last_loss = loss;
 
                 let mut arena_result = None;
+                let mut arena_report = None;
                 if run.games % PROMOTION_INTERVAL == 0 {
+                    let candidate_steps = run.model.training_steps;
+                    let incumbent_steps = run.champion.training_steps;
                     let result = arena(
                         &run.model,
                         &run.champion,
@@ -265,22 +504,33 @@ fn train(run_dir: &Path, duration: Duration, simulations: usize, workers: usize)
                         PROMOTION_PAIRS,
                         workers,
                     );
-                    if result.lower_bound > 0.5
-                        && passes_league_guard(
+                    let mut decision = ArenaDecision::Continued;
+                    if result.lower_bound > 0.5 {
+                        if passes_league_guard(
                             run_dir,
                             &run.model,
                             &run.champion,
                             simulations.max(8),
                             run.games,
                             workers,
-                        )?
-                    {
-                        run.champion = run.model.clone();
-                        run.promotions += 1;
-                        archive_champion(run_dir, &run)?;
+                        )? {
+                            run.champion = run.model.clone();
+                            run.promotions += 1;
+                            archive_champion(run_dir, &run)?;
+                            decision = ArenaDecision::Promoted;
+                        } else {
+                            decision = ArenaDecision::LeagueGuardRejected;
+                        }
                     }
                     append_arena_report(run_dir, &run, result)?;
                     arena_result = Some(result);
+                    arena_report = Some(format_arena_report(
+                        ProgressSnapshot::from_run(&run),
+                        candidate_steps,
+                        incumbent_steps,
+                        result,
+                        decision,
+                    ));
                 }
                 last_arena = arena_result;
                 save_run(
@@ -290,40 +540,29 @@ fn train(run_dir: &Path, duration: Duration, simulations: usize, workers: usize)
                     arena_result,
                     run.games < 10 || run.games % REPLAY_SAVE_INTERVAL == 0,
                 )?;
-                println!(
-                    "game {:>6}  winner={:<5} actions={:<3} replay={:<5} loss={:.4} batch={:.1}s{}",
-                    run.games,
-                    winner.map_or("draw", |player| if player == Player::Alpha {
-                        "Alpha"
-                    } else {
-                        "Beta"
-                    }),
-                    actions,
-                    run.replay.len(),
-                    loss,
-                    batch_started.elapsed().as_secs_f32(),
-                    arena_result.map_or_else(String::new, |result| format!(
-                        " arena={:.3} lower99={:.3}",
-                        result.score, result.lower_bound
-                    )),
-                );
+                if let Some(report) = arena_report {
+                    print_progress(progress_reports, report)?;
+                } else if run.games % PROGRESS_REPORT_INTERVAL == 0 {
+                    print_progress(
+                        progress_reports,
+                        format_periodic_report(
+                            ProgressSnapshot::from_run(&run),
+                            loss,
+                            winner,
+                            actions,
+                        ),
+                    )?;
+                }
             }
             Ok::<(), io::Error>(())
         })?;
     }
     save_run(run_dir, &run, last_loss, last_arena, true)?;
+    let snapshot = ProgressSnapshot::from_run(&run);
     if shutdown_requested() {
-        println!(
-            "Cherry stopped gracefully at game {} and step {}. Full checkpoint saved to {}.",
-            run.games,
-            run.model.training_steps,
-            absolute(run_dir)?.display()
-        );
+        print_progress(true, format_shutdown_report(snapshot, &absolute(run_dir)?))?;
     } else {
-        println!(
-            "Training window complete: games={}, steps={}, promotions={}",
-            run.games, run.model.training_steps, run.promotions
-        );
+        print_progress(progress_reports, format_completion_report(snapshot))?;
     }
     Ok(())
 }
@@ -879,10 +1118,6 @@ fn passes_league_guard(
     }
     candidate_score /= checkpoints.len() as f32;
     incumbent_score /= checkpoints.len() as f32;
-    println!(
-        "league guard: candidate={candidate_score:.3}, incumbent={incumbent_score:.3}, checkpoints={}",
-        checkpoints.len()
-    );
     Ok(candidate_score + 0.01 >= incumbent_score)
 }
 
@@ -1091,6 +1326,96 @@ mod tests {
     }
 
     #[test]
+    fn progress_reports_default_to_on_and_accept_explicit_toggles() {
+        let arguments = strings(&["train"]);
+        assert!(parse_on_off(&arguments, "--progress-reports", true).unwrap());
+
+        let arguments = strings(&["train", "--progress-reports", "OFF"]);
+        assert!(!parse_on_off(&arguments, "--progress-reports", true).unwrap());
+
+        let arguments = strings(&["train", "--progress-reports", "yes"]);
+        assert!(parse_on_off(&arguments, "--progress-reports", false).unwrap());
+    }
+
+    #[test]
+    fn progress_report_toggle_rejects_missing_and_invalid_values() {
+        let missing = strings(&["train", "--progress-reports"]);
+        assert!(
+            parse_on_off(&missing, "--progress-reports", true)
+                .unwrap_err()
+                .to_string()
+                .contains("requires on or off")
+        );
+
+        let invalid = strings(&["train", "--progress-reports", "sometimes"]);
+        assert!(
+            parse_on_off(&invalid, "--progress-reports", true)
+                .unwrap_err()
+                .to_string()
+                .contains("expected on or off")
+        );
+    }
+
+    #[test]
+    fn progress_reports_use_readable_utc_timestamps_and_counts() {
+        assert_eq!(utc_timestamp(UNIX_EPOCH), "1970-01-01T00:00:00Z");
+        assert_eq!(
+            utc_timestamp(UNIX_EPOCH + Duration::from_secs(1_000_000_000)),
+            "2001-09-09T01:46:40Z"
+        );
+        assert_eq!(format_count(0), "0");
+        assert_eq!(format_count(192_025), "192,025");
+        assert_eq!(
+            timestamped_report(
+                UNIX_EPOCH + Duration::from_secs(1_000_000_000),
+                "Cherry is training."
+            ),
+            "[2001-09-09T01:46:40Z] Cherry is training."
+        );
+    }
+
+    #[test]
+    fn arena_reports_explain_promotions_and_rejections() {
+        let result = ArenaResult {
+            score: 0.625,
+            lower_bound: 0.538,
+            games: 192,
+        };
+        let promoted = format_arena_report(
+            progress_snapshot(160_000, 960_000, 960_000, 38),
+            960_000,
+            954_000,
+            result,
+            ArenaDecision::Promoted,
+        );
+        assert!(promoted.contains("Promotion 38 at game 160,000"));
+        assert!(promoted.contains("scored 62.5% (53.8% lower 99% confidence bound)"));
+
+        let rejected = format_arena_report(
+            progress_snapshot(161_000, 966_000, 960_000, 38),
+            966_000,
+            960_000,
+            result,
+            ArenaDecision::LeagueGuardRejected,
+        );
+        assert!(rejected.contains("did not pass the validated league guard"));
+        assert!(rejected.contains("No promotion occurred; training continues"));
+
+        let continued = format_arena_report(
+            progress_snapshot(162_000, 972_000, 960_000, 38),
+            972_000,
+            960_000,
+            ArenaResult {
+                score: 0.531,
+                lower_bound: 0.445,
+                games: 192,
+            },
+            ArenaDecision::Continued,
+        );
+        assert!(continued.contains("No promotion occurred; training continues"));
+    }
+
+    #[test]
     fn circular_replay_keeps_newest_samples_in_chronological_order() {
         let mut replay = ReplayBuffer::with_capacity(3);
         for marker in 0..5 {
@@ -1152,5 +1477,24 @@ mod tests {
         fs::remove_file(&path).unwrap();
         assert_eq!((games, promotions, rng), (80, 0, 9));
         assert!(!validated_protocol);
+    }
+
+    fn strings(values: &[&str]) -> Vec<String> {
+        values.iter().map(ToString::to_string).collect()
+    }
+
+    fn progress_snapshot(
+        games: u64,
+        candidate_steps: u64,
+        champion_steps: u64,
+        promotions: u64,
+    ) -> ProgressSnapshot {
+        ProgressSnapshot {
+            games,
+            candidate_steps,
+            champion_steps,
+            promotions,
+            replay_positions: 500_000,
+        }
     }
 }

@@ -116,8 +116,14 @@ From `rust_impl`, start or resume the main run:
 cargo run --release -p cherry-train -- train \
   --run-dir training/cherry-main \
   --hours 1000000 \
-  --simulations 512
+  --simulations 512 \
+  --progress-reports on
 ```
+
+`--progress-reports` defaults to `on`. Like Fajita, Cherry prints timestamped,
+human-readable status reports every 500 games and an arena-specific promotion
+or continuation report every 1,000 games. Use `--progress-reports off` for
+quiet training; errors and graceful-shutdown confirmation are still printed.
 
 The trainer makes the latest weights and run metadata durable after every
 completed game, and flushes the replay window every 25 games. Press `Ctrl+C`

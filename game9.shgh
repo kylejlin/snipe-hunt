@@ -3,7 +3,7 @@
 // Intuitively, Beta must respond to the check by either moving to rank 5 (which the engines report as +#5)
 // or by moving the Elephant to rank 5 (to remove the pressure on Rank 6).
 // In this situation, all the possible "move Elephant plus something else" plies ultimately come down to 2 patterns: capturing and non-capturing.
-// If you don't capture, then  "42a. Elephant 4, Rat5x" sets a mating net.
+// If you don't capture, then  "42a. Rat5x, Elephant 4" sets a mating net.
 // If you do capture, then "42a. Dog 5, Elephant 4" sets a mating net.
 // Stockfish would be able to figure this out in an instant,
 // yet Honey seems to stupid to figure this out even with 30 seconds of thinking time.

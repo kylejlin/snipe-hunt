@@ -1373,9 +1373,13 @@ impl MateSearch {
                     return proves_upper;
                 }
                 if lower == 1 && position.active_player() != self.target {
+                    // The one-ply defender horizon disproves the parent in one
+                    // shot, so it deliberately does not populate depth-zero
+                    // child entries.  Any non-terminal child that is proved at
+                    // the upper bound is therefore an optimal longest defense:
+                    // it survives this ply, but loses on the next one.
                     return proves_upper
-                        && self.table.get(&lower_key).and_then(|entry| entry.best)
-                            == Some(candidate.line);
+                        && candidate.next.captured_snipe_winner() != Some(self.target);
                 }
                 let lower_child = child_key(lower_key, *candidate, 0);
                 proves_upper
@@ -1938,6 +1942,81 @@ mod tests {
                 .unwrap();
         }
         cards
+    }
+
+    fn bug3_position() -> State {
+        State {
+            active_player: Player::Beta,
+            reserves: cards(&[
+                (Card::Animal(Animal::Mouse), Player::Alpha),
+                (Card::Animal(Animal::Ox), Player::Alpha),
+                (Card::Animal(Animal::Dragon), Player::Alpha),
+                (Card::Animal(Animal::Snake), Player::Alpha),
+                (Card::Animal(Animal::Ram), Player::Alpha),
+                (Card::Animal(Animal::Rooster), Player::Alpha),
+                (Card::Animal(Animal::Frog), Player::Alpha),
+                (Card::Animal(Animal::Frog), Player::Alpha),
+                (Card::Animal(Animal::Tiger), Player::Beta),
+                (Card::Animal(Animal::Dragon), Player::Beta),
+                (Card::Animal(Animal::Horse), Player::Beta),
+                (Card::Animal(Animal::Horse), Player::Beta),
+                (Card::Animal(Animal::Rooster), Player::Beta),
+                (Card::Animal(Animal::Dog), Player::Beta),
+                (Card::Animal(Animal::Fish), Player::Beta),
+                (Card::Animal(Animal::Squid), Player::Beta),
+            ]),
+            r1: cards(&[(Card::Snipe, Player::Alpha)]),
+            r2: cards(&[
+                (Card::Animal(Animal::Fish), Player::Alpha),
+                (Card::Animal(Animal::Squid), Player::Beta),
+            ]),
+            r3: cards(&[
+                (Card::Animal(Animal::Rabbit), Player::Alpha),
+                (Card::Animal(Animal::Snake), Player::Alpha),
+            ]),
+            r4: cards(&[
+                (Card::Animal(Animal::Dog), Player::Alpha),
+                (Card::Animal(Animal::Elephant), Player::Alpha),
+            ]),
+            r5: cards(&[
+                (Card::Animal(Animal::Mouse), Player::Alpha),
+                (Card::Animal(Animal::Ox), Player::Alpha),
+                (Card::Animal(Animal::Boar), Player::Beta),
+                (Card::Snipe, Player::Beta),
+            ]),
+            r6: cards(&[
+                (Card::Animal(Animal::Tiger), Player::Alpha),
+                (Card::Animal(Animal::Monkey), Player::Alpha),
+                (Card::Animal(Animal::Elephant), Player::Alpha),
+                (Card::Animal(Animal::Rabbit), Player::Beta),
+                (Card::Animal(Animal::Ram), Player::Beta),
+                (Card::Animal(Animal::Monkey), Player::Beta),
+                (Card::Animal(Animal::Boar), Player::Beta),
+            ]),
+            leading_action: None,
+        }
+    }
+
+    #[test]
+    fn reports_a_proved_mate_when_the_shortest_line_uses_the_defender_horizon() {
+        let state = bug3_position();
+        let mut honey = HoneyAnalyzer::new();
+        honey.set_state(state);
+        for _ in 0..100 {
+            if honey.is_fully_solved().is_some() {
+                break;
+            }
+            honey.think_for_one_tick();
+        }
+
+        let expected = MateInN::new(Player::Alpha, 4).unwrap();
+        assert_eq!(
+            honey.is_fully_solved(),
+            Some(OptimalOutcome::MateInN(expected)),
+            "{}",
+            honey.diagnostics()
+        );
+        assert_eq!(honey.evaluation(), Evaluation::MateInN(expected));
     }
 
     fn immediate_mate() -> State {

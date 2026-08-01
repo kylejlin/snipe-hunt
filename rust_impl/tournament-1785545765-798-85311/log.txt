@@ -1,0 +1,38 @@
+(base) kyle@MacBookPro rust_impl % cargo run --release -p agent-arena -- \
+  --matchup avocado-vs-garlic \
+  --pairs 10 \
+  --milliseconds 10000 \
+  --save-games per-ply
+   Compiling agent-arena v0.1.0 (/Users/kyle/snipe-hunt/rust_impl/crates/agent-arena)
+    Finished `release` profile [optimized] target(s) in 5.20s
+     Running `target/release/agent-arena --matchup avocado-vs-garlic --pairs 10 --milliseconds 10000 --save-games per-ply`
+matchups: Avocado–Garlic; 10 paired seeds; 10.000s/ply
+seeds: 0 through 9; each matchup swaps sides on every seed
+game saving: per-ply; tournament directory: agent-arena-results/tournament-1785545765-798-85311
+Avocado–Garlic seed    0, Avocado as Alpha: Winner(Beta) in 53 plies (ticks alpha=828774469, beta=1401113113, game=530.5s)
+Avocado–Garlic seed    0, Avocado as Beta: Winner(Alpha) in 34 plies (ticks alpha=1146694848, beta=728249059, game=340.6s)
+Avocado–Garlic seed    1, Avocado as Alpha: Winner(Beta) in 149 plies (ticks alpha=1092885336, beta=1141354215, game=1490.9s)
+Avocado–Garlic seed    1, Avocado as Beta: Winner(Alpha) in 18 plies (ticks alpha=1137716287, beta=766619633, game=180.1s)
+Avocado–Garlic seed    2, Avocado as Alpha: Winner(Beta) in 35 plies (ticks alpha=754565867, beta=1153493411, game=350.4s)
+Avocado–Garlic seed    2, Avocado as Beta: Winner(Alpha) in 30 plies (ticks alpha=1175422754, beta=791012945, game=300.1s)
+Avocado–Garlic seed    3, Avocado as Alpha: Winner(Alpha) in 36 plies (ticks alpha=1165725130, beta=787595034, game=362.0s)
+Avocado–Garlic seed    3, Avocado as Beta: Winner(Alpha) in 18 plies (ticks alpha=1176488547, beta=789311126, game=180.1s)
+Avocado–Garlic seed    4, Avocado as Alpha: Winner(Alpha) in 68 plies (ticks alpha=1130885134, beta=1114618282, game=680.3s)
+Avocado–Garlic seed    4, Avocado as Beta: Winner(Alpha) in 58 plies (ticks alpha=1163788133, beta=781891214, game=580.2s)
+Avocado–Garlic seed    5, Avocado as Alpha: Winner(Alpha) in 38 plies (ticks alpha=1131539438, beta=1148160792, game=380.2s)
+Avocado–Garlic seed    5, Avocado as Beta: Winner(Alpha) in 74 plies (ticks alpha=1151285353, beta=769722245, game=741.0s)
+Avocado–Garlic seed    6, Avocado as Alpha: Winner(Beta) in 51 plies (ticks alpha=1046047328, beta=1365000216, game=510.2s)
+Avocado–Garlic seed    6, Avocado as Beta: Winner(Beta) in 37 plies (ticks alpha=1112019231, beta=1346795138, game=370.4s)
+Avocado–Garlic seed    7, Avocado as Alpha: Winner(Alpha) in 38 plies (ticks alpha=1381919702, beta=1134938713, game=380.3s)
+Avocado–Garlic seed    7, Avocado as Beta: Winner(Alpha) in 40 plies (ticks alpha=1190244197, beta=781788216, game=400.2s)
+Avocado–Garlic seed    8, Avocado as Alpha: Winner(Beta) in 33 plies (ticks alpha=763121552, beta=1173929693, game=330.3s)
+Avocado–Garlic seed    8, Avocado as Beta: Winner(Alpha) in 62 plies (ticks alpha=1188230765, beta=788947901, game=620.2s)
+Avocado–Garlic seed    9, Avocado as Alpha: Winner(Alpha) in 20 plies (ticks alpha=1170815198, beta=796613454, game=200.1s)
+Avocado–Garlic seed    9, Avocado as Beta: Winner(Beta) in 69 plies (ticks alpha=663849216, beta=967441736, game=690.5s)
+Avocado–Garlic result: 7–13–0 (Avocado wins, Garlic wins, draws) in 9618.5s
+
+FINAL STANDINGS
+rank  agent       W   L   D   points   score
+   1  Garlic     13   7   0    13.0    65.0%
+   2  Avocado     7  13   0     7.0    35.0%
+elapsed: 9618.5s

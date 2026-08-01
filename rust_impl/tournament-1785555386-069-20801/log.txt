@@ -1,0 +1,42 @@
+Last login: Fri Jul 31 04:24:25 on ttys004
+Finished running .profile
+(base) kyle@MacBookPro rust_impl % cargo run --release -p agent-arena -- \
+  --matchup garlic-vs-honey \
+  --pairs 10 \
+  --milliseconds 10000 \
+  --save-games per-ply
+
+   Compiling agent-honey v0.1.0 (/Users/kyle/snipe-hunt/rust_impl/crates/agent-honey)
+   Compiling agent-arena v0.1.0 (/Users/kyle/snipe-hunt/rust_impl/crates/agent-arena)
+    Finished `release` profile [optimized] target(s) in 9.75s
+     Running `target/release/agent-arena --matchup garlic-vs-honey --pairs 10 --milliseconds 10000 --save-games per-ply`
+matchups: Garlic–Honey; 10 paired seeds; 10.000s/ply
+seeds: 0 through 9; each matchup swaps sides on every seed
+game saving: per-ply; tournament directory: agent-arena-results/tournament-1785555386-069-20801
+Garlic–Honey seed    0, Garlic as Alpha: Winner(Alpha) in 7 plies (ticks alpha=17301, beta=50921, game=55.5s)
+Garlic–Honey seed    0, Garlic as Beta: Winner(Beta) in 4 plies (ticks alpha=19538, beta=10632, game=33.2s)
+Garlic–Honey seed    1, Garlic as Alpha: Winner(Alpha) in 7 plies (ticks alpha=14275, beta=45308, game=55.5s)
+Garlic–Honey seed    1, Garlic as Beta: Winner(Beta) in 4 plies (ticks alpha=19984, beta=10193, game=33.3s)
+Garlic–Honey seed    2, Garlic as Alpha: Winner(Alpha) in 3 plies (ticks alpha=4181, beta=5502, game=24.9s)
+Garlic–Honey seed    2, Garlic as Beta: Winner(Beta) in 6 plies (ticks alpha=19835, beta=13978, game=50.5s)
+Garlic–Honey seed    3, Garlic as Alpha: Winner(Alpha) in 5 plies (ticks alpha=8458, beta=7649, game=41.1s)
+Garlic–Honey seed    3, Garlic as Beta: Winner(Beta) in 10 plies (ticks alpha=65429, beta=27275, game=81.1s)
+Garlic–Honey seed    4, Garlic as Alpha: Winner(Alpha) in 5 plies (ticks alpha=10749, beta=18256, game=40.2s)
+Garlic–Honey seed    4, Garlic as Beta: Winner(Beta) in 6 plies (ticks alpha=19409, beta=14721, game=50.3s)
+Garlic–Honey seed    5, Garlic as Alpha: Winner(Alpha) in 15 plies (ticks alpha=34540, beta=120412, game=120.3s)
+Garlic–Honey seed    5, Garlic as Beta: Winner(Beta) in 8 plies (ticks alpha=24372, beta=19035, game=68.8s)
+Garlic–Honey seed    6, Garlic as Alpha: Winner(Alpha) in 9 plies (ticks alpha=18681, beta=46633, game=74.2s)
+Garlic–Honey seed    6, Garlic as Beta: Winner(Beta) in 6 plies (ticks alpha=32369, beta=15946, game=49.4s)
+Garlic–Honey seed    7, Garlic as Alpha: Winner(Alpha) in 5 plies (ticks alpha=10515, beta=21096, game=41.4s)
+Garlic–Honey seed    7, Garlic as Beta: Winner(Beta) in 6 plies (ticks alpha=37700, beta=16169, game=48.1s)
+Garlic–Honey seed    8, Garlic as Alpha: Winner(Alpha) in 24 plies (ticks alpha=1164395483, beta=765084510, game=204.7s)
+Garlic–Honey seed    8, Garlic as Beta: Winner(Beta) in 8 plies (ticks alpha=25276, beta=18160, game=67.7s)
+Garlic–Honey seed    9, Garlic as Alpha: Winner(Alpha) in 5 plies (ticks alpha=9092, beta=20536, game=40.3s)
+Garlic–Honey seed    9, Garlic as Beta: Winner(Beta) in 6 plies (ticks alpha=38411, beta=15573, game=50.1s)
+Garlic–Honey result: 20–0–0 (Garlic wins, Honey wins, draws) in 1230.7s
+
+FINAL STANDINGS
+rank  agent       W   L   D   points   score
+   1  Garlic     20   0   0    20.0   100.0%
+   2  Honey       0  20   0     0.0     0.0%
+elapsed: 1230.7s

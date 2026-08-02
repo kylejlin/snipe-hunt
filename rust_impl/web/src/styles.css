@@ -704,6 +704,8 @@ input[type="text"] {
 .move-list-scroll {
   position: relative;
   min-width: 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 
 .move-list {
@@ -728,8 +730,7 @@ input[type="text"] {
   position: absolute;
   inset: 0 0 0 auto;
   width: 9px;
-  border-radius: 999px;
-  background: rgba(83, 101, 126, 0.1);
+  background: var(--line);
   cursor: pointer;
   touch-action: none;
 }
@@ -737,7 +738,6 @@ input[type="text"] {
 .move-list-scrollbar__thumb {
   width: 100%;
   min-height: 28px;
-  border-radius: inherit;
   background: rgba(83, 101, 126, 0.56);
   cursor: grab;
   touch-action: none;
@@ -749,9 +749,8 @@ input[type="text"] {
 
 .history-controls--footer {
   justify-content: space-between;
-  margin-top: 12px;
+  margin-top: 0;
   padding-top: 12px;
-  border-top: 1px solid var(--line);
 }
 
 .move-list__layout > button,

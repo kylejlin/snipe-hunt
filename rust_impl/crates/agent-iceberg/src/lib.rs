@@ -359,7 +359,9 @@ impl IcebergAnalyzer {
         let Some(mut state) = self.root_state.clone() else {
             return false;
         };
-        let mut plies = 0_u32;
+        // Completing a ply that was already in progress at the root still
+        // counts as one completed ply in the Analyzer contract.
+        let mut plies = u32::from(state.leading_action.is_some());
         for &action in line {
             if state.leading_action.is_none() {
                 plies += 1;
@@ -650,10 +652,25 @@ mod tests {
         let mut line = Vec::new();
         iceberg.write_optimal_lop(&mut line);
         let result = line
-            .into_iter()
-            .try_fold(state, |current, action| current.apply(action))
+            .iter()
+            .copied()
+            .try_fold(state.clone(), |current, action| current.apply(action))
             .unwrap();
         assert_eq!(result.winner(), Some(Player::Alpha));
+
+        let partial_state = state.apply(line[0]).unwrap();
+        assert!(partial_state.leading_action.is_some());
+        let mut partial_iceberg = IcebergAnalyzer::new();
+        partial_iceberg.set_state(partial_state.clone());
+        partial_iceberg.think_for_one_tick();
+        assert_eq!(partial_iceberg.evaluation(), mate.into());
+        let mut partial_line = Vec::new();
+        partial_iceberg.write_optimal_lop(&mut partial_line);
+        let partial_result = partial_line
+            .into_iter()
+            .try_fold(partial_state, |current, action| current.apply(action))
+            .unwrap();
+        assert_eq!(partial_result.winner(), Some(Player::Alpha));
     }
 
     #[test]

@@ -32,12 +32,12 @@ impl Tactics {
         turns
     }
 
-    /// Returns a concrete full-ply snipe capture. The caller may ask about
-    /// either player; tactical pressure is a board fact, not a turn-order fact.
+    /// Returns a concrete snipe capture, retaining any restriction imposed by
+    /// an in-progress ply. Pressure callers canonicalize complete-ply probes
+    /// before asking about a player other than the active one.
     pub(crate) fn direct_capture(&mut self, position: Position, attacker: Player) -> Option<Turn> {
         let mut probe = position;
         probe.active = attacker;
-        probe.leading = None;
         if let Some(cached) = self.direct.get(&(probe, attacker)) {
             return *cached;
         }

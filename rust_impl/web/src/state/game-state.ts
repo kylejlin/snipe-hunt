@@ -88,6 +88,28 @@ export function activeTimeline(game: GameState): TimelineEntry[] {
   ];
 }
 
+export function promoteAlternativeLine(game: GameState): GameState {
+  const alternative = game.alternativeLine;
+  if (!alternative) return game;
+
+  const timeline = [
+    ...game.timeline.slice(0, alternative.divergenceIndex + 1),
+    ...alternative.entries,
+  ];
+  const draftStep =
+    game.activeLine === "alternative" ? game.draftStep : null;
+
+  return {
+    ...game,
+    timeline,
+    alternativeLine: null,
+    activeLine: "actual",
+    cursor: timeline.length - 1,
+    subply: Boolean(draftStep),
+    draftStep,
+  };
+}
+
 export function gameReducer(game: GameState, action: GameAction): GameState {
   switch (action.type) {
     case "replace":

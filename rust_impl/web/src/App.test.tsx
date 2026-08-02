@@ -251,7 +251,7 @@ describe("value-semantic card interaction", () => {
 describe("presentation contract", () => {
   it("shows the package version", () => {
     render(<App />);
-    expect(screen.getByText("Version 0.78.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.79.0")).toBeInTheDocument();
   });
 
   it("does not show a turn-status pill", () => {
@@ -569,6 +569,60 @@ describe("presentation contract", () => {
     expect(
       screen.getByRole("button", { name: "Go to initial position" }),
     ).toHaveAttribute("aria-current", "true");
+  });
+
+  it("confirms before replacing the main history with an alternative line", () => {
+    const actual = gameReducer(
+      { ...newGame(initial), gameMode: "pass-and-play" },
+      {
+        type: "commit",
+        basePositionKey: initial.positionKey,
+        position: after,
+        move,
+      },
+    );
+    const alternative = {
+      ...actual,
+      alternativeLine: {
+        divergenceIndex: 0,
+        entries: [{ position: after, move: twoStepMove }],
+      },
+      activeLine: "alternative" as const,
+    };
+    localStorage.setItem(STORAGE_KEY, saveGame(alternative));
+    render(<App />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use as main line" }),
+    );
+    const dialog = screen.getByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Use this as the main line?");
+    expect(dialog).toHaveTextContent(
+      "The main history after the branch point will be replaced by this alternative line.",
+    );
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(
+      screen.getByRole("list", { name: "Alternative Line" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use as main line" }),
+    );
+    fireEvent.click(
+      within(screen.getByRole("alertdialog")).getByRole("button", {
+        name: "Use as main line",
+      }),
+    );
+
+    expect(
+      screen.queryByRole("list", { name: "Alternative Line" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Go to position after 1α. Rabbit 2, Rabbit 2",
+      }),
+    ).toHaveAttribute("aria-current", "step");
   });
 
   it("shows the last completed result after the analyzer reaches its memory ceiling", async () => {

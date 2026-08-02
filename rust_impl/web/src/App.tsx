@@ -44,6 +44,7 @@ import {
   activeTimeline,
   computerControls,
   gameReducer,
+  promoteAlternativeLine,
   type ActiveLine,
   type GameMode,
   type GameState,
@@ -701,6 +702,7 @@ function GameApp() {
   const [pendingConfirmation, setPendingConfirmation] = useState<
     | { kind: "reset" }
     | { kind: "import"; timeline: TimelineEntry[] }
+    | { kind: "use-alternative" }
     | null
   >(null);
   const agentRequestSequence = useRef(0);
@@ -1347,6 +1349,16 @@ function GameApp() {
     setPendingConfirmation({ kind: "reset" });
   };
 
+  const useAlternativeAsMainLine = () => {
+    agentRequestSequence.current += 1;
+    analysisRequestSequence.current += 1;
+    setAnalysis(null);
+    setAgentThinking(false);
+    setAnalysisRunning(false);
+    setSelectedPieceKey(null);
+    setGame(promoteAlternativeLine);
+  };
+
   const exportHistory = () => {
     setHistoryError(null);
     try {
@@ -1647,6 +1659,15 @@ function GameApp() {
         className="move-list__alternative"
       >
         <ol aria-label="Alternative Line">{items}</ol>
+        <button
+          className="move-list__alternative-action"
+          type="button"
+          onClick={() =>
+            setPendingConfirmation({ kind: "use-alternative" })
+          }
+        >
+          Use as main line
+        </button>
       </li>
     );
   };
@@ -2177,10 +2198,14 @@ function GameApp() {
             <h2 id="confirmation-title">
               {pendingConfirmation.kind === "reset"
                 ? "Start a fresh game?"
-                : "Import this game history?"}
+                : pendingConfirmation.kind === "import"
+                  ? "Import this game history?"
+                  : "Use this as the main line?"}
             </h2>
             <p id="confirmation-description">
-              The current game and its history will be replaced.
+              {pendingConfirmation.kind === "use-alternative"
+                ? "The main history after the branch point will be replaced by this alternative line."
+                : "The current game and its history will be replaced."}
             </p>
             <div className="confirmation-dialog__actions">
               <button
@@ -2199,14 +2224,18 @@ function GameApp() {
                   setPendingConfirmation(null);
                   if (confirmation.kind === "reset") {
                     performReset();
-                  } else {
+                  } else if (confirmation.kind === "import") {
                     applyImportedHistory(confirmation.timeline);
+                  } else {
+                    useAlternativeAsMainLine();
                   }
                 }}
               >
                 {pendingConfirmation.kind === "reset"
                   ? "Reset game"
-                  : "Import history"}
+                  : pendingConfirmation.kind === "import"
+                    ? "Import history"
+                    : "Use as main line"}
               </button>
             </div>
           </section>

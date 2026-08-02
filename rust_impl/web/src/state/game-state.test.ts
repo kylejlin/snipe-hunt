@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Position, RulesEngine, TurnMove } from "../engine/types";
-import { gameReducer, newGame } from "./game-state";
+import {
+  gameReducer,
+  newGame,
+  promoteAlternativeLine,
+} from "./game-state";
 import { restoreGame, saveGame } from "./persistence";
 
 function position(positionKey: string, turn: Position["turn"] = "Alpha"): Position {
@@ -79,6 +83,41 @@ describe("game-state invariants", () => {
       move,
     });
     expect(result).toBe(game);
+  });
+
+  it("replaces the main history with the complete alternative line", () => {
+    const actualTail = {
+      position: position("actual-tail", "Alpha"),
+      move: { ...move, id: "actual-tail", positionKey: after.positionKey },
+    };
+    const alternativePosition = position("alternative-after", "Beta");
+    const alternativeMove = { ...move, id: "alternative" };
+    const game = {
+      ...newGame(initial),
+      timeline: [
+        { position: initial, move: null },
+        { position: after, move },
+        actualTail,
+      ],
+      alternativeLine: {
+        divergenceIndex: 0,
+        entries: [
+          { position: alternativePosition, move: alternativeMove },
+        ],
+      },
+      activeLine: "alternative" as const,
+      cursor: 1,
+    };
+
+    const promoted = promoteAlternativeLine(game);
+
+    expect(promoted.timeline).toEqual([
+      { position: initial, move: null },
+      { position: alternativePosition, move: alternativeMove },
+    ]);
+    expect(promoted.alternativeLine).toBeNull();
+    expect(promoted.activeLine).toBe("actual");
+    expect(promoted.cursor).toBe(1);
   });
 
   it("round-trips a replay-validated current-schema game", () => {

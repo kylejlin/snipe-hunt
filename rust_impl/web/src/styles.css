@@ -831,6 +831,24 @@ input[type="text"] {
   flex: 1 1 150px;
 }
 
+.move-list__alternative-action {
+  margin: 5px 0 1px 5px;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--muted);
+  background: rgba(45, 49, 55, 0.035);
+  cursor: pointer;
+  font: 500 0.62rem "DM Mono", monospace;
+  transition: 140ms ease;
+}
+
+.move-list__alternative-action:hover {
+  border-color: rgba(83, 101, 126, 0.42);
+  color: var(--ink);
+  background: rgba(83, 101, 126, 0.09);
+}
+
 .move-list button,
 .move-list button *,
 .move-list__ply-content,

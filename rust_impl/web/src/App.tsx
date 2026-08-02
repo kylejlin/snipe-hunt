@@ -88,6 +88,14 @@ function sameMove(left: TurnMove | null, right: TurnMove): boolean {
   );
 }
 
+function sameStep(left: MoveStep | null, right: MoveStep): boolean {
+  return (
+    left?.pieceKey === right.pieceKey &&
+    left.from === right.from &&
+    left.to === right.to
+  );
+}
+
 function useCardMovementAnimation(
   boardPosition: Position,
   movementOrigin: MutableRefObject<string | null>,
@@ -1335,20 +1343,39 @@ function GameApp() {
           game.cursor + index + 1,
           move.player,
         ),
-        notation: formatCompletedMove(move, nextVariationPosition.winner),
+        resultingWinner: nextVariationPosition.winner,
       };
       variationPosition = nextVariationPosition;
       return item;
     });
   }, [analysis, game.cursor, position]);
 
-  const playSuggestedLine = (targetIndex: number) => {
-    if (!analysis || targetIndex < 0) return;
+  const playSuggestedLine = (
+    targetMoveIndex: number,
+    targetStepIndex: number,
+  ) => {
+    if (!analysis || targetMoveIndex < 0 || targetStepIndex < 0) return;
     const moves = analysis.recommendedLine.length
       ? analysis.recommendedLine
       : [analysis.bestMove];
-    const selectedMoves = moves.slice(0, targetIndex + 1);
-    if (selectedMoves.length === 0) return;
+    const targetMove = moves[targetMoveIndex];
+    const targetStep = targetMove?.steps[targetStepIndex];
+    if (!targetMove || !targetStep) return;
+    const partial = targetStepIndex < targetMove.steps.length - 1;
+    const selectedMoves = moves.slice(
+      0,
+      targetMoveIndex + (partial ? 0 : 1),
+    );
+
+    if (
+      partial &&
+      targetMoveIndex === 0 &&
+      game.subply &&
+      midpointStep &&
+      sameStep(midpointStep, targetStep)
+    ) {
+      return;
+    }
 
     let nextPosition = position;
     const appliedEntries: TimelineEntry[] = [];
@@ -1357,6 +1384,7 @@ function GameApp() {
         nextPosition = engine.applyMove(nextPosition, move);
         appliedEntries.push({ position: nextPosition, move });
       }
+      if (partial) engine.previewFirstStep(nextPosition, targetStep);
     } catch (reason) {
       setHistoryError(
         reason instanceof Error
@@ -1388,7 +1416,23 @@ function GameApp() {
         matchingMoves += 1;
       }
 
-      if (matchingMoves === selectedMoves.length) {
+      if (
+        partial &&
+        matchingMoves === selectedMoves.length &&
+        sameMove(
+          currentTimeline[current.cursor + matchingMoves + 1]?.move ?? null,
+          targetMove,
+        )
+      ) {
+        return {
+          ...current,
+          cursor: current.cursor + matchingMoves,
+          subply: true,
+          draftStep: null,
+        };
+      }
+
+      if (!partial && matchingMoves === selectedMoves.length) {
         return {
           ...current,
           cursor: current.cursor + matchingMoves,
@@ -1423,8 +1467,8 @@ function GameApp() {
         },
         activeLine: "alternative",
         cursor: current.cursor + selectedMoves.length,
-        subply: false,
-        draftStep: null,
+        subply: partial,
+        draftStep: partial ? targetStep : null,
       };
     });
   };
@@ -1790,19 +1834,55 @@ function GameApp() {
                         className="suggested-line"
                         aria-label="Suggested line"
                       >
-                        {suggestedLine.map((ply, index) => (
+                        {suggestedLine.map((ply, moveIndex) => (
                           <li
                             key={ply.key}
                             className={`suggested-line__ply move-list__ply--${ply.player.toLowerCase()}`}
                           >
-                            <button
-                              type="button"
-                              className={`suggested-line__button move-list__ply--${ply.player.toLowerCase()}`}
-                              onClick={() => playSuggestedLine(index)}
-                              aria-label={`Play suggested line through ${ply.prefix} ${ply.notation}`}
-                            >
-                              {`${ply.prefix} ${ply.notation}`}
-                            </button>
+                            <span className="suggested-line__prefix">
+                              {ply.prefix}{" "}
+                            </span>
+                            {ply.move.steps.map((step, stepIndex) => {
+                              const notation = formatCompletedStep(
+                                ply.move,
+                                stepIndex,
+                                stepIndex === ply.move.steps.length - 1
+                                  ? ply.resultingWinner
+                                  : null,
+                              );
+                              const positionNotation = ply.move.steps
+                                .slice(0, stepIndex + 1)
+                                .map((_, completedStepIndex) =>
+                                  formatCompletedStep(
+                                    ply.move,
+                                    completedStepIndex,
+                                    completedStepIndex ===
+                                      ply.move.steps.length - 1
+                                      ? ply.resultingWinner
+                                      : null,
+                                  ),
+                                )
+                                .join(", ");
+                              return (
+                                <span
+                                  key={`${step.pieceKey}-${step.from}-${step.to}-${stepIndex}`}
+                                >
+                                  {stepIndex > 0 && (
+                                    <span aria-hidden="true">, </span>
+                                  )}
+                                  <button
+                                    type="button"
+                                    className="suggested-line__button move-list__action"
+                                    onClick={() =>
+                                      playSuggestedLine(moveIndex, stepIndex)
+                                    }
+                                    aria-label={`Play suggested line through ${ply.prefix} ${positionNotation}`}
+                                  >
+                                    {notation}
+                                  </button>
+                                </span>
+                              );
+                            })}
                           </li>
                         ))}
                       </ol>

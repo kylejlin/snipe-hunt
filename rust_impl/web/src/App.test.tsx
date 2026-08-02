@@ -251,7 +251,50 @@ describe("value-semantic card interaction", () => {
 describe("presentation contract", () => {
   it("shows the package version", () => {
     render(<App />);
-    expect(screen.getByText("Version 0.62.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.64.0")).toBeInTheDocument();
+  });
+
+  it("plays suggested lines through an individual action", async () => {
+    analysisRun.mockImplementation(({ requestId }, onProgress) => {
+      const update = {
+        ...result(requestId),
+        bestMove: twoStepMove,
+        recommendedLine: [twoStepMove],
+      };
+      onProgress(update);
+      return Promise.resolve(update);
+    });
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("switch", { name: "Analysis" }));
+
+    const firstAction = await screen.findByRole("button", {
+      name: "Play suggested line through 1α. Rabbit 2",
+    });
+    expect(firstAction).toHaveClass("move-list__action");
+    expect(
+      screen.getByRole("button", {
+        name: "Play suggested line through 1α. Rabbit 2, Rabbit 2",
+      }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(firstAction);
+
+    expect(screen.getByLabelText("Current position")).toHaveTextContent(
+      "1α. Rabbit 2, …",
+    );
+    expect(screen.getByText("0.5 / 0.5")).toBeInTheDocument();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Play suggested line through 1α. Rabbit 2, Rabbit 2",
+      }),
+    );
+
+    expect(screen.getByLabelText("Current position")).toHaveTextContent(
+      "1α. Rabbit 2, Rabbit 2",
+    );
+    expect(screen.getByText("1 / 1")).toBeInTheDocument();
   });
 
   it("autoscrolls the current Game Log action after moves and navigation", () => {

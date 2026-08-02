@@ -1,3 +1,2 @@
 - [ ] Validate that each player has 4 Major Animals in `InitialStateBuilder::build`
   - We can also add a `InitialStateBuilder::build_without_major_balance_check`, to allow API users to deliberately give one player a Major Animal advantage.
-- [ ] Add a "Use as main line" button in the "Alternative Line" menu. It opens a confirmation modal, and then overwrites the main history with the alternative line.

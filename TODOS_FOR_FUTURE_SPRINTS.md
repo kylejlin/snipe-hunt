@@ -7,3 +7,4 @@
 - [ ] At the top left, say "Initial position" (instead of "0") during the initial position.
 - [ ] Add a "Use as main line" button in the "Alternative Line" menu. It opens a confirmation modal, and then overwrites the main history with the alternative line.
 - [ ] Remove all-caps text from the UI (except when all-caps is appropriate, if any such situations exist)
+- [ ] If there are enough plies in the game log to cause overflow, the scrollbar should be always-visible, not just visible-when-the-mouse-is-moving.

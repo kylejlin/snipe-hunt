@@ -1544,36 +1544,6 @@ function GameApp() {
 
       <main className="game-layout">
         <section className="table-panel" aria-label="Snipe Hunt board">
-          <div className="table-panel__topline">
-            <div
-              className="table-panel__current-action"
-              aria-label="Current position"
-            >
-              <strong aria-live="polite">{currentActionLabel}</strong>
-            </div>
-            <div className="history-controls" aria-label="History navigation">
-              <button
-                className="button button--quiet"
-                type="button"
-                onClick={moveHistoryBackward}
-                disabled={game.cursor === 0 && !game.subply}
-              >
-                ← Back
-              </button>
-              <span aria-live="polite">
-                {currentPlyCount} / {totalPlyCount}
-              </span>
-              <button
-                className="button button--quiet"
-                type="button"
-                onClick={moveHistoryForward}
-                disabled={!canMoveForward}
-              >
-                Forward →
-              </button>
-            </div>
-          </div>
-
           {game.activeLine === "alternative" ? (
             <div className="past-banner past-banner--alternative" role="status">
               Exploring an alternative line. Actual history is unchanged.
@@ -1611,74 +1581,77 @@ function GameApp() {
         </section>
 
         <aside className="sidebar">
-          <section className="control-card history-card">
-            <div className="section-heading">
-              <h2>Game Log</h2>
-              <div className="history-heading-actions">
-                <span className="move-count">
-                  {completedPlyCount}{" "}
-                  {completedPlyCount === 1 ? "ply" : "plies"}
-                </span>
-                <div className="history-menu" ref={historyMenu}>
-                  <button
-                    ref={historyMenuButton}
-                    className="history-menu__trigger"
-                    type="button"
+          <section
+            className="control-card history-card"
+            aria-label="Game log"
+          >
+            <div className="section-heading history-heading">
+              <strong
+                className="history-current-action"
+                aria-label="Current position"
+                aria-live="polite"
+              >
+                {currentActionLabel}
+              </strong>
+              <div className="history-menu" ref={historyMenu}>
+                <button
+                  ref={historyMenuButton}
+                  className="history-menu__trigger"
+                  type="button"
+                  aria-label="Game Log settings"
+                  title="Game Log settings"
+                  aria-expanded={historyMenuOpen}
+                  aria-haspopup="dialog"
+                  aria-controls="history-settings-menu"
+                  onClick={() => setHistoryMenuOpen((open) => !open)}
+                >
+                  <span aria-hidden="true">⚙</span>
+                </button>
+                {historyMenuOpen && (
+                  <div
+                    className="history-menu__items"
+                    id="history-settings-menu"
+                    role="dialog"
                     aria-label="Game Log settings"
-                    title="Game Log settings"
-                    aria-expanded={historyMenuOpen}
-                    aria-haspopup="dialog"
-                    aria-controls="history-settings-menu"
-                    onClick={() => setHistoryMenuOpen((open) => !open)}
                   >
-                    <span aria-hidden="true">⚙</span>
-                  </button>
-                  {historyMenuOpen && (
-                    <div
-                      className="history-menu__items"
-                      id="history-settings-menu"
-                      role="dialog"
-                      aria-label="Game Log settings"
+                    <label className="field history-menu__time">
+                      <span>Analysis time</span>
+                      <NumericTextInput
+                        value={game.analysisTimeSeconds}
+                        minimum={0.25}
+                        maximum={120}
+                        increment={0.25}
+                        ariaLabel="Analysis time"
+                        onCommit={(analysisTimeSeconds) => {
+                          setGame((current) => ({
+                            ...current,
+                            analysisTimeSeconds,
+                          }));
+                        }}
+                      />
+                      <span>seconds</span>
+                    </label>
+                    <div className="history-menu__divider" role="separator" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHistoryMenuOpen(false);
+                        exportHistory();
+                      }}
                     >
-                      <label className="field history-menu__time">
-                        <span>Analysis time</span>
-                        <NumericTextInput
-                          value={game.analysisTimeSeconds}
-                          minimum={0.25}
-                          maximum={120}
-                          increment={0.25}
-                          ariaLabel="Analysis time"
-                          onCommit={(analysisTimeSeconds) => {
-                            setGame((current) => ({
-                              ...current,
-                              analysisTimeSeconds,
-                            }));
-                          }}
-                        />
-                        <span>seconds</span>
-                      </label>
-                      <div className="history-menu__divider" role="separator" />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setHistoryMenuOpen(false);
-                          exportHistory();
-                        }}
-                      >
-                        Export
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setHistoryMenuOpen(false);
-                          importInput.current?.click();
-                        }}
-                      >
-                        Import
-                      </button>
-                    </div>
-                  )}
-                </div>
+                      Export
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHistoryMenuOpen(false);
+                        importInput.current?.click();
+                      }}
+                    >
+                      Import
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
             <input
@@ -1850,7 +1823,11 @@ function GameApp() {
                 </div>
               )}
             </div>
-            <ol className="move-list" ref={moveList}>
+            <ol
+              className="move-list"
+              ref={moveList}
+              aria-label="Game timeline"
+            >
               {game.timeline.flatMap((timelineEntry, timelineIndex) => {
                 const draftPly =
                   timelineIndex === game.timeline.length - 1
@@ -1916,6 +1893,30 @@ function GameApp() {
                 ];
               })}
             </ol>
+            <div
+              className="history-controls history-controls--footer"
+              aria-label="History navigation"
+            >
+              <button
+                className="button button--quiet"
+                type="button"
+                onClick={moveHistoryBackward}
+                disabled={game.cursor === 0 && !game.subply}
+              >
+                ← Back
+              </button>
+              <span aria-live="polite">
+                {currentPlyCount} / {totalPlyCount}
+              </span>
+              <button
+                className="button button--quiet"
+                type="button"
+                onClick={moveHistoryForward}
+                disabled={!canMoveForward}
+              >
+                Forward →
+              </button>
+            </div>
           </section>
 
           <section className="control-card">

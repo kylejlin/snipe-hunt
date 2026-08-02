@@ -251,7 +251,27 @@ describe("value-semantic card interaction", () => {
 describe("presentation contract", () => {
   it("shows the package version", () => {
     render(<App />);
-    expect(screen.getByText("Version 0.68.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.69.0")).toBeInTheDocument();
+  });
+
+  it("keeps the position and navigation outside the scrolling game timeline", () => {
+    render(<App />);
+
+    const gameLog = screen.getByRole("region", { name: "Game log" });
+    const currentPosition = within(gameLog).getByLabelText("Current position");
+    const timeline = within(gameLog).getByRole("list", {
+      name: "Game timeline",
+    });
+    const navigation = within(gameLog).getByLabelText("History navigation");
+
+    expect(currentPosition).toHaveTextContent("Initial position");
+    expect(
+      timeline.compareDocumentPosition(navigation) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.queryByText("Game Log")).not.toBeInTheDocument();
+    expect(screen.queryByText(/\d+ (?:ply|plies)$/)).not.toBeInTheDocument();
+    expect(document.querySelector(".table-panel__topline")).toBeNull();
   });
 
   it("uses the requested board and line labels", () => {
@@ -449,7 +469,6 @@ describe("presentation contract", () => {
       "1α. Rabbit 2, …",
     );
     expect(screen.getByText("0.5 / 0.5")).toBeInTheDocument();
-    expect(screen.getByText("0 plies")).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(".5α");
     expect(
       screen.queryByText("First animal step chosen"),

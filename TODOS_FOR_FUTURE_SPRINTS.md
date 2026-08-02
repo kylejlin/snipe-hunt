@@ -1,10 +1,10 @@
 - [ ] Validate that each player has 4 Major Animals in `InitialStateBuilder::build`
   - We can also add a `InitialStateBuilder::build_without_major_balance_check`, to allow API users to deliberately give one player a Major Animal advantage.
-- [ ] Replace "Open field" text with "Empty rank" text
-- [ ] Remove the "First animal step chosen" and "Choose the second animal to complete this ply" UI from the bottom.
 - [x] Make the Game Log autoscroll to the appropriate item whenever the user navigates back/forward, plays an action, or when the computer performs an action.
 - [x] "Invert the theme" of the selected item in the game log (i.e., roughly speaking, the foreground and background should be swapped. of course, a literal swap may or may not be visually ugly, so use design judgment).
-- [ ] At the top left, say "Initial position" (instead of "0") during the initial position.
 - [ ] Add a "Use as main line" button in the "Alternative Line" menu. It opens a confirmation modal, and then overwrites the main history with the alternative line.
-- [ ] Remove all-caps text from the UI (except when all-caps is appropriate, if any such situations exist)
+- [ ] Replace "Open field" text with "Empty rank" text
+- [ ] Remove the "First animal step chosen" and "Choose the second animal to complete this ply" UI from the bottom.
+- [ ] At the top left, say "Initial position" (instead of "0") during the initial position.
+- [ ] Make "Suggested Line" and "Alternative Line" normal-cased (currently they're all-caps).
 - [ ] If there are enough plies in the game log to cause overflow, the scrollbar should be always-visible, not just visible-when-the-mouse-is-moving.

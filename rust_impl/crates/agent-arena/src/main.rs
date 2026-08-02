@@ -22,12 +22,11 @@ const DEFAULT_PAIRS: u64 = 10;
 const DEFAULT_MILLISECONDS: u64 = 10_000;
 const DEFAULT_MAX_PLIES: u32 = 256;
 const DEFAULT_OUTPUT_ROOT: &str = "agent-arena-results";
-const AGENTS: [AgentKind; 5] = [
+const DEFAULT_AGENTS: [AgentKind; 4] = [
     AgentKind::Avocado,
     AgentKind::Cherry,
     AgentKind::Fajita,
     AgentKind::Garlic,
-    AgentKind::Iceberg,
 ];
 
 type Matchup = (AgentKind, AgentKind);
@@ -325,8 +324,8 @@ fn parse_matchup(value: &str) -> Result<Matchup, String> {
 
 fn default_matchups() -> Vec<Matchup> {
     let mut matchups = Vec::new();
-    for (index, &first) in AGENTS.iter().enumerate() {
-        for &second in &AGENTS[index + 1..] {
+    for (index, &first) in DEFAULT_AGENTS.iter().enumerate() {
+        for &second in &DEFAULT_AGENTS[index + 1..] {
             matchups.push((first, second));
         }
     }
@@ -345,7 +344,7 @@ fn usage() -> &'static str {
      [--save-games off|per-ply|per-game] [--output-root agent-arena-results] \
      [--matchup AGENT-vs-AGENT]...\n\
      agents: avocado, cherry, fajita, garlic, iceberg\n\
-     omit --matchup to run the full round robin; repeat it to select multiple matchups"
+     omit --matchup to run the default round robin; repeat it to select multiple matchups"
 }
 
 fn run(config: Config) -> Result<(), String> {
@@ -815,18 +814,27 @@ mod tests {
             parse_matchup("Garlic-vs-Avocado"),
             Ok((AgentKind::Avocado, AgentKind::Garlic))
         );
+        assert_eq!(
+            parse_matchup("iceberg-vs-avocado"),
+            Ok((AgentKind::Avocado, AgentKind::Iceberg))
+        );
         assert!(parse_matchup("avocado-vs-avocado").is_err());
         assert!(parse_matchup("avocado-garlic").is_err());
         assert!(parse_matchup("avocado-vs-potato").is_err());
     }
 
     #[test]
-    fn omitted_matchups_use_the_full_round_robin() {
+    fn omitted_matchups_use_the_default_round_robin() {
         let config = parse_args_from(Vec::<String>::new())
             .unwrap()
             .expect("default arguments should run the arena");
         assert_eq!(config.matchups, default_matchups());
-        assert_eq!(config.matchups.len(), 10);
+        assert_eq!(config.matchups.len(), 6);
+        assert!(
+            config.matchups.iter().all(
+                |(first, second)| *first != AgentKind::Iceberg && *second != AgentKind::Iceberg
+            )
+        );
     }
 
     #[test]

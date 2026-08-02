@@ -1,5 +1,10 @@
 //! Iceberg is a tactic-aware Snipe Hunt agent.
 //!
+//! Iceberg is a mate-finding specialist, not a general-purpose player.
+//! For example, it's opening play is extremely weak.
+//! It will probably lose to almost every other agent, and most humans.
+//! Consequently, it is recommended to exclude it from tournaments.
+//!
 //! It reasons in complete plies and treats pressure, safe snipe exits, captures,
 //! and pressure-building moves as first-class search facts. Its scout is
 //! deliberately selective when looking for a mate, but its shortestness search

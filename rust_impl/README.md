@@ -57,8 +57,8 @@ npm run build
 
 ## Run the browser-agent arena
 
-From `rust_impl`, run the published Avocado, Cherry, Fajita, Garlic, and Iceberg
-agents in a round robin:
+From `rust_impl`, run the published Avocado, Cherry, Fajita, and Garlic agents
+in the default round robin:
 
 ```sh
 cargo run --release -p agent-arena -- \
@@ -67,8 +67,8 @@ cargo run --release -p agent-arena -- \
   --save-games per-ply
 ```
 
-Each of the ten matchups runs concurrently. A matchup plays every seed twice,
-with the agents swapping Alpha and Beta, so the command above plays 200 games.
+Each of the six matchups runs concurrently. A matchup plays every seed twice,
+with the agents swapping Alpha and Beta, so the command above plays 120 games.
 The final table awards one point per win and half a point per draw.
 
 To run only selected matchups, pass `--matchup AGENT-vs-AGENT` once per matchup.
@@ -84,8 +84,10 @@ cargo run --release -p agent-arena -- \
   --save-games per-ply
 ```
 
-Omitting `--matchup` preserves the full five-agent round robin. Repeat the flag
-to include multiple selected matchups.
+Omitting `--matchup` runs the default four-agent round robin. Iceberg is excluded
+because it is a mate-finding specialist with weak opening play, but it remains
+available through an explicit `--matchup`. Repeat the flag to include multiple
+selected matchups.
 
 `--save-games` has three modes:
 
@@ -97,9 +99,8 @@ to include multiple selected matchups.
 - `off` does not create history directories or files.
 
 Saved histories default to `agent-arena-results/`. Every invocation creates a
-new `tournament-*` directory with one subdirectory for each selected pairing,
-including the four `*-vs-iceberg` pairings in the default round robin. Use
-`--output-root PATH` to select another parent directory.
+new `tournament-*` directory with one subdirectory for each selected pairing.
+Use `--output-root PATH` to select another parent directory.
 `--seed-start` changes the first paired seed, and `--max-plies` changes the draw
 limit.
 

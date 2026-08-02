@@ -454,6 +454,12 @@ struct SearchChoice {
     score: i32,
 }
 
+fn completes_ply(position: Position, next: Position) -> bool {
+    next.active_player() != position.active_player()
+        || next.captured_snipe_winner().is_some()
+        || !has_legal_action(next)
+}
+
 #[derive(Clone, Copy, Debug)]
 struct OnePlyResolution {
     target_wins: bool,
@@ -491,14 +497,17 @@ impl MoveCache {
         let choices: Arc<[SearchChoice]> = self
             .actions(position)
             .iter()
-            .map(|candidate| SearchChoice {
-                line: ChoiceLine {
-                    first: candidate.action,
-                    second: None,
-                },
-                next: position.apply_known(candidate.action, candidate.capture),
-                consumes_ply: position.leading == 0,
-                score: candidate.score,
+            .map(|candidate| {
+                let next = position.apply_known(candidate.action, candidate.capture);
+                SearchChoice {
+                    line: ChoiceLine {
+                        first: candidate.action,
+                        second: None,
+                    },
+                    next,
+                    consumes_ply: completes_ply(position, next),
+                    score: candidate.score,
+                }
             })
             .collect::<Vec<_>>()
             .into();
@@ -1132,9 +1141,9 @@ impl MateSearch {
         }
         let entry = if let Some(winner) = key.position.captured_snipe_winner() {
             terminal_entry(winner == self.target)
-        } else if key.position.leading == 0 && !has_legal_action(key.position) {
+        } else if !has_legal_action(key.position) {
             terminal_entry(key.position.active_player().opponent() == self.target)
-        } else if key.position.leading == 0 && key.plies_left == 0 {
+        } else if key.plies_left == 0 {
             terminal_entry(false)
         } else if key.position.leading == 0
             && key.plies_left == 1
@@ -1372,7 +1381,7 @@ impl MateSearch {
                 if is_or {
                     return proves_upper;
                 }
-                if lower == 1 && position.active_player() != self.target {
+                if lower == 1 && position.leading == 0 && position.active_player() != self.target {
                     // The one-ply defender horizon disproves the parent in one
                     // shot, so it deliberately does not populate depth-zero
                     // child entries.  Any non-terminal child that is proved at
@@ -1629,13 +1638,14 @@ impl HoneyAnalyzer {
         };
         let mut plies = 0;
         for &action in line {
-            if state.leading_action.is_none() {
-                plies += 1;
-            }
+            let player = state.active_player;
             let Ok(next) = state.apply(action) else {
                 return false;
             };
             state = next;
+            if state.active_player != player || state.winner().is_some() {
+                plies += 1;
+            }
             if state.winner().is_some() {
                 break;
             }
@@ -1654,12 +1664,13 @@ impl HoneyAnalyzer {
         };
         let mut plies = 0;
         for (index, &action) in line.iter().enumerate() {
-            if state.leading_action.is_none() {
-                plies += 1;
-            }
+            let player = state.active_player;
             match state.apply(action) {
                 Ok(next) => state = next,
                 Err(error) => return format!("illegal action {index}: {error:?}"),
+            }
+            if state.active_player != player || state.winner().is_some() {
+                plies += 1;
             }
             if state.winner().is_some() {
                 break;
@@ -2017,6 +2028,54 @@ mod tests {
             honey.diagnostics()
         );
         assert_eq!(honey.evaluation(), Evaluation::MateInN(expected));
+    }
+
+    #[test]
+    fn counts_an_already_started_ply_in_the_reported_mate_distance() {
+        let state = bug3_position()
+            .apply(Action::SnipeStep(SnipeStep {
+                destination: Rank::R4,
+            }))
+            .unwrap()
+            .apply(Action::AnimalStep(AnimalStep {
+                actor: Animal::Snake,
+                direction: StepDirection::Advance,
+                destination: Rank::R4,
+            }))
+            .unwrap();
+        assert!(state.leading_action.is_some());
+
+        let mut honey = HoneyAnalyzer::new();
+        honey.set_state(state.clone());
+        for _ in 0..500 {
+            if honey.is_fully_solved().is_some() {
+                break;
+            }
+            honey.think_for_one_tick();
+        }
+
+        let expected = MateInN::new(Player::Alpha, 3).unwrap();
+        assert_eq!(
+            honey.is_fully_solved(),
+            Some(OptimalOutcome::MateInN(expected)),
+            "{}",
+            honey.diagnostics()
+        );
+        assert_eq!(honey.evaluation(), Evaluation::MateInN(expected));
+
+        let mut line = Vec::new();
+        honey.write_optimal_lop(&mut line);
+        let mut replay = state;
+        let mut completed_plies = 0;
+        for action in line {
+            let player = replay.active_player;
+            replay = replay.apply(action).unwrap();
+            if replay.active_player != player || replay.winner().is_some() {
+                completed_plies += 1;
+            }
+        }
+        assert_eq!(completed_plies, 3);
+        assert_eq!(replay.winner(), Some(Player::Alpha));
     }
 
     fn immediate_mate() -> State {

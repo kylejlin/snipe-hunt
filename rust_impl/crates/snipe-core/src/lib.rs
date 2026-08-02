@@ -309,21 +309,31 @@ pub trait Analyzer {
     /// Your implementation must be truthful about mates.
     /// In other words, an implementation is only sound if it satisfies ALL of the following:
     /// - If the game is over, you must return mate-in-zero.
-    /// - If you return mate-in-N, there must truly exist a forced win in N plies.
+    /// - If you return mate-in-N, there must truly exist a forced win in at most N plies.
     ///   - As a corollary, if you return mate-in-zero, the game must truly be over.
     ///   - Note that N need not be the shortest forced mate distance.
     ///     In other words, this function is allowed to return mate-in-N even if there exists a shorter mate-in-M.
+    /// - If you return mate-in-N, then `write_optimal_lop` must write the full winning line.
+    ///   See the documentation for `write_optimal_lop` for more details.
     /// - If you return an estimate, the game must NOT be over.
     fn evaluation(&self) -> Evaluation;
 
     /// "LOP" stands for "line of play".
     /// This must only write legal actions.
     /// Usually, the more actions this writes, the more helpful it is.
+    ///
     /// At a _minimum_, if the game is not over, this must write enough actions to either complete the active player's ply,
     /// or end the game.
     ///
-    /// If `evaluation` returns a mate-in-N, it is **strongly** recommended (but technically not required)
-    /// that `write_optimal_lop` write the entire winning line of play.
+    /// If `evaluation` returns mate-in-N for winner W, let A be exactly the actions emitted by `write_optimal_lop`.
+    /// Replaying A from the current state must:
+    ///
+    /// - end with W as the winner after at most N completed plies; and
+    /// - after every prefix ending at the completion of K plies, leave W with a forced win in at most `N - K` additional plies.
+    ///
+    /// A ply is completed when control passes to the other player or the game ends.
+    /// If the starting state has `leading_action.is_some()`,
+    /// then completing that already-started ply counts as one completed ply.
     fn write_optimal_lop<W>(&self, w: &mut W)
     where
         W: ActionWriter;

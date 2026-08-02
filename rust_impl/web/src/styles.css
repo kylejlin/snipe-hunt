@@ -77,9 +77,9 @@ button {
 
 .masthead h1 {
   margin: 2px 0 0;
-  font-size: clamp(2.2rem, 5vw, 4.25rem);
-  line-height: 0.94;
-  letter-spacing: -0.065em;
+  font-size: clamp(1.8rem, 3vw, 2.5rem);
+  line-height: 1;
+  letter-spacing: -0.045em;
 }
 
 .eyebrow,
@@ -968,7 +968,7 @@ footer {
   }
 
   .masthead h1 {
-    font-size: 2.4rem;
+    font-size: 1.8rem;
   }
 
   .history-controls {

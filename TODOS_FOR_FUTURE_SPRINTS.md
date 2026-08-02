@@ -7,4 +7,4 @@
 - [ ] Remove the "First animal step chosen" and "Choose the second animal to complete this ply" UI from the bottom.
 - [ ] At the top left, say "Initial position" (instead of "0") during the initial position.
 - [ ] Make "Suggested Line" and "Alternative Line" normal-cased (currently they're all-caps).
-- [ ] If there are enough plies in the game log to cause overflow, the scrollbar should be always-visible, not just visible-when-the-mouse-is-moving.
+- [x] If there are enough plies in the game log to cause overflow, the scrollbar should be always-visible, not just visible-when-the-mouse-is-moving.

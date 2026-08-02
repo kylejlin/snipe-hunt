@@ -1,5 +1,6 @@
 import {
   Component,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -7,7 +8,11 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ErrorInfo, ReactNode } from "react";
+import type {
+  ErrorInfo,
+  PointerEvent as ReactPointerEvent,
+  ReactNode,
+} from "react";
 import type { MutableRefObject } from "react";
 import { version } from "../package.json";
 import {
@@ -525,6 +530,40 @@ function scrollCurrentHistoryActionIntoView(container: HTMLOListElement) {
   });
 }
 
+interface MoveListScrollbarMetrics {
+  overflowing: boolean;
+  thumbHeight: number;
+  thumbTop: number;
+}
+
+const emptyMoveListScrollbar: MoveListScrollbarMetrics = {
+  overflowing: false,
+  thumbHeight: 0,
+  thumbTop: 0,
+};
+
+function measureMoveListScrollbar(
+  container: HTMLOListElement,
+): MoveListScrollbarMetrics {
+  const viewportHeight = container.clientHeight;
+  const maximumScrollTop = container.scrollHeight - viewportHeight;
+  if (viewportHeight <= 0 || maximumScrollTop <= 1) {
+    return emptyMoveListScrollbar;
+  }
+
+  const thumbHeight = Math.min(
+    viewportHeight,
+    Math.max(28, (viewportHeight * viewportHeight) / container.scrollHeight),
+  );
+  const maximumThumbTop = viewportHeight - thumbHeight;
+  const scrollTop = Math.min(maximumScrollTop, Math.max(0, container.scrollTop));
+  return {
+    overflowing: true,
+    thumbHeight,
+    thumbTop: (scrollTop / maximumScrollTop) * maximumThumbTop,
+  };
+}
+
 function MoveLogPly({
   timelineIndex,
   move,
@@ -670,6 +709,14 @@ function GameApp() {
   const historyMenu = useRef<HTMLDivElement>(null);
   const historyMenuButton = useRef<HTMLButtonElement>(null);
   const moveList = useRef<HTMLOListElement>(null);
+  const moveListScrollbarDrag = useRef<{
+    pointerId: number;
+    startClientY: number;
+    startScrollTop: number;
+  } | null>(null);
+  const [moveListScrollbar, setMoveListScrollbar] = useState(
+    emptyMoveListScrollbar,
+  );
   const confirmationDialog = useRef<HTMLElement>(null);
   const confirmationCancelButton = useRef<HTMLButtonElement>(null);
 
@@ -764,6 +811,73 @@ function GameApp() {
       .map((move) => move.steps[nextStepIndex]?.to)
       .filter((location): location is Location => Boolean(location)),
   );
+  const updateMoveListScrollbar = useCallback(() => {
+    const container = moveList.current;
+    if (!container) return;
+    const next = measureMoveListScrollbar(container);
+    setMoveListScrollbar((current) =>
+      current.overflowing === next.overflowing &&
+      current.thumbHeight === next.thumbHeight &&
+      current.thumbTop === next.thumbTop
+        ? current
+        : next,
+    );
+  }, []);
+
+  const scrollMoveListFromTrack = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    if (event.target !== event.currentTarget) return;
+    const container = moveList.current;
+    if (!container) return;
+    const trackBounds = event.currentTarget.getBoundingClientRect();
+    const maximumThumbTop = trackBounds.height - moveListScrollbar.thumbHeight;
+    const maximumScrollTop = container.scrollHeight - container.clientHeight;
+    if (maximumThumbTop <= 0 || maximumScrollTop <= 0) return;
+    const thumbTop = Math.min(
+      maximumThumbTop,
+      Math.max(
+        0,
+        event.clientY - trackBounds.top - moveListScrollbar.thumbHeight / 2,
+      ),
+    );
+    container.scrollTop = (thumbTop / maximumThumbTop) * maximumScrollTop;
+    updateMoveListScrollbar();
+  };
+
+  const dragMoveListScrollbar = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    const drag = moveListScrollbarDrag.current;
+    const container = moveList.current;
+    const track = event.currentTarget.parentElement;
+    if (!drag || drag.pointerId !== event.pointerId || !container || !track) {
+      return;
+    }
+    const maximumThumbTop =
+      track.getBoundingClientRect().height - moveListScrollbar.thumbHeight;
+    const maximumScrollTop = container.scrollHeight - container.clientHeight;
+    if (maximumThumbTop <= 0 || maximumScrollTop <= 0) return;
+    container.scrollTop = Math.min(
+      maximumScrollTop,
+      Math.max(
+        0,
+        drag.startScrollTop +
+          ((event.clientY - drag.startClientY) / maximumThumbTop) *
+            maximumScrollTop,
+      ),
+    );
+    updateMoveListScrollbar();
+  };
+
+  const stopDraggingMoveListScrollbar = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    if (moveListScrollbarDrag.current?.pointerId === event.pointerId) {
+      moveListScrollbarDrag.current = null;
+    }
+  };
+
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, saveGame(game));
@@ -793,6 +907,23 @@ function GameApp() {
     game.alternativeLine?.entries.length,
     game.draftStep,
   ]);
+
+  useLayoutEffect(updateMoveListScrollbar);
+
+  useEffect(() => {
+    const container = moveList.current;
+    if (!container) return;
+    const resizeObserver =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(updateMoveListScrollbar);
+    resizeObserver?.observe(container);
+    window.addEventListener("resize", updateMoveListScrollbar);
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", updateMoveListScrollbar);
+    };
+  }, [updateMoveListScrollbar]);
 
   useEffect(() => {
     if (!historyMenuOpen) return;
@@ -1823,76 +1954,106 @@ function GameApp() {
                 </div>
               )}
             </div>
-            <ol
-              className="move-list"
-              ref={moveList}
-              aria-label="Game timeline"
-            >
-              {game.timeline.flatMap((timelineEntry, timelineIndex) => {
-                const draftPly =
-                  timelineIndex === game.timeline.length - 1
-                    ? renderDraftPly("actual", game.timeline.length)
-                    : null;
-                if (timelineIndex === 0) {
-                  const initialLines = formatInitialLines(
-                    timelineEntry.position,
+            <div className="move-list-scroll">
+              <ol
+                className="move-list"
+                ref={moveList}
+                aria-label="Game timeline"
+                onScroll={updateMoveListScrollbar}
+              >
+                {game.timeline.flatMap((timelineEntry, timelineIndex) => {
+                  const draftPly =
+                    timelineIndex === game.timeline.length - 1
+                      ? renderDraftPly("actual", game.timeline.length)
+                      : null;
+                  if (timelineIndex === 0) {
+                    const initialLines = formatInitialLines(
+                      timelineEntry.position,
+                    );
+                    const initialSelected =
+                      historyLineContainsPly(game, "actual", 0) &&
+                      game.cursor === 0 &&
+                      !game.subply;
+                    const initialPosition = (
+                      <li key="initial-layout" className="move-list__layout">
+                        <button
+                          type="button"
+                          className={initialSelected ? "move-list__active" : ""}
+                          aria-current={initialSelected ? "true" : undefined}
+                          aria-label="Go to initial position"
+                          onClick={() => moveToPosition(0, "actual")}
+                        >
+                          {initialLines.map((line, index) => {
+                            const player: Player =
+                              index === 0 ? "Beta" : "Alpha";
+                            return (
+                              <small
+                                key={player}
+                                className={`move-list__ply--${player.toLowerCase()}`}
+                              >
+                                {`${formatDisplayPlyPrefix(0, player)} ${line.slice(4)}`}
+                              </small>
+                            );
+                          })}
+                        </button>
+                      </li>
+                    );
+                    const branch = renderAlternativeBranch(0);
+                    return [
+                      initialPosition,
+                      ...(draftPly ? [draftPly] : []),
+                      ...(branch ? [branch] : []),
+                    ];
+                  }
+                  const move = timelineEntry.move;
+                  if (!move) return [];
+                  const completedPly = (
+                    <MoveLogPly
+                      key={`${move.id}-${timelineIndex}`}
+                      timelineIndex={timelineIndex}
+                      move={move}
+                      resultingWinner={timelineEntry.position.winner}
+                      line="actual"
+                      game={game}
+                      onNavigate={moveToHistoryAction}
+                    />
                   );
-                  const initialSelected =
-                    historyLineContainsPly(game, "actual", 0) &&
-                    game.cursor === 0 &&
-                    !game.subply;
-                  const initialPosition = (
-                    <li key="initial-layout" className="move-list__layout">
-                      <button
-                        type="button"
-                        className={initialSelected ? "move-list__active" : ""}
-                        aria-current={initialSelected ? "true" : undefined}
-                        aria-label="Go to initial position"
-                        onClick={() => moveToPosition(0, "actual")}
-                      >
-                        {initialLines.map((line, index) => {
-                          const player: Player =
-                            index === 0 ? "Beta" : "Alpha";
-                          return (
-                            <small
-                              key={player}
-                              className={`move-list__ply--${player.toLowerCase()}`}
-                            >
-                              {`${formatDisplayPlyPrefix(0, player)} ${line.slice(4)}`}
-                            </small>
-                          );
-                        })}
-                      </button>
-                    </li>
-                  );
-                  const branch = renderAlternativeBranch(0);
+                  const branch = renderAlternativeBranch(timelineIndex);
                   return [
-                    initialPosition,
+                    completedPly,
                     ...(draftPly ? [draftPly] : []),
                     ...(branch ? [branch] : []),
                   ];
-                }
-                const move = timelineEntry.move;
-                if (!move) return [];
-                const completedPly = (
-                  <MoveLogPly
-                    key={`${move.id}-${timelineIndex}`}
-                    timelineIndex={timelineIndex}
-                    move={move}
-                    resultingWinner={timelineEntry.position.winner}
-                    line="actual"
-                    game={game}
-                    onNavigate={moveToHistoryAction}
+                })}
+              </ol>
+              {moveListScrollbar.overflowing && (
+                <div
+                  className="move-list-scrollbar"
+                  aria-hidden="true"
+                  onPointerDown={scrollMoveListFromTrack}
+                >
+                  <div
+                    className="move-list-scrollbar__thumb"
+                    style={{
+                      height: moveListScrollbar.thumbHeight,
+                      transform: `translateY(${moveListScrollbar.thumbTop}px)`,
+                    }}
+                    onPointerDown={(event) => {
+                      moveListScrollbarDrag.current = {
+                        pointerId: event.pointerId,
+                        startClientY: event.clientY,
+                        startScrollTop: moveList.current?.scrollTop ?? 0,
+                      };
+                      event.currentTarget.setPointerCapture?.(event.pointerId);
+                      event.preventDefault();
+                    }}
+                    onPointerMove={dragMoveListScrollbar}
+                    onPointerUp={stopDraggingMoveListScrollbar}
+                    onPointerCancel={stopDraggingMoveListScrollbar}
                   />
-                );
-                const branch = renderAlternativeBranch(timelineIndex);
-                return [
-                  completedPly,
-                  ...(draftPly ? [draftPly] : []),
-                  ...(branch ? [branch] : []),
-                ];
-              })}
-            </ol>
+                </div>
+              )}
+            </div>
             <div
               className="history-controls history-controls--footer"
               aria-label="History navigation"

@@ -251,7 +251,37 @@ describe("value-semantic card interaction", () => {
 describe("presentation contract", () => {
   it("shows the package version", () => {
     render(<App />);
-    expect(screen.getByText("Version 0.69.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.70.0")).toBeInTheDocument();
+  });
+
+  it("shows a persistent scrollbar exactly when the Game Log overflows", () => {
+    render(<App />);
+    const timeline = screen.getByRole("list", { name: "Game timeline" });
+    const timelineWrapper = timeline.parentElement;
+    expect(timelineWrapper?.querySelector(".move-list-scrollbar")).toBeNull();
+
+    Object.defineProperties(timeline, {
+      clientHeight: { configurable: true, value: 100 },
+      scrollHeight: { configurable: true, value: 400 },
+      scrollTop: { configurable: true, value: 100, writable: true },
+    });
+    fireEvent(window, new Event("resize"));
+
+    const scrollbar = timelineWrapper?.querySelector(
+      ".move-list-scrollbar",
+    );
+    const thumb = scrollbar?.querySelector<HTMLElement>(
+      ".move-list-scrollbar__thumb",
+    );
+    expect(scrollbar).toBeInTheDocument();
+    expect(thumb).toHaveStyle({ height: "28px", transform: "translateY(24px)" });
+
+    Object.defineProperty(timeline, "scrollHeight", {
+      configurable: true,
+      value: 100,
+    });
+    fireEvent(window, new Event("resize"));
+    expect(timelineWrapper?.querySelector(".move-list-scrollbar")).toBeNull();
   });
 
   it("keeps the position and navigation outside the scrolling game timeline", () => {

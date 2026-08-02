@@ -729,32 +729,51 @@ input[type="text"] {
   margin-left: 5px;
 }
 
+.move-list-scroll {
+  position: relative;
+  min-width: 0;
+}
+
 .move-list {
   display: grid;
   gap: 3px;
   max-height: 265px;
   margin: 0;
-  padding: 0;
+  padding: 0 13px 0 0;
   overflow-y: scroll;
-  scrollbar-color: rgba(83, 101, 126, 0.56) rgba(83, 101, 126, 0.08);
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
+  scrollbar-width: none;
   list-style: none;
   -webkit-user-select: text;
   user-select: text;
 }
 
 .move-list::-webkit-scrollbar {
-  width: 8px;
+  width: 0;
+  height: 0;
 }
 
-.move-list::-webkit-scrollbar-track {
-  background: rgba(83, 101, 126, 0.08);
+.move-list-scrollbar {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 9px;
+  padding: 2px;
+  border-radius: 999px;
+  background: rgba(83, 101, 126, 0.1);
+  cursor: pointer;
+  touch-action: none;
 }
 
-.move-list::-webkit-scrollbar-thumb {
+.move-list-scrollbar__thumb {
+  width: 5px;
+  min-height: 28px;
   border-radius: 999px;
   background: rgba(83, 101, 126, 0.56);
+  cursor: grab;
+  touch-action: none;
+}
+
+.move-list-scrollbar__thumb:active {
+  cursor: grabbing;
 }
 
 .history-controls--footer {

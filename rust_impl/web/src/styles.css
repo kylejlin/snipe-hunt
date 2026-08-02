@@ -91,36 +91,6 @@ button {
   text-transform: uppercase;
 }
 
-.turn-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  min-width: max-content;
-  padding: 10px 14px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: #383b40;
-  background: rgba(255, 255, 255, 0.78);
-  font-size: 0.82rem;
-  font-weight: 700;
-}
-
-.turn-chip__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: currentColor;
-  box-shadow: 0 0 10px color-mix(in srgb, currentColor 55%, transparent);
-}
-
-.turn-chip--alpha {
-  color: var(--alpha);
-}
-
-.turn-chip--beta {
-  color: var(--beta);
-}
-
 .game-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(310px, 380px);
@@ -961,18 +931,8 @@ footer {
     padding: 15px 10px 22px;
   }
 
-  .masthead {
-    align-items: start;
-  }
-
   .masthead h1 {
     font-size: 2.4rem;
-  }
-
-  .turn-chip {
-    max-width: 48%;
-    min-width: 0;
-    font-size: 0.68rem;
   }
 
   .history-controls {

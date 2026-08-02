@@ -1434,13 +1434,6 @@ function GameApp() {
     }
   };
 
-  const status = position.winner
-    ? `${position.winner} wins`
-    : agentThinking
-      ? `${position.turn} is thinking…`
-      : computerTurn
-        ? `${position.turn} computer turn`
-        : `${position.turn} to move`;
   const suggestedLine = useMemo(() => {
     if (!analysis) return [];
     const moves = analysis.recommendedLine.length
@@ -1661,16 +1654,7 @@ function GameApp() {
   return (
     <div className="app-shell">
       <header className="masthead">
-        <div>
-          <h1>Snipe Hunt</h1>
-        </div>
-        <div
-          className={`turn-chip turn-chip--${position.turn.toLowerCase()}`}
-          aria-live="polite"
-        >
-          <span className="turn-chip__dot" />
-          {status}
-        </div>
+        <h1>Snipe Hunt</h1>
       </header>
 
       <main className="game-layout">

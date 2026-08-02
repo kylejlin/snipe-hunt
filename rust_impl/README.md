@@ -403,6 +403,42 @@ cargo run --release -p kiwi-train -- status \
   --run-dir training/kiwi-main
 ```
 
+### Train Kiwi on a 2021 14-inch M1 Pro MacBook Pro
+
+From `rust_impl`, this command lets Kiwi choose its default worker count,
+compiles for the native M1 Pro CPU, and prevents idle system sleep:
+
+```sh
+caffeinate -i cargo run --release -p kiwi-train -- train \
+  --run-dir training/kiwi-main \
+  --hours 1000000 \
+  --progress-reports on
+```
+
+Keep the MacBook plugged in with its lid open and unobstructed ventilation.
+The display may sleep. The million-hour training window is intentionally
+effectively unbounded; stop the trainer manually when it is time to move the
+run. `caffeinate -i` ends when the trainer exits.
+
+### Train Kiwi on a 2017 13-inch Intel MacBook Pro
+
+From `rust_impl`, this command lets Kiwi choose its default worker count,
+compiles for the native AVX2/FMA-capable CPU in a 2017 13-inch Intel MacBook
+Pro, and prevents idle system sleep:
+
+```sh
+RUSTFLAGS="-C target-cpu=native" \
+caffeinate -i cargo run --release -p kiwi-train -- train \
+  --run-dir training/kiwi-main \
+  --hours 1000000 \
+  --progress-reports on
+```
+
+Keep the MacBook plugged in with its lid open and unobstructed ventilation.
+The display may sleep. The million-hour training window is intentionally
+effectively unbounded; stop the trainer manually when it is time to move the
+run. `caffeinate -i` ends when the trainer exits.
+
 Kiwi writes resumable `latest.bin`, optimizer, replay, and metadata checkpoints.
 Every 1,000 games it also keeps an inert network snapshot under `snapshots/`.
 Snapshots never affect self-play or training; they exist so regressions can be

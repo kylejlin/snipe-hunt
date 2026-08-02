@@ -2043,23 +2043,29 @@ function GameApp() {
               aria-label="History navigation"
             >
               <button
-                className="button button--quiet"
+                className="button button--quiet button--icon"
                 type="button"
                 onClick={moveHistoryBackward}
                 disabled={game.cursor === 0 && !game.subply}
+                aria-label="Back"
               >
-                ← Back
+                <svg aria-hidden="true" viewBox="0 0 18 18">
+                  <path d="M 13 5 L 5 9 L 13 13" />
+                </svg>
               </button>
               <span aria-live="polite">
                 {currentPlyCount} / {totalPlyCount}
               </span>
               <button
-                className="button button--quiet"
+                className="button button--quiet button--icon"
                 type="button"
                 onClick={moveHistoryForward}
                 disabled={!canMoveForward}
+                aria-label="Forward"
               >
-                Forward →
+                <svg aria-hidden="true" viewBox="0 0 18 18">
+                  <path d="M 5 5 L 13 9 L 5 13" />
+                </svg>
               </button>
             </div>
           </section>

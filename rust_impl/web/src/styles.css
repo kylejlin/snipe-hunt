@@ -146,6 +146,25 @@ button {
   padding: 7px 9px;
 }
 
+.button--icon {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  place-items: center;
+  line-height: 1;
+}
+
+.button--icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
 .button--danger {
   width: 100%;
   color: #a83b30;

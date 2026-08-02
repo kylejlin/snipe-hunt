@@ -414,10 +414,10 @@ describe("presentation contract", () => {
       );
       expect(scrollTo).toHaveBeenCalledTimes(2);
 
-      fireEvent.click(screen.getByRole("button", { name: "← Back" }));
+      fireEvent.click(screen.getByRole("button", { name: "Back" }));
       expect(scrollTo).toHaveBeenCalledTimes(3);
 
-      fireEvent.click(screen.getByRole("button", { name: "Forward →" }));
+      fireEvent.click(screen.getByRole("button", { name: "Forward" }));
       expect(scrollTo).toHaveBeenCalledTimes(4);
       expect(scrollTo).toHaveBeenLastCalledWith({
         top: 45,
@@ -555,7 +555,7 @@ describe("presentation contract", () => {
     );
     expect(screen.getByText("0.5 / 1")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "← Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
 
     expect(screen.getByLabelText("Current position")).toHaveTextContent(
       "Initial position",

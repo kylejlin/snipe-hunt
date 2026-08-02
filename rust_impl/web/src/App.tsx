@@ -1790,152 +1790,149 @@ function GameApp() {
               className={`history-analysis${game.analysisEnabled ? " history-analysis--enabled" : ""}`}
             >
               <div className="history-analysis__toolbar" aria-live="polite">
-                <div className="history-analysis__summary">
-                  <label className="analysis-switch">
-                    <input
-                      type="checkbox"
-                      role="switch"
-                      aria-label="Analysis"
-                      checked={game.analysisEnabled}
-                      onChange={(event) => {
-                        analysisRequestSequence.current += 1;
-                        setGame((current) => ({
-                          ...current,
-                          analysisEnabled: event.target.checked,
-                        }));
-                      }}
-                    />
-                  </label>
-                  {game.analysisEnabled ? (
-                    <div className="history-analysis__score">
-                      <strong className={evaluationTone}>
-                        {analysisError
-                          ? "—"
-                          : analysis?.evaluation
-                            ? formatEvaluation(analysis.evaluation)
-                            : alphaEvaluation !== null
+                {game.analysisEnabled ? (
+                  <div className="history-analysis__score">
+                    <span>Analysis:</span>{" "}
+                    <strong className={evaluationTone}>
+                      {analysisError
+                        ? "—"
+                        : analysis?.evaluation
+                          ? formatEvaluation(analysis.evaluation)
+                          : alphaEvaluation !== null
                             ? formatAlphaScore(alphaEvaluation, "Alpha")
                             : "—"}
-                      </strong>
-                    </div>
-                  ) : (
-                    <span className="history-analysis__disabled">
-                      Analysis disabled
-                    </span>
-                  )}
-                </div>
-                {game.analysisEnabled && (
+                    </strong>
+                  </div>
+                ) : (
+                  <span className="history-analysis__disabled">
+                    Analysis disabled
+                  </span>
+                )}
+                <label className="analysis-switch">
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    aria-label="Analysis"
+                    checked={game.analysisEnabled}
+                    onChange={(event) => {
+                      analysisRequestSequence.current += 1;
+                      setGame((current) => ({
+                        ...current,
+                        analysisEnabled: event.target.checked,
+                      }));
+                    }}
+                  />
+                </label>
+              </div>
+              {game.analysisEnabled && (
+                <>
+                  <div className="history-analysis__advice" aria-live="polite">
+                    {analysisError ? (
+                      <p className="error-message">{analysisError}</p>
+                    ) : position.winner ? (
+                      <>
+                        <span className="meta-label">Best next ply</span>
+                        <strong>Game complete</strong>
+                      </>
+                    ) : analysis ? (
+                      <>
+                        <span className="suggested-line__label">Suggested:</span>
+                        <ol
+                          className="suggested-line"
+                          aria-label="Suggested Line"
+                        >
+                          {suggestedLine.map((ply, moveIndex) => {
+                            const omitsPlayedFirstStep = Boolean(
+                              moveIndex === 0 &&
+                                game.subply &&
+                                midpointStep &&
+                                ply.move.steps.length > 1 &&
+                                sameStep(midpointStep, ply.move.steps[0]),
+                            );
+                            return (
+                              <li
+                                key={ply.key}
+                                className={`suggested-line__ply move-list__ply--${ply.player.toLowerCase()}`}
+                              >
+                                <span className="suggested-line__prefix">
+                                  {ply.prefix}{" "}
+                                </span>
+                                {omitsPlayedFirstStep && <span>...</span>}
+                                {ply.move.steps.map((step, stepIndex) => {
+                                  if (omitsPlayedFirstStep && stepIndex === 0) {
+                                    return null;
+                                  }
+                                  const notation = formatCompletedStep(
+                                    ply.move,
+                                    stepIndex,
+                                    stepIndex === ply.move.steps.length - 1
+                                      ? ply.resultingWinner
+                                      : null,
+                                  );
+                                  const notationParts = ply.move.steps
+                                    .slice(0, stepIndex + 1)
+                                    .map((_, completedStepIndex) =>
+                                      formatCompletedStep(
+                                        ply.move,
+                                        completedStepIndex,
+                                        completedStepIndex ===
+                                          ply.move.steps.length - 1
+                                          ? ply.resultingWinner
+                                          : null,
+                                      ),
+                                    );
+                                  if (omitsPlayedFirstStep) {
+                                    notationParts[0] = "...";
+                                  }
+                                  const positionNotation =
+                                    notationParts.join(", ");
+                                  return (
+                                    <span
+                                      key={`${step.pieceKey}-${step.from}-${step.to}-${stepIndex}`}
+                                    >
+                                      {stepIndex > 0 && (
+                                        <span aria-hidden="true">, </span>
+                                      )}
+                                      <button
+                                        type="button"
+                                        className="suggested-line__button move-list__action"
+                                        onClick={() =>
+                                          playSuggestedLine(moveIndex, stepIndex)
+                                        }
+                                        aria-label={`Play suggested line through ${ply.prefix} ${positionNotation}`}
+                                      >
+                                        {notation}
+                                      </button>
+                                    </span>
+                                  );
+                                })}
+                              </li>
+                            );
+                          })}
+                        </ol>
+                      </>
+                    ) : (
+                      <p className="empty-copy">
+                        {analysisRunning
+                          ? `${strategyLabel(game.strategy)} is thinking…`
+                          : "No legal analysis is available."}
+                      </p>
+                    )}
+                  </div>
                   <span className="history-analysis__work">
                     {analysis?.engineName ?? strategyLabel(game.strategy)}
                     {" · "}
                     {analysis?.ticks?.toLocaleString() ?? "—"} ticks
                     {" · "}
                     {analysis?.elapsedMs !== undefined
-                      ? `${(analysis.elapsedMs / 1000).toFixed(2)}s`
+                      ? `${(analysis.elapsedMs / 1000).toFixed(2)}s${
+                          analysis.stoppedReason === "memory-limit"
+                            ? " (OOM)"
+                            : ""
+                        }`
                       : `${game.analysisTimeSeconds}s`}
                   </span>
-                )}
-              </div>
-              {game.analysisEnabled && (
-                <div className="history-analysis__advice" aria-live="polite">
-                  {analysisError ? (
-                    <p className="error-message">{analysisError}</p>
-                  ) : position.winner ? (
-                    <>
-                      <span className="meta-label">Best next ply</span>
-                      <strong>Game complete</strong>
-                    </>
-                  ) : analysis ? (
-                    <>
-                      <span className="suggested-line__label">Suggested:</span>
-                      <ol
-                        className="suggested-line"
-                        aria-label="Suggested Line"
-                      >
-                        {suggestedLine.map((ply, moveIndex) => {
-                          const omitsPlayedFirstStep = Boolean(
-                            moveIndex === 0 &&
-                              game.subply &&
-                              midpointStep &&
-                              ply.move.steps.length > 1 &&
-                              sameStep(midpointStep, ply.move.steps[0]),
-                          );
-                          return (
-                            <li
-                              key={ply.key}
-                              className={`suggested-line__ply move-list__ply--${ply.player.toLowerCase()}`}
-                            >
-                              <span className="suggested-line__prefix">
-                                {ply.prefix}{" "}
-                              </span>
-                              {omitsPlayedFirstStep && <span>...</span>}
-                              {ply.move.steps.map((step, stepIndex) => {
-                                if (omitsPlayedFirstStep && stepIndex === 0) {
-                                  return null;
-                                }
-                                const notation = formatCompletedStep(
-                                  ply.move,
-                                  stepIndex,
-                                  stepIndex === ply.move.steps.length - 1
-                                    ? ply.resultingWinner
-                                    : null,
-                                );
-                                const notationParts = ply.move.steps
-                                  .slice(0, stepIndex + 1)
-                                  .map((_, completedStepIndex) =>
-                                    formatCompletedStep(
-                                      ply.move,
-                                      completedStepIndex,
-                                      completedStepIndex ===
-                                        ply.move.steps.length - 1
-                                        ? ply.resultingWinner
-                                        : null,
-                                    ),
-                                  );
-                                if (omitsPlayedFirstStep) {
-                                  notationParts[0] = "...";
-                                }
-                                const positionNotation =
-                                  notationParts.join(", ");
-                                return (
-                                  <span
-                                    key={`${step.pieceKey}-${step.from}-${step.to}-${stepIndex}`}
-                                  >
-                                    {stepIndex > 0 && (
-                                      <span aria-hidden="true">, </span>
-                                    )}
-                                    <button
-                                      type="button"
-                                      className="suggested-line__button move-list__action"
-                                      onClick={() =>
-                                        playSuggestedLine(moveIndex, stepIndex)
-                                      }
-                                      aria-label={`Play suggested line through ${ply.prefix} ${positionNotation}`}
-                                    >
-                                      {notation}
-                                    </button>
-                                  </span>
-                                );
-                              })}
-                            </li>
-                          );
-                        })}
-                      </ol>
-                      {analysis.stoppedReason === "memory-limit" && (
-                        <p className="history-analysis__notice" role="status">
-                          Memory ceiling reached. Showing the best completed
-                          result.
-                        </p>
-                      )}
-                    </>
-                  ) : (
-                    <p className="empty-copy">
-                      {analysisRunning
-                        ? `${strategyLabel(game.strategy)} is thinking…`
-                        : "No legal analysis is available."}
-                    </p>
-                  )}
-                </div>
+                </>
               )}
             </div>
             <div className="move-list-scroll">

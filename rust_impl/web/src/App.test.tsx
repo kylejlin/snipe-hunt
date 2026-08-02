@@ -251,7 +251,7 @@ describe("value-semantic card interaction", () => {
 describe("presentation contract", () => {
   it("shows the package version", () => {
     render(<App />);
-    expect(screen.getByText("Version 0.75.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.76.0")).toBeInTheDocument();
   });
 
   it("does not show a turn-status pill", () => {
@@ -569,6 +569,9 @@ describe("presentation contract", () => {
     analysisRun.mockImplementationOnce(({ requestId }, onProgress) => {
       const update = {
         ...result(requestId),
+        engineName: "Garlic",
+        ticks: 7_040,
+        elapsedMs: 17_050,
         stoppedReason: "memory-limit" as const,
       };
       onProgress(update);
@@ -578,21 +581,48 @@ describe("presentation contract", () => {
 
     fireEvent.click(screen.getByRole("switch", { name: "Analysis" }));
 
-    const notice = await screen.findByText(
-      "Memory ceiling reached. Showing the best completed result.",
+    const diagnostics = await screen.findByText(
+      "Garlic · 7,040 ticks · 17.05s (OOM)",
     );
     const suggestedLine = screen.getByRole("list", {
       name: "Suggested Line",
     });
-    expect(notice).toBeInTheDocument();
     expect(
-      suggestedLine.compareDocumentPosition(notice) &
+      suggestedLine.compareDocumentPosition(diagnostics) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    expect(screen.queryByText(/Memory ceiling reached/)).not.toBeInTheDocument();
     expect(screen.getByText("Suggested:")).toHaveClass(
       "suggested-line__label",
     );
     expect(screen.queryByText("unreachable")).not.toBeInTheDocument();
+  });
+
+  it("places the analysis score at top left, switch at top right, and diagnostics at bottom", async () => {
+    analysisRun.mockImplementationOnce(({ requestId }, onProgress) => {
+      const update = {
+        ...result(requestId),
+        evaluation: { kind: "estimate" as const, millipoints: 23_200 },
+        engineName: "Garlic",
+        ticks: 7_040,
+        elapsedMs: 17_050,
+      };
+      onProgress(update);
+      return Promise.resolve(update);
+    });
+    render(<App />);
+
+    const analysisSwitch = screen.getByRole("switch", { name: "Analysis" });
+    fireEvent.click(analysisSwitch);
+
+    const score = await screen.findByText("Analysis:");
+    const diagnostics = screen.getByText("Garlic · 7,040 ticks · 17.05s");
+    const panel = score.closest(".history-analysis");
+    const toolbar = score.closest(".history-analysis__toolbar");
+
+    expect(score.parentElement).toHaveTextContent("Analysis: +23.2");
+    expect(toolbar?.lastElementChild).toContainElement(analysisSwitch);
+    expect(panel?.lastElementChild).toBe(diagnostics);
   });
 
   it("lists the remaining strategies alphabetically", () => {

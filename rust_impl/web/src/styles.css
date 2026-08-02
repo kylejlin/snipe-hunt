@@ -622,31 +622,23 @@ input[type="text"] {
 
 .history-analysis__toolbar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-}
-
-.history-analysis__summary {
-  display: flex;
-  flex: 0 1 auto;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 7px;
-  min-width: 0;
-  color: var(--muted);
-  font: 400 0.59rem "DM Mono", monospace;
 }
 
 .history-analysis__score {
   display: flex;
   align-items: baseline;
   gap: 5px;
+  min-width: 0;
+  color: var(--ink);
+  font: 400 0.95rem "DM Mono", monospace;
 }
 
 .history-analysis__disabled {
-  font-size: 0.68rem;
+  color: var(--muted);
+  font: 400 0.95rem "DM Mono", monospace;
 }
 
 .history-analysis__score strong {
@@ -664,8 +656,12 @@ input[type="text"] {
 }
 
 .history-analysis__work {
+  display: block;
+  padding: 10px 0;
+  border-top: 1px solid rgba(83, 101, 126, 0.15);
   color: var(--muted);
   font: 400 0.59rem "DM Mono", monospace;
+  text-align: right;
   white-space: nowrap;
 }
 
@@ -676,12 +672,6 @@ input[type="text"] {
   margin-top: 10px;
   padding: 10px 0 11px;
   border-top: 1px solid rgba(83, 101, 126, 0.15);
-}
-
-.history-analysis__notice {
-  margin: 1px 0 2px;
-  color: var(--muted);
-  font: 400 0.59rem/1.45 "DM Mono", monospace;
 }
 
 .suggested-line {

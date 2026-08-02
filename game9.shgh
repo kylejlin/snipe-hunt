@@ -6,8 +6,7 @@
 // In this situation, all the possible "move Elephant plus something else" plies ultimately come down to 2 patterns: capturing and non-capturing.
 // If you don't capture, then  "42a. Rat5x, Elephant 4" sets a mating net.
 // If you do capture, then "42a. Dog 5, Elephant 4" sets a mating net.
-// Stockfish would be able to figure this out in an instant,
-// yet Honey seems to stupid to figure this out even with 30 seconds of thinking time.
+// A strong tactical specialist should be able to find this line quickly.
 
 0b. =Tiger; Dragon Fish Beta; Rabbit Horse Horse Ram Monkey Rooster Dog Boar Boar Elephant Squid Squid; Rat
 0a. =Rat; Rooster Fish Alpha; Ox Ox Tiger Rabbit Dragon Snake Snake Ram Monkey Elephant Frog Frog; Dog

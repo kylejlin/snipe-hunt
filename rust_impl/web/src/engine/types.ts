@@ -4,7 +4,6 @@ export type Strategy =
   | "cherry"
   | "fajita"
   | "garlic"
-  | "honey"
   | "iceberg";
 export type Location =
   | "alpha-reserve"

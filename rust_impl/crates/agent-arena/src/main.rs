@@ -4,7 +4,6 @@ use agent_avocado::AvocadoAnalyzer;
 use agent_cherry::CherryAnalyzer;
 use agent_fajita::FajitaAnalyzer;
 use agent_garlic::GarlicAnalyzer;
-use agent_honey::HoneyAnalyzer;
 use agent_iceberg::IcebergAnalyzer;
 use snipe_core::{Action, Analyzer, Evaluation, Player, State};
 use snipe_prng::initial_state;
@@ -23,12 +22,11 @@ const DEFAULT_PAIRS: u64 = 10;
 const DEFAULT_MILLISECONDS: u64 = 10_000;
 const DEFAULT_MAX_PLIES: u32 = 256;
 const DEFAULT_OUTPUT_ROOT: &str = "agent-arena-results";
-const AGENTS: [AgentKind; 6] = [
+const AGENTS: [AgentKind; 5] = [
     AgentKind::Avocado,
     AgentKind::Cherry,
     AgentKind::Fajita,
     AgentKind::Garlic,
-    AgentKind::Honey,
     AgentKind::Iceberg,
 ];
 
@@ -40,7 +38,6 @@ enum AgentKind {
     Cherry,
     Fajita,
     Garlic,
-    Honey,
     Iceberg,
 }
 
@@ -51,7 +48,6 @@ impl AgentKind {
             Self::Cherry => "Cherry",
             Self::Fajita => "Fajita",
             Self::Garlic => "Garlic",
-            Self::Honey => "Honey",
             Self::Iceberg => "Iceberg",
         }
     }
@@ -62,7 +58,6 @@ impl AgentKind {
             Self::Cherry => "cherry",
             Self::Fajita => "fajita",
             Self::Garlic => "garlic",
-            Self::Honey => "honey",
             Self::Iceberg => "iceberg",
         }
     }
@@ -73,10 +68,9 @@ impl AgentKind {
             "cherry" => Ok(Self::Cherry),
             "fajita" => Ok(Self::Fajita),
             "garlic" => Ok(Self::Garlic),
-            "honey" => Ok(Self::Honey),
             "iceberg" => Ok(Self::Iceberg),
             _ => Err(format!(
-                "unknown agent `{value}`; expected avocado, cherry, fajita, garlic, honey, or iceberg"
+                "unknown agent `{value}`; expected avocado, cherry, fajita, garlic, or iceberg"
             )),
         }
     }
@@ -87,7 +81,6 @@ impl AgentKind {
             Self::Cherry => ArenaAgent::Cherry(CherryAnalyzer::new()),
             Self::Fajita => ArenaAgent::Fajita(FajitaAnalyzer::new()),
             Self::Garlic => ArenaAgent::Garlic(GarlicAnalyzer::new()),
-            Self::Honey => ArenaAgent::Honey(Box::new(HoneyAnalyzer::new())),
             Self::Iceberg => ArenaAgent::Iceberg(Box::new(IcebergAnalyzer::new())),
         }
     }
@@ -98,7 +91,6 @@ enum ArenaAgent {
     Cherry(CherryAnalyzer),
     Fajita(FajitaAnalyzer),
     Garlic(GarlicAnalyzer),
-    Honey(Box<HoneyAnalyzer>),
     Iceberg(Box<IcebergAnalyzer>),
 }
 
@@ -109,7 +101,6 @@ impl ArenaAgent {
             Self::Cherry(agent) => agent.set_state(state),
             Self::Fajita(agent) => agent.set_state(state),
             Self::Garlic(agent) => agent.set_state(state),
-            Self::Honey(agent) => agent.set_state(state),
             Self::Iceberg(agent) => agent.set_state(state),
         }
     }
@@ -120,7 +111,6 @@ impl ArenaAgent {
             Self::Cherry(agent) => agent.think_for_one_tick(),
             Self::Fajita(agent) => agent.think_for_one_tick(),
             Self::Garlic(agent) => agent.think_for_one_tick(),
-            Self::Honey(agent) => agent.think_for_one_tick(),
             Self::Iceberg(agent) => agent.think_for_one_tick(),
         }
     }
@@ -131,7 +121,6 @@ impl ArenaAgent {
             Self::Cherry(agent) => agent.evaluation(),
             Self::Fajita(agent) => agent.evaluation(),
             Self::Garlic(agent) => agent.evaluation(),
-            Self::Honey(agent) => agent.evaluation(),
             Self::Iceberg(agent) => agent.evaluation(),
         }
     }
@@ -143,7 +132,6 @@ impl ArenaAgent {
             Self::Cherry(agent) => agent.write_optimal_lop(&mut line),
             Self::Fajita(agent) => agent.write_optimal_lop(&mut line),
             Self::Garlic(agent) => agent.write_optimal_lop(&mut line),
-            Self::Honey(agent) => agent.write_optimal_lop(&mut line),
             Self::Iceberg(agent) => agent.write_optimal_lop(&mut line),
         }
         line
@@ -356,7 +344,7 @@ fn usage() -> &'static str {
      [--seed-start 0] [--max-plies 256] \
      [--save-games off|per-ply|per-game] [--output-root agent-arena-results] \
      [--matchup AGENT-vs-AGENT]...\n\
-     agents: avocado, cherry, fajita, garlic, honey, iceberg\n\
+     agents: avocado, cherry, fajita, garlic, iceberg\n\
      omit --matchup to run the full round robin; repeat it to select multiple matchups"
 }
 
@@ -838,7 +826,7 @@ mod tests {
             .unwrap()
             .expect("default arguments should run the arena");
         assert_eq!(config.matchups, default_matchups());
-        assert_eq!(config.matchups.len(), 15);
+        assert_eq!(config.matchups.len(), 10);
     }
 
     #[test]

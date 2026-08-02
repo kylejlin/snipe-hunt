@@ -36,29 +36,21 @@ const engine = {
 
 describe("native arena history recording", () => {
   it("round-trips through the authoritative SHGH importer", () => {
-    const source = readFileSync(
-      resolve(
-        "../../dumpling_v0_vs_cherry/with_unbalanced_deal/game1(cherry_won).shgh",
-      ),
-      "utf8",
-    );
+    const source = readFileSync(resolve("../../game4.shgh"), "utf8");
     const timeline = parseHistory(source, engine);
-    expect(timeline).toHaveLength(28);
-    expect(timeline.at(-1)?.position.winner).toBe("Beta");
+    expect(timeline).toHaveLength(27);
+    expect(timeline.at(-1)?.position.winner).toBe("Alpha");
   });
 
-  it("imports and re-exports an immobilization win with its result marker", () => {
-    const source = readFileSync(
-      resolve("../../dumpling_v0_vs_cherry/game6(cherry_won).shgh"),
-      "utf8",
-    );
+  it("imports and re-exports a terminal win with its result marker", () => {
+    const source = readFileSync(resolve("../../game6.shgh"), "utf8");
     const timeline = parseHistory(source, engine);
 
-    expect(timeline).toHaveLength(122);
+    expect(timeline).toHaveLength(23);
     expect(timeline.at(-1)?.position.winner).toBe("Alpha");
-    expect(timeline.at(-1)?.move?.captures.snipe).toBeNull();
+    expect(timeline.at(-1)?.move?.captures.snipe).toBe("Beta");
     const exported = serializeHistory(timeline);
-    expect(exported).toMatch(/121b\. Rat 3\+#0\n$/);
+    expect(exported).toMatch(/22a\. Elephant 6x\+#0\n$/);
     expect(parseHistory(exported, engine).at(-1)?.position.winner).toBe(
       "Alpha",
     );

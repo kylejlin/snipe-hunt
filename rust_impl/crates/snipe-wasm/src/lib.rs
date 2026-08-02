@@ -8,7 +8,6 @@ use agent_avocado::AvocadoAnalyzer;
 use agent_cherry::CherryAnalyzer;
 use agent_fajita::FajitaAnalyzer;
 use agent_garlic::GarlicAnalyzer;
-use agent_honey::HoneyAnalyzer;
 use agent_iceberg::IcebergAnalyzer;
 use serde::{Deserialize, Serialize};
 use snipe_core::{
@@ -31,7 +30,6 @@ enum Strategy {
     Cherry,
     Fajita,
     Garlic,
-    Honey,
     Iceberg,
 }
 
@@ -42,7 +40,6 @@ impl Strategy {
             Self::Cherry => "Cherry",
             Self::Fajita => "Fajita",
             Self::Garlic => "Garlic",
-            Self::Honey => "Honey",
             Self::Iceberg => "Iceberg",
         }
     }
@@ -53,7 +50,6 @@ enum BrowserAnalyzer {
     Cherry(CherryAnalyzer),
     Fajita(FajitaAnalyzer),
     Garlic(GarlicAnalyzer),
-    Honey(Box<HoneyAnalyzer>),
     Iceberg(Box<IcebergAnalyzer>),
 }
 
@@ -80,11 +76,6 @@ impl BrowserAnalyzer {
                 analyzer.set_state(state);
                 Self::Garlic(analyzer)
             }
-            Strategy::Honey => {
-                let mut analyzer = HoneyAnalyzer::new();
-                analyzer.set_state(state);
-                Self::Honey(Box::new(analyzer))
-            }
             Strategy::Iceberg => {
                 let mut analyzer = IcebergAnalyzer::new();
                 analyzer.set_state(state);
@@ -94,11 +85,11 @@ impl BrowserAnalyzer {
     }
 
     fn think(&mut self, max_ticks: usize) -> usize {
-        // Mate specialists do substantially more useful work per tick than the
-        // general playing agents. Returning to the browser clock after every
+        // The mate specialist does substantially more useful work per tick than
+        // the general playing agents. Returning to the browser clock after every
         // specialist tick keeps a request within one short atomic tick of its
         // deadline instead of the shared eight-tick batch.
-        let max_ticks = if matches!(self, Self::Honey(_) | Self::Iceberg(_)) {
+        let max_ticks = if matches!(self, Self::Iceberg(_)) {
             max_ticks.min(1)
         } else {
             max_ticks
@@ -110,7 +101,6 @@ impl BrowserAnalyzer {
                 Self::Cherry(analyzer) => analyzer.think_for_one_tick(),
                 Self::Fajita(analyzer) => analyzer.think_for_one_tick(),
                 Self::Garlic(analyzer) => analyzer.think_for_one_tick(),
-                Self::Honey(analyzer) => analyzer.think_for_one_tick(),
                 Self::Iceberg(analyzer) => analyzer.think_for_one_tick(),
             }
             ticks += 1;
@@ -124,7 +114,6 @@ impl BrowserAnalyzer {
             Self::Cherry(analyzer) => analyzer.is_fully_solved().is_some(),
             Self::Fajita(analyzer) => analyzer.is_fully_solved().is_some(),
             Self::Garlic(analyzer) => analyzer.is_fully_solved().is_some(),
-            Self::Honey(analyzer) => analyzer.is_fully_solved().is_some(),
             Self::Iceberg(analyzer) => analyzer.is_fully_solved().is_some(),
         }
     }
@@ -135,7 +124,6 @@ impl BrowserAnalyzer {
             Self::Cherry(analyzer) => analyzer.evaluation(),
             Self::Fajita(analyzer) => analyzer.evaluation(),
             Self::Garlic(analyzer) => analyzer.evaluation(),
-            Self::Honey(analyzer) => analyzer.evaluation(),
             Self::Iceberg(analyzer) => analyzer.evaluation(),
         }
     }
@@ -147,7 +135,6 @@ impl BrowserAnalyzer {
             Self::Cherry(analyzer) => analyzer.write_optimal_lop(&mut actions),
             Self::Fajita(analyzer) => analyzer.write_optimal_lop(&mut actions),
             Self::Garlic(analyzer) => analyzer.write_optimal_lop(&mut actions),
-            Self::Honey(analyzer) => analyzer.write_optimal_lop(&mut actions),
             Self::Iceberg(analyzer) => analyzer.write_optimal_lop(&mut actions),
         }
         actions
@@ -1281,7 +1268,6 @@ mod tests {
             Strategy::Cherry,
             Strategy::Fajita,
             Strategy::Garlic,
-            Strategy::Honey,
             Strategy::Iceberg,
         ] {
             let mut analyzer = BrowserAnalyzer::new(strategy, terminal_alpha_win());
@@ -1417,15 +1403,6 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&Strategy::Garlic).unwrap(),
             "\"garlic\""
-        );
-    }
-
-    #[test]
-    fn honey_strategy_has_the_browser_wire_name() {
-        assert_eq!(Strategy::Honey.label(), "Honey");
-        assert_eq!(
-            serde_json::to_string(&Strategy::Honey).unwrap(),
-            "\"honey\""
         );
     }
 

@@ -1522,7 +1522,6 @@ function GameApp() {
         key={`alternative-${divergenceIndex}`}
         className="move-list__alternative"
       >
-        <span className="move-list__alternative-label">Alternative Line</span>
         <ol aria-label="Alternative Line">{items}</ol>
       </li>
     );
@@ -1760,9 +1759,7 @@ function GameApp() {
                     </>
                   ) : analysis ? (
                     <>
-                      <span className="meta-label meta-label--normal-case">
-                        Suggested Line
-                      </span>
+                      <span className="suggested-line__label">Suggested:</span>
                       {analysis.stoppedReason === "memory-limit" && (
                         <p className="history-analysis__notice" role="status">
                           Memory ceiling reached. Showing the best completed

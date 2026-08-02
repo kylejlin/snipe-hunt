@@ -91,11 +91,6 @@ button {
   text-transform: uppercase;
 }
 
-.meta-label--normal-case {
-  letter-spacing: 0.04em;
-  text-transform: none;
-}
-
 .turn-chip {
   display: inline-flex;
   align-items: center;
@@ -747,6 +742,13 @@ input[type="text"] {
   white-space: nowrap;
 }
 
+.suggested-line__label {
+  color: var(--ink);
+  font-size: 0.76rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
 .suggested-line__prefix {
   margin-left: 5px;
 }
@@ -812,7 +814,7 @@ input[type="text"] {
 .move-list__alternative {
   position: relative;
   margin: 2px 0 4px 13px;
-  padding: 7px 0 2px 15px;
+  padding: 2px 0 2px 15px;
   border-left: 2px solid rgba(83, 101, 126, 0.24);
 }
 
@@ -824,15 +826,6 @@ input[type="text"] {
   height: 12px;
   border-bottom: 2px solid rgba(83, 101, 126, 0.24);
   content: "";
-}
-
-.move-list__alternative-label {
-  display: block;
-  margin: 0 0 3px 7px;
-  color: var(--muted);
-  font: 500 0.57rem "DM Mono", monospace;
-  letter-spacing: 0.04em;
-  text-transform: none;
 }
 
 .move-list__alternative ol {

@@ -7,6 +7,9 @@
 // If you don't capture, then  "42a. Rat5x, Elephant 4" sets a mating net.
 // If you do capture, then "42a. Dog 5, Elephant 4" sets a mating net.
 // A strong tactical specialist should be able to find this line quickly.
+//
+// In fact, the forced win exists as soon as after "39b. Elephant &6" is played, since by then, it's Alpha's turn.
+// A strong tactical specialist should be able to find "40a. Dog 4, Ox 5" (or a faster win) as a winning move.
 
 0b. =Tiger; Dragon Fish Beta; Rabbit Horse Horse Ram Monkey Rooster Dog Boar Boar Elephant Squid Squid; Rat
 0a. =Rat; Rooster Fish Alpha; Ox Ox Tiger Rabbit Dragon Snake Snake Ram Monkey Elephant Frog Frog; Dog

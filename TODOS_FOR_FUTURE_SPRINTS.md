@@ -1,4 +1,9 @@
-1. Validate that each player has 4 Major Animals in `InitialStateBuilder::build`
-   - We can also add a `InitialStateBuilder::build_without_major_balance_check`, to allow API users to deliberately give one player a Major Animal advantage.
-2. Replace "Open field" text with "Empty rank" text
-3. Move the leading animal step UI to the top. It should say, for example, "Ply 65β. Elephant 3, ..."
+- [ ] Validate that each player has 4 Major Animals in `InitialStateBuilder::build`
+  - We can also add a `InitialStateBuilder::build_without_major_balance_check`, to allow API users to deliberately give one player a Major Animal advantage.
+- [ ] Replace "Open field" text with "Empty rank" text
+- [ ] Remove the "First animal step chosen" and "Choose the second animal to complete this ply" UI from the bottom.
+- [ ] Make the Game Log autoscroll to the appropriate item whenever the user navigates back/forward, plays an action, or when the computer performs and action.
+- [ ] "Invert the theme" of the selected ply (i.e., the foreground and background should be roughly swapped).
+- [ ] At the top left, say "Initial position" (instead of "0") during the initial position.
+- [ ] Add a "Use as main line" button in the "Alternative Line" menu. It opens a confirmation modal, and then overwrites the main history with the alternative line.
+- [ ] Remove all-caps text from the UI (except when all-caps is appropriate, if any such situations exist)

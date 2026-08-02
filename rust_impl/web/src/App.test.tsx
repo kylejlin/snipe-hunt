@@ -289,22 +289,33 @@ describe("presentation contract", () => {
     expect(timelineWrapper?.querySelector(".move-list-scrollbar")).toBeNull();
   });
 
-  it("keeps the position and navigation outside the scrolling game timeline", () => {
+  it("lays out the Game Log header and navigation outside the scrolling timeline", () => {
     render(<App />);
 
     const gameLog = screen.getByRole("region", { name: "Game log" });
+    const heading = within(gameLog).getByRole("heading", { name: "Game Log" });
     const currentPosition = within(gameLog).getByLabelText("Current position");
     const timeline = within(gameLog).getByRole("list", {
       name: "Game timeline",
     });
     const navigation = within(gameLog).getByLabelText("History navigation");
+    const buttonRow = navigation.querySelector(".history-navigation-buttons");
+    const statusRow = navigation.querySelector(".history-navigation-status");
 
+    expect(heading).toBeInTheDocument();
     expect(currentPosition).toHaveTextContent("Initial position");
+    expect(buttonRow).toContainElement(
+      within(gameLog).getByRole("button", { name: "Back" }),
+    );
+    expect(buttonRow).toContainElement(
+      within(gameLog).getByRole("button", { name: "Forward" }),
+    );
+    expect(statusRow?.firstElementChild).toBe(currentPosition);
+    expect(statusRow?.lastElementChild).toHaveTextContent("0/0");
     expect(
       timeline.compareDocumentPosition(navigation) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(screen.queryByText("Game Log")).not.toBeInTheDocument();
     expect(screen.queryByText(/\d+ (?:ply|plies)$/)).not.toBeInTheDocument();
     expect(document.querySelector(".table-panel__topline")).toBeNull();
   });
@@ -345,7 +356,7 @@ describe("presentation contract", () => {
     expect(screen.getByLabelText("Current position")).toHaveTextContent(
       "1α. Rabbit 2, …",
     );
-    expect(screen.getByText("0.5 / 0.5")).toBeInTheDocument();
+    expect(screen.getByText("0.5/0.5")).toBeInTheDocument();
     const partialSuggestion = screen.getByRole("list", {
       name: "Suggested Line",
     });
@@ -365,7 +376,7 @@ describe("presentation contract", () => {
     expect(screen.getByLabelText("Current position")).toHaveTextContent(
       "1α. Rabbit 2, Rabbit 2",
     );
-    expect(screen.getByText("1 / 1")).toBeInTheDocument();
+    expect(screen.getByText("1/1")).toBeInTheDocument();
   });
 
   it("autoscrolls the current Game Log action after moves and navigation", () => {
@@ -479,7 +490,7 @@ describe("presentation contract", () => {
     fireEvent.click(firstAction);
 
     expect(currentPosition).toHaveTextContent("1α. Rabbit 2, …");
-    expect(screen.getByText("0.5 / 1")).toBeInTheDocument();
+    expect(screen.getByText("0.5/1")).toBeInTheDocument();
     expect(firstAction).toHaveAttribute("aria-current", "step");
     expect(secondAction).not.toHaveAttribute("aria-current");
     expect(document.body).not.toHaveTextContent(".5α");
@@ -489,7 +500,7 @@ describe("presentation contract", () => {
     expect(currentPosition).toHaveTextContent(
       "1α. Rabbit 2, Rabbit 2",
     );
-    expect(screen.getByText("1 / 1")).toBeInTheDocument();
+    expect(screen.getByText("1/1")).toBeInTheDocument();
   });
 
   it("renders a live first step as an incomplete ply without half notation", () => {
@@ -503,7 +514,7 @@ describe("presentation contract", () => {
     expect(screen.getByLabelText("Current position")).toHaveTextContent(
       "1α. Rabbit 2, …",
     );
-    expect(screen.getByText("0.5 / 0.5")).toBeInTheDocument();
+    expect(screen.getByText("0.5/0.5")).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(".5α");
     expect(
       screen.queryByText("First animal step chosen"),
@@ -553,7 +564,7 @@ describe("presentation contract", () => {
     expect(screen.getByLabelText("Current position")).toHaveTextContent(
       "1α. Rabbit 2, …",
     );
-    expect(screen.getByText("0.5 / 1")).toBeInTheDocument();
+    expect(screen.getByText("0.5/1")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
 

@@ -1701,13 +1701,7 @@ function GameApp() {
             aria-label="Game log"
           >
             <div className="section-heading history-heading">
-              <strong
-                className="history-current-action"
-                aria-label="Current position"
-                aria-live="polite"
-              >
-                {currentActionLabel}
-              </strong>
+              <h2>Game Log</h2>
               <div className="history-menu" ref={historyMenu}>
                 <button
                   ref={historyMenuButton}
@@ -2039,31 +2033,42 @@ function GameApp() {
               className="history-controls history-controls--footer"
               aria-label="History navigation"
             >
-              <button
-                className="button button--quiet button--icon"
-                type="button"
-                onClick={moveHistoryBackward}
-                disabled={game.cursor === 0 && !game.subply}
-                aria-label="Back"
-              >
-                <svg aria-hidden="true" viewBox="0 0 18 18">
-                  <path d="M 13 5 L 5 9 L 13 13" />
-                </svg>
-              </button>
-              <span aria-live="polite">
-                {currentPlyCount} / {totalPlyCount}
-              </span>
-              <button
-                className="button button--quiet button--icon"
-                type="button"
-                onClick={moveHistoryForward}
-                disabled={!canMoveForward}
-                aria-label="Forward"
-              >
-                <svg aria-hidden="true" viewBox="0 0 18 18">
-                  <path d="M 5 5 L 13 9 L 5 13" />
-                </svg>
-              </button>
+              <div className="history-navigation-buttons">
+                <button
+                  className="button button--quiet button--icon history-navigation-button"
+                  type="button"
+                  onClick={moveHistoryBackward}
+                  disabled={game.cursor === 0 && !game.subply}
+                  aria-label="Back"
+                >
+                  <svg aria-hidden="true" viewBox="0 0 18 18">
+                    <path d="M 13 5 L 5 9 L 13 13" />
+                  </svg>
+                </button>
+                <button
+                  className="button button--quiet button--icon history-navigation-button"
+                  type="button"
+                  onClick={moveHistoryForward}
+                  disabled={!canMoveForward}
+                  aria-label="Forward"
+                >
+                  <svg aria-hidden="true" viewBox="0 0 18 18">
+                    <path d="M 5 5 L 13 9 L 5 13" />
+                  </svg>
+                </button>
+              </div>
+              <div className="history-navigation-status">
+                <strong
+                  className="history-current-action"
+                  aria-label="Current position"
+                  aria-live="polite"
+                >
+                  {currentActionLabel}
+                </strong>
+                <span className="history-position-count" aria-live="polite">
+                  {currentPlyCount}/{totalPlyCount}
+                </span>
+              </div>
             </div>
           </section>
 

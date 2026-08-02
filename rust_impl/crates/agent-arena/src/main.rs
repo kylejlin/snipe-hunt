@@ -5,6 +5,7 @@ use agent_cherry::CherryAnalyzer;
 use agent_fajita::FajitaAnalyzer;
 use agent_garlic::GarlicAnalyzer;
 use agent_iceberg::IcebergAnalyzer;
+use agent_kiwi::KiwiAnalyzer;
 use snipe_core::{Action, Analyzer, Evaluation, Player, State};
 use snipe_prng::initial_state;
 use std::{
@@ -22,11 +23,12 @@ const DEFAULT_PAIRS: u64 = 10;
 const DEFAULT_MILLISECONDS: u64 = 10_000;
 const DEFAULT_MAX_PLIES: u32 = 256;
 const DEFAULT_OUTPUT_ROOT: &str = "agent-arena-results";
-const DEFAULT_AGENTS: [AgentKind; 4] = [
+const DEFAULT_AGENTS: [AgentKind; 5] = [
     AgentKind::Avocado,
     AgentKind::Cherry,
     AgentKind::Fajita,
     AgentKind::Garlic,
+    AgentKind::Kiwi,
 ];
 
 type Matchup = (AgentKind, AgentKind);
@@ -38,6 +40,7 @@ enum AgentKind {
     Fajita,
     Garlic,
     Iceberg,
+    Kiwi,
 }
 
 impl AgentKind {
@@ -48,6 +51,7 @@ impl AgentKind {
             Self::Fajita => "Fajita",
             Self::Garlic => "Garlic",
             Self::Iceberg => "Iceberg",
+            Self::Kiwi => "Kiwi",
         }
     }
 
@@ -58,6 +62,7 @@ impl AgentKind {
             Self::Fajita => "fajita",
             Self::Garlic => "garlic",
             Self::Iceberg => "iceberg",
+            Self::Kiwi => "kiwi",
         }
     }
 
@@ -68,8 +73,9 @@ impl AgentKind {
             "fajita" => Ok(Self::Fajita),
             "garlic" => Ok(Self::Garlic),
             "iceberg" => Ok(Self::Iceberg),
+            "kiwi" => Ok(Self::Kiwi),
             _ => Err(format!(
-                "unknown agent `{value}`; expected avocado, cherry, fajita, garlic, or iceberg"
+                "unknown agent `{value}`; expected avocado, cherry, fajita, garlic, iceberg, or kiwi"
             )),
         }
     }
@@ -81,6 +87,7 @@ impl AgentKind {
             Self::Fajita => ArenaAgent::Fajita(FajitaAnalyzer::new()),
             Self::Garlic => ArenaAgent::Garlic(GarlicAnalyzer::new()),
             Self::Iceberg => ArenaAgent::Iceberg(Box::new(IcebergAnalyzer::new())),
+            Self::Kiwi => ArenaAgent::Kiwi(KiwiAnalyzer::new()),
         }
     }
 }
@@ -91,6 +98,7 @@ enum ArenaAgent {
     Fajita(FajitaAnalyzer),
     Garlic(GarlicAnalyzer),
     Iceberg(Box<IcebergAnalyzer>),
+    Kiwi(KiwiAnalyzer),
 }
 
 impl ArenaAgent {
@@ -101,6 +109,7 @@ impl ArenaAgent {
             Self::Fajita(agent) => agent.set_state(state),
             Self::Garlic(agent) => agent.set_state(state),
             Self::Iceberg(agent) => agent.set_state(state),
+            Self::Kiwi(agent) => agent.set_state(state),
         }
     }
 
@@ -111,6 +120,7 @@ impl ArenaAgent {
             Self::Fajita(agent) => agent.think_for_one_tick(),
             Self::Garlic(agent) => agent.think_for_one_tick(),
             Self::Iceberg(agent) => agent.think_for_one_tick(),
+            Self::Kiwi(agent) => agent.think_for_one_tick(),
         }
     }
 
@@ -121,6 +131,7 @@ impl ArenaAgent {
             Self::Fajita(agent) => agent.evaluation(),
             Self::Garlic(agent) => agent.evaluation(),
             Self::Iceberg(agent) => agent.evaluation(),
+            Self::Kiwi(agent) => agent.evaluation(),
         }
     }
 
@@ -132,6 +143,7 @@ impl ArenaAgent {
             Self::Fajita(agent) => agent.write_optimal_lop(&mut line),
             Self::Garlic(agent) => agent.write_optimal_lop(&mut line),
             Self::Iceberg(agent) => agent.write_optimal_lop(&mut line),
+            Self::Kiwi(agent) => agent.write_optimal_lop(&mut line),
         }
         line
     }
@@ -343,7 +355,7 @@ fn usage() -> &'static str {
      [--seed-start 0] [--max-plies 256] \
      [--save-games off|per-ply|per-game] [--output-root agent-arena-results] \
      [--matchup AGENT-vs-AGENT]...\n\
-     agents: avocado, cherry, fajita, garlic, iceberg\n\
+     agents: avocado, cherry, fajita, garlic, iceberg, kiwi\n\
      omit --matchup to run the default round robin; repeat it to select multiple matchups"
 }
 
@@ -829,7 +841,7 @@ mod tests {
             .unwrap()
             .expect("default arguments should run the arena");
         assert_eq!(config.matchups, default_matchups());
-        assert_eq!(config.matchups.len(), 6);
+        assert_eq!(config.matchups.len(), 10);
         assert!(
             config.matchups.iter().all(
                 |(first, second)| *first != AgentKind::Iceberg && *second != AgentKind::Iceberg

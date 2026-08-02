@@ -14,6 +14,7 @@ agent-cherry = { path = "../agent-cherry" }
 agent-fajita = { path = "../agent-fajita" }
 agent-garlic = { path = "../agent-garlic" }
 agent-iceberg = { path = "../agent-iceberg" }
+agent-kiwi = { path = "../agent-kiwi" }
 js-sys = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

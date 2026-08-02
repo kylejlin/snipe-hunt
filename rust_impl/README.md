@@ -12,9 +12,12 @@ The active implementation is intentionally small and dependency-directed:
 - `crates/cherry-train` is Cherry's resumable native self-play trainer.
 - `crates/agent-fajita` is a wide residual policy/value MCTS analyzer trained
   from independent fresh weights.
+- `crates/agent-kiwi` uses Fajita's exact model and MCTS implementation with an
+  independently published, continuously trained checkpoint.
 - `crates/agent-arena` runs paired-seed round robins between the browser agents.
 - `crates/fajita-train` is Fajita's high-quality, rules-only self-play trainer.
-- `crates/snipe-wasm` is the browser bridge over Core and the five browser
+- `crates/kiwi-train` is Kiwi's ungated, rules-only continuous self-play trainer.
+- `crates/snipe-wasm` is the browser bridge over Core and the six browser
   agents.
 - `web` is the React game and analysis UI.
 
@@ -57,7 +60,7 @@ npm run build
 
 ## Run the browser-agent arena
 
-From `rust_impl`, run the published Avocado, Cherry, Fajita, and Garlic agents
+From `rust_impl`, run the published Avocado, Cherry, Fajita, Garlic, and Kiwi agents
 in the default round robin:
 
 ```sh
@@ -67,12 +70,12 @@ cargo run --release -p agent-arena -- \
   --save-games per-ply
 ```
 
-Each of the six matchups runs concurrently. A matchup plays every seed twice,
-with the agents swapping Alpha and Beta, so the command above plays 120 games.
+Each of the ten matchups runs concurrently. A matchup plays every seed twice,
+with the agents swapping Alpha and Beta, so the command above plays 200 games.
 The final table awards one point per win and half a point per draw.
 
 To run only selected matchups, pass `--matchup AGENT-vs-AGENT` once per matchup.
-Agent names are `avocado`, `cherry`, `fajita`, `garlic`, and `iceberg`;
+Agent names are `avocado`, `cherry`, `fajita`, `garlic`, `iceberg`, and `kiwi`;
 their order in the argument does not matter. For example, this runs only
 Avocado versus Garlic:
 
@@ -84,7 +87,7 @@ cargo run --release -p agent-arena -- \
   --save-games per-ply
 ```
 
-Omitting `--matchup` runs the default four-agent round robin. Iceberg is excluded
+Omitting `--matchup` runs the default five-agent round robin. Iceberg is excluded
 because it is a mate-finding specialist with weak opening play, but it remains
 available through an explicit `--matchup`. Repeat the flag to include multiple
 selected matchups.
@@ -372,6 +375,73 @@ npm --prefix web run build:wasm
 ```
 
 After rebuilding WASM, Fajita is available in the browser's strategy selector.
+
+## Train Kiwi
+
+Kiwi is the controlled continuous-training counterpart to Fajita. It delegates
+the network, encoding, optimizer, and MCTS implementation to `agent-fajita`, so
+those algorithms cannot drift between the agents. A fresh Kiwi run deliberately
+uses Fajita's same deterministic initialization and self-play RNG seed, along
+with the same replay capacity, update schedule, learning rates, root noise, and
+adaptive simulation budget.
+
+The sole training-policy difference is the one under study: Kiwi always carries
+the latest network forward. It runs no automatic champion match, promotion
+decision, or regression rollback. Each new worker batch takes the latest
+parameters available when that batch starts. This is an AlphaZero-style
+continuous update loop, adapted to the trainer's single-machine batched worker
+architecture rather than a claim to reproduce DeepMind's distributed TPU
+scheduler.
+
+```sh
+cargo run --release -p kiwi-train -- train \
+  --run-dir training/kiwi-main \
+  --hours 1000000 \
+  --progress-reports on
+
+cargo run --release -p kiwi-train -- status \
+  --run-dir training/kiwi-main
+```
+
+Kiwi writes resumable `latest.bin`, optimizer, replay, and metadata checkpoints.
+Every 1,000 games it also keeps an inert network snapshot under `snapshots/`.
+Snapshots never affect self-play or training; they exist so regressions can be
+measured after the fact without reintroducing a gate. The optional evaluator
+compares the current network with any explicitly selected checkpoint and does
+not modify the run:
+
+```sh
+cargo run --release -p kiwi-train -- evaluate \
+  --run-dir training/kiwi-main \
+  --against training/kiwi-main/snapshots/network-step-4000-game-1000.bin \
+  --pairs 64
+```
+
+Removing the gate does not guarantee monotonic strength. MCTS uses the network's
+policy priors and leaf values, so more search may damp some local errors but
+cannot reliably repair a regressed network. The replay window and retained
+snapshots provide stability and observability, respectively, without selecting
+which network is allowed to generate self-play.
+
+Press `Ctrl+C` once to finish the current worker batch and write a complete
+checkpoint; press it a second time only for an immediate exit without saving.
+Move a stopped run between computers with the Kiwi-specific checksummed scripts:
+
+```sh
+./scripts/export-kiwi-training.sh
+./scripts/import-kiwi-training.sh ~/Downloads/kiwi-main-YYYYMMDDTHHMMSSZ.tar.gz
+```
+
+Publishing intentionally copies `latest.bin`; there is no champion artifact to
+select. Until a Kiwi checkpoint is published, the browser's Kiwi option uses
+the same deterministic fresh random initialization as a new Kiwi training run.
+It does not load Fajita's trained checkpoint or any other training state.
+
+```sh
+cargo run --release -p kiwi-train -- publish \
+  --run-dir training/kiwi-main
+npm --prefix web run build:wasm
+```
 
 ## Browser behavior
 

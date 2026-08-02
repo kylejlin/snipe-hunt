@@ -1,0 +1,15 @@
+[package]
+name = "kiwi-train"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[[bin]]
+name = "kiwi-train"
+path = "src/main.rs"
+
+[dependencies]
+agent-kiwi = { path = "../agent-kiwi", features = ["training"] }
+ctrlc = "3.4"
+snipe-core = { path = "../snipe-core" }
+snipe-prng = { path = "../snipe-prng" }

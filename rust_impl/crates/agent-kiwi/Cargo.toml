@@ -1,0 +1,18 @@
+[package]
+name = "agent-kiwi"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+training = ["agent-fajita/training"]
+
+[dependencies]
+agent-fajita = { path = "../agent-fajita" }
+snipe-core = { path = "../snipe-core" }
+
+[dev-dependencies]
+snipe-prng = { path = "../snipe-prng" }

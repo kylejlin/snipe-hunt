@@ -257,7 +257,7 @@ describe("value-semantic card interaction", () => {
 describe("presentation contract", () => {
   it("shows the package version", () => {
     render(<App />);
-    expect(screen.getByText("Version 0.82.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.83.0")).toBeInTheDocument();
   });
 
   it("does not show a turn-status pill", () => {
@@ -700,6 +700,7 @@ describe("presentation contract", () => {
       "Fajita",
       "Garlic",
       "Iceberg",
+      "Kiwi",
     ]);
   });
 

@@ -9,6 +9,7 @@ use agent_cherry::CherryAnalyzer;
 use agent_fajita::FajitaAnalyzer;
 use agent_garlic::GarlicAnalyzer;
 use agent_iceberg::IcebergAnalyzer;
+use agent_kiwi::KiwiAnalyzer;
 use serde::{Deserialize, Serialize};
 use snipe_core::{
     Action, Analyzer, Animal, AnimalDrop, AnimalStep, Card, CardMultiset, Evaluation, Player, Rank,
@@ -31,6 +32,7 @@ enum Strategy {
     Fajita,
     Garlic,
     Iceberg,
+    Kiwi,
 }
 
 impl Strategy {
@@ -41,6 +43,7 @@ impl Strategy {
             Self::Fajita => "Fajita",
             Self::Garlic => "Garlic",
             Self::Iceberg => "Iceberg",
+            Self::Kiwi => "Kiwi",
         }
     }
 }
@@ -51,6 +54,7 @@ enum BrowserAnalyzer {
     Fajita(FajitaAnalyzer),
     Garlic(GarlicAnalyzer),
     Iceberg(Box<IcebergAnalyzer>),
+    Kiwi(KiwiAnalyzer),
 }
 
 impl BrowserAnalyzer {
@@ -81,6 +85,11 @@ impl BrowserAnalyzer {
                 analyzer.set_state(state);
                 Self::Iceberg(Box::new(analyzer))
             }
+            Strategy::Kiwi => {
+                let mut analyzer = KiwiAnalyzer::new();
+                analyzer.set_state(state);
+                Self::Kiwi(analyzer)
+            }
         }
     }
 
@@ -102,6 +111,7 @@ impl BrowserAnalyzer {
                 Self::Fajita(analyzer) => analyzer.think_for_one_tick(),
                 Self::Garlic(analyzer) => analyzer.think_for_one_tick(),
                 Self::Iceberg(analyzer) => analyzer.think_for_one_tick(),
+                Self::Kiwi(analyzer) => analyzer.think_for_one_tick(),
             }
             ticks += 1;
         }
@@ -115,6 +125,7 @@ impl BrowserAnalyzer {
             Self::Fajita(analyzer) => analyzer.is_fully_solved().is_some(),
             Self::Garlic(analyzer) => analyzer.is_fully_solved().is_some(),
             Self::Iceberg(analyzer) => analyzer.is_fully_solved().is_some(),
+            Self::Kiwi(analyzer) => analyzer.is_fully_solved().is_some(),
         }
     }
 
@@ -125,6 +136,7 @@ impl BrowserAnalyzer {
             Self::Fajita(analyzer) => analyzer.evaluation(),
             Self::Garlic(analyzer) => analyzer.evaluation(),
             Self::Iceberg(analyzer) => analyzer.evaluation(),
+            Self::Kiwi(analyzer) => analyzer.evaluation(),
         }
     }
 
@@ -136,6 +148,7 @@ impl BrowserAnalyzer {
             Self::Fajita(analyzer) => analyzer.write_optimal_lop(&mut actions),
             Self::Garlic(analyzer) => analyzer.write_optimal_lop(&mut actions),
             Self::Iceberg(analyzer) => analyzer.write_optimal_lop(&mut actions),
+            Self::Kiwi(analyzer) => analyzer.write_optimal_lop(&mut actions),
         }
         actions
     }
@@ -1269,6 +1282,7 @@ mod tests {
             Strategy::Fajita,
             Strategy::Garlic,
             Strategy::Iceberg,
+            Strategy::Kiwi,
         ] {
             let mut analyzer = BrowserAnalyzer::new(strategy, terminal_alpha_win());
             assert!(analyzer.is_fully_solved());
@@ -1413,6 +1427,12 @@ mod tests {
             serde_json::to_string(&Strategy::Iceberg).unwrap(),
             "\"iceberg\""
         );
+    }
+
+    #[test]
+    fn kiwi_strategy_has_the_browser_wire_name() {
+        assert_eq!(Strategy::Kiwi.label(), "Kiwi");
+        assert_eq!(serde_json::to_string(&Strategy::Kiwi).unwrap(), "\"kiwi\"");
     }
 
     #[test]

@@ -11,6 +11,7 @@ dependencies = [
  "agent-fajita",
  "agent-garlic",
  "agent-iceberg",
+ "agent-kiwi",
  "snipe-core",
  "snipe-prng",
 ]
@@ -52,6 +53,15 @@ dependencies = [
 name = "agent-iceberg"
 version = "0.1.0"
 dependencies = [
+ "snipe-core",
+ "snipe-prng",
+]
+
+[[package]]
+name = "agent-kiwi"
+version = "0.1.0"
+dependencies = [
+ "agent-fajita",
  "snipe-core",
  "snipe-prng",
 ]
@@ -171,6 +181,16 @@ dependencies = [
  "cfg-if",
  "futures-util",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "kiwi-train"
+version = "0.1.0"
+dependencies = [
+ "agent-kiwi",
+ "ctrlc",
+ "snipe-core",
+ "snipe-prng",
 ]
 
 [[package]]
@@ -317,6 +337,7 @@ dependencies = [
  "agent-fajita",
  "agent-garlic",
  "agent-iceberg",
+ "agent-kiwi",
  "js-sys",
  "serde",
  "serde_json",

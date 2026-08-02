@@ -1,0 +1,34 @@
+// Export Date: 2026-08-02
+// The current Iceberg version at the time of writing (3cd0b960df368f7aba38874c4ac6f67ad9816bd7)
+// has strange behavior:
+// When given a 30-second-per-ply time limit, it can find a forced mate after `14a. Tiger &4`,
+// and its principal variation contains `15b. Beta 3`.
+// However, after playing that exact ply (i.e., `15b. Beta 3`), Iceberg mysteriously "loses" the mate
+// it previously discovered (i.e., it can't find it within the time limit, in that position).
+// This is extremely counterintuitive, since we should be _closer_ to the forced win that it previously found,
+// making it _easier_ to find that forced win.
+
+0b. =Rooster; Dragon Elephant Beta; Ox Rabbit Snake Horse Ram Monkey Dog Boar Fish Fish Squid Frog; Dog
+0a. =Snake; Rat Rabbit Alpha; Rat Ox Tiger Tiger Dragon Horse Ram Monkey Rooster Elephant Squid Frog; Boar
+1b. Beta 5
+2a. Alpha 2
+3b. Beta 4
+4a. Alpha 3
+5b. Rabbit *6, Squid *6
+6a. Alpha *2
+7b. Boar *6, Snake *6x
+8a. Alpha *1
+9b. Dragon &6
+10a. Ox 3, Rabbit 2x
+11b. Elephant &6
+12a. Squid &4
+13b. Rabbit &3
+14a. Tiger &4
+15b. Beta 3
+16a. Squid 5x, Rat 2
+17b. Dog 3, Snake 5
+18a. Tiger &2
+19b. Beta *4
+20a. Rat &4
+21b. Rabbit 2, Dog 2
+22a. Ox 4, Squid *4x+#0

@@ -450,6 +450,7 @@ input[type="text"] {
 
 .history-heading {
   align-items: center;
+  margin-right: -16px;
 }
 
 .history-current-action {
@@ -704,6 +705,7 @@ input[type="text"] {
 .move-list-scroll {
   position: relative;
   min-width: 0;
+  margin-inline: -16px;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }
@@ -713,7 +715,7 @@ input[type="text"] {
   gap: 3px;
   max-height: 265px;
   margin: 0;
-  padding: 0 13px 0 0;
+  padding: 0 13px 0 5px;
   overflow-y: scroll;
   scrollbar-width: none;
   list-style: none;

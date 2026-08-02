@@ -251,7 +251,7 @@ describe("value-semantic card interaction", () => {
 describe("presentation contract", () => {
   it("shows the package version", () => {
     render(<App />);
-    expect(screen.getByText("Version 0.67.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.68.0")).toBeInTheDocument();
   });
 
   it("uses the requested board and line labels", () => {
@@ -524,11 +524,17 @@ describe("presentation contract", () => {
 
     fireEvent.click(screen.getByRole("switch", { name: "Analysis" }));
 
+    const notice = await screen.findByText(
+      "Memory ceiling reached. Showing the best completed result.",
+    );
+    const suggestedLine = screen.getByRole("list", {
+      name: "Suggested Line",
+    });
+    expect(notice).toBeInTheDocument();
     expect(
-      await screen.findByText(
-        "Memory ceiling reached. Showing the best completed result.",
-      ),
-    ).toBeInTheDocument();
+      suggestedLine.compareDocumentPosition(notice) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(screen.getByText("Suggested:")).toHaveClass(
       "suggested-line__label",
     );

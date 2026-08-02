@@ -1760,12 +1760,6 @@ function GameApp() {
                   ) : analysis ? (
                     <>
                       <span className="suggested-line__label">Suggested:</span>
-                      {analysis.stoppedReason === "memory-limit" && (
-                        <p className="history-analysis__notice" role="status">
-                          Memory ceiling reached. Showing the best completed
-                          result.
-                        </p>
-                      )}
                       <ol
                         className="suggested-line"
                         aria-label="Suggested Line"
@@ -1839,6 +1833,12 @@ function GameApp() {
                           );
                         })}
                       </ol>
+                      {analysis.stoppedReason === "memory-limit" && (
+                        <p className="history-analysis__notice" role="status">
+                          Memory ceiling reached. Showing the best completed
+                          result.
+                        </p>
+                      )}
                     </>
                   ) : (
                     <p className="empty-copy">

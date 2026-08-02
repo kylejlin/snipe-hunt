@@ -251,7 +251,76 @@ describe("value-semantic card interaction", () => {
 describe("presentation contract", () => {
   it("shows the package version", () => {
     render(<App />);
-    expect(screen.getByText("Version 0.60.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.61.0")).toBeInTheDocument();
+  });
+
+  it("autoscrolls the current Game Log action after moves and navigation", () => {
+    const originalScrollTo = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "scrollTo",
+    );
+    const scrollTo = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      configurable: true,
+      value: scrollTo,
+    });
+    const rect = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        const top = this.classList.contains("move-list")
+          ? 0
+          : this.hasAttribute("aria-current")
+            ? 125
+            : 10;
+        const height = this.classList.contains("move-list") ? 100 : 20;
+        return {
+          x: 0,
+          y: top,
+          top,
+          right: 100,
+          bottom: top + height,
+          left: 0,
+          width: 100,
+          height,
+          toJSON: () => ({}),
+        };
+      });
+
+    try {
+      render(<App />);
+      expect(scrollTo).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(
+        screen.getAllByRole("button", {
+          name: "Alpha Rabbit, retreater",
+        })[0],
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Move selected card to Rank 2" }),
+      );
+      expect(scrollTo).toHaveBeenCalledTimes(2);
+
+      fireEvent.click(screen.getByRole("button", { name: "← Back" }));
+      expect(scrollTo).toHaveBeenCalledTimes(3);
+
+      fireEvent.click(screen.getByRole("button", { name: "Forward →" }));
+      expect(scrollTo).toHaveBeenCalledTimes(4);
+      expect(scrollTo).toHaveBeenLastCalledWith({
+        top: 45,
+        behavior: "smooth",
+      });
+    } finally {
+      rect.mockRestore();
+      if (originalScrollTo) {
+        Object.defineProperty(
+          HTMLElement.prototype,
+          "scrollTo",
+          originalScrollTo,
+        );
+      } else {
+        delete (HTMLElement.prototype as { scrollTo?: unknown }).scrollTo;
+      }
+    }
   });
 
   it("groups the initial layout into the position labeled 0", () => {

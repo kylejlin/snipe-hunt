@@ -500,6 +500,31 @@ function historyActionIsCurrent(
   return game.subply && game.cursor === timelineIndex - 1;
 }
 
+function scrollCurrentHistoryActionIntoView(container: HTMLOListElement) {
+  const currentAction = container.querySelector<HTMLElement>("[aria-current]");
+  if (!currentAction) return;
+
+  const containerBounds = container.getBoundingClientRect();
+  const actionBounds = currentAction.getBoundingClientRect();
+  let nextScrollTop: number | null = null;
+
+  if (actionBounds.top < containerBounds.top) {
+    nextScrollTop = container.scrollTop + actionBounds.top - containerBounds.top;
+  } else if (actionBounds.bottom > containerBounds.bottom) {
+    nextScrollTop =
+      container.scrollTop + actionBounds.bottom - containerBounds.bottom;
+  }
+
+  if (nextScrollTop === null) return;
+  const reduceMotion = window.matchMedia?.(
+    "(prefers-reduced-motion: reduce)",
+  ).matches;
+  container.scrollTo({
+    top: Math.max(0, nextScrollTop),
+    behavior: reduceMotion ? "auto" : "smooth",
+  });
+}
+
 function MoveLogPly({
   timelineIndex,
   move,
@@ -644,6 +669,7 @@ function GameApp() {
   const importInput = useRef<HTMLInputElement>(null);
   const historyMenu = useRef<HTMLDivElement>(null);
   const historyMenuButton = useRef<HTMLButtonElement>(null);
+  const moveList = useRef<HTMLOListElement>(null);
   const confirmationDialog = useRef<HTMLElement>(null);
   const confirmationCancelButton = useRef<HTMLButtonElement>(null);
 
@@ -762,6 +788,20 @@ function GameApp() {
     setAgentError(null);
     setAnalysisError(null);
   }, [game.cursor, game.subply, position.turnNumber]);
+
+  useLayoutEffect(() => {
+    if (moveList.current) {
+      scrollCurrentHistoryActionIntoView(moveList.current);
+    }
+  }, [
+    game.activeLine,
+    game.cursor,
+    game.subply,
+    game.timeline.length,
+    game.alternativeLine?.divergenceIndex,
+    game.alternativeLine?.entries.length,
+    game.draftStep,
+  ]);
 
   useEffect(() => {
     if (!historyMenuOpen) return;
@@ -1777,7 +1817,7 @@ function GameApp() {
                 </div>
               )}
             </div>
-            <ol className="move-list">
+            <ol className="move-list" ref={moveList}>
               {game.timeline.flatMap((timelineEntry, timelineIndex) => {
                 const draftPly =
                   timelineIndex === game.timeline.length - 1

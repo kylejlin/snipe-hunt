@@ -251,7 +251,14 @@ describe("value-semantic card interaction", () => {
 describe("presentation contract", () => {
   it("shows the package version", () => {
     render(<App />);
-    expect(screen.getByText("Version 0.65.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.66.0")).toBeInTheDocument();
+  });
+
+  it("uses the requested board and line labels", () => {
+    render(<App />);
+
+    expect(screen.getAllByText("Empty rank").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Open field")).not.toBeInTheDocument();
   });
 
   it("plays suggested lines through an individual action", async () => {
@@ -285,7 +292,7 @@ describe("presentation contract", () => {
     );
     expect(screen.getByText("0.5 / 0.5")).toBeInTheDocument();
     const partialSuggestion = screen.getByRole("list", {
-      name: "Suggested line",
+      name: "Suggested Line",
     });
     expect(partialSuggestion).toHaveTextContent("1α. ..., Rabbit 2");
     expect(
@@ -375,10 +382,12 @@ describe("presentation contract", () => {
     }
   });
 
-  it("groups the initial layout into the position labeled 0", () => {
+  it("labels the initial position while keeping its zero-ply notation", () => {
     render(<App />);
 
-    expect(screen.getByLabelText("Current position")).toHaveTextContent("0");
+    expect(screen.getByLabelText("Current position")).toHaveTextContent(
+      "Initial position",
+    );
     const initialPosition = screen.getByRole("button", {
       name: "Go to initial position",
     });
@@ -442,6 +451,15 @@ describe("presentation contract", () => {
     expect(screen.getByText("0.5 / 0.5")).toBeInTheDocument();
     expect(screen.getByText("0 plies")).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(".5α");
+    expect(
+      screen.queryByText("First animal step chosen"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Choose the second animal/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Undo first step" }),
+    ).not.toBeInTheDocument();
   });
 
   it("navigates alternative lines at the action level", () => {
@@ -466,7 +484,7 @@ describe("presentation contract", () => {
     render(<App />);
 
     const alternativeLog = within(
-      screen.getByRole("list", { name: "Alternative line" }),
+      screen.getByRole("list", { name: "Alternative Line" }),
     );
     const firstAction = alternativeLog.getByRole("button", {
       name: "Go to position after 1α. Rabbit 2",
@@ -482,7 +500,9 @@ describe("presentation contract", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "← Back" }));
 
-    expect(screen.getByLabelText("Current position")).toHaveTextContent("0");
+    expect(screen.getByLabelText("Current position")).toHaveTextContent(
+      "Initial position",
+    );
     expect(
       screen.getByRole("button", { name: "Go to initial position" }),
     ).toHaveAttribute("aria-current", "true");
@@ -506,7 +526,7 @@ describe("presentation contract", () => {
         "Memory ceiling reached. Showing the best completed result.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("Suggested line")).toBeInTheDocument();
+    expect(screen.getByText("Suggested Line")).toBeInTheDocument();
     expect(screen.queryByText("unreachable")).not.toBeInTheDocument();
   });
 

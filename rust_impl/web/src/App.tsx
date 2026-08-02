@@ -316,14 +316,6 @@ function cardBackground(card: Card): string {
   return `${import.meta.env.BASE_URL}cards/${card.owner}${card.canRetreat && !card.isSnipe ? "Retreater" : ""}Background.png`;
 }
 
-function cardName(position: Position, pieceKey: string): string {
-  return (
-    Object.values(position.locations)
-      .flat()
-      .find((card) => card.pieceKey === pieceKey)?.animal ?? pieceKey
-  );
-}
-
 function CardTile({
   card,
   location,
@@ -414,7 +406,7 @@ function BoardLane({
       </button>
       <div className="lane__cards">
         {cards.length === 0 ? (
-          <span className="lane__empty">Open field</span>
+          <span className="lane__empty">Empty rank</span>
         ) : (
           cards.map((card, occurrence) => {
             const semanticSelection = selectionKey(card.pieceKey, location);
@@ -726,7 +718,7 @@ function GameApp() {
         )} ${formatCompletedStep(partialMove, 0, null)}, …`;
       }
     }
-    if (game.cursor === 0) return "0";
+    if (game.cursor === 0) return "Initial position";
     const completedMove = entry.move;
     return completedMove
       ? `${formatDisplayPlyPrefix(
@@ -772,15 +764,6 @@ function GameApp() {
       .map((move) => move.steps[nextStepIndex]?.to)
       .filter((location): location is Location => Boolean(location)),
   );
-  const nextStepChoices = Array.from(
-    new Map(
-      prefixCandidates
-        .map((move) => move.steps[nextStepIndex])
-        .filter((step): step is MoveStep => Boolean(step))
-        .map((step) => [`${step.pieceKey}:${step.from}`, step]),
-    ).values(),
-  );
-
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, saveGame(game));
@@ -1539,8 +1522,8 @@ function GameApp() {
         key={`alternative-${divergenceIndex}`}
         className="move-list__alternative"
       >
-        <span className="move-list__alternative-label">Alternative line</span>
-        <ol aria-label="Alternative line">{items}</ol>
+        <span className="move-list__alternative-label">Alternative Line</span>
+        <ol aria-label="Alternative Line">{items}</ol>
       </li>
     );
   };
@@ -1619,57 +1602,11 @@ function GameApp() {
             ))}
           </div>
 
-          {movePrefix.length > 0 && (
-            <div className="turn-builder" role="status">
-              <div>
-                <strong>First animal step chosen</strong>
-                <span>
-                  {locationLabel(movePrefix[0].from)} →{" "}
-                  {locationLabel(movePrefix[0].to)}. Choose the second animal.
-                </span>
-              </div>
-              <div
-                className="turn-builder__choices"
-                aria-label="Legal second animals"
-              >
-                {nextStepChoices.map((step) => (
-                  <button
-                    className="button button--quiet"
-                    type="button"
-                    key={`${step.pieceKey}:${step.from}`}
-                    onClick={() =>
-                      {
-                        setSelectedPieceKey(
-                          selectionKey(step.pieceKey, step.from),
-                        );
-                        setSelectedOccurrence(null);
-                      }
-                    }
-                  >
-                    {cardName(boardPosition, step.pieceKey)} from{" "}
-                    {locationLabel(step.from)}
-                  </button>
-                ))}
-                <button
-                  className="button button--quiet"
-                  type="button"
-                  onClick={() => {
-                    moveHistoryBackward();
-                  }}
-                >
-                  Undo first step
-                </button>
-              </div>
-            </div>
-          )}
-
-          {(computerTurn || selectedPieceKey || movePrefix.length > 0) && (
+          {(computerTurn || selectedPieceKey) && (
             <p className="board-help">
               {computerTurn
                 ? `${position.turn} is controlled by the computer.`
-                : selectedPieceKey
-                  ? "Choose a highlighted rank to complete the move."
-                  : "Choose the second animal to complete this ply."}
+                : "Choose a highlighted rank to complete the move."}
             </p>
           )}
         </section>
@@ -1823,7 +1760,9 @@ function GameApp() {
                     </>
                   ) : analysis ? (
                     <>
-                      <span className="meta-label">Suggested line</span>
+                      <span className="meta-label meta-label--normal-case">
+                        Suggested Line
+                      </span>
                       {analysis.stoppedReason === "memory-limit" && (
                         <p className="history-analysis__notice" role="status">
                           Memory ceiling reached. Showing the best completed
@@ -1832,7 +1771,7 @@ function GameApp() {
                       )}
                       <ol
                         className="suggested-line"
-                        aria-label="Suggested line"
+                        aria-label="Suggested Line"
                       >
                         {suggestedLine.map((ply, moveIndex) => {
                           const omitsPlayedFirstStep = Boolean(

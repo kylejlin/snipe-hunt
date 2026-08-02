@@ -251,7 +251,7 @@ describe("value-semantic card interaction", () => {
 describe("presentation contract", () => {
   it("shows the package version", () => {
     render(<App />);
-    expect(screen.getByText("Version 0.70.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.71.0")).toBeInTheDocument();
   });
 
   it("shows a persistent scrollbar exactly when the Game Log overflows", () => {

@@ -93,10 +93,19 @@ pub struct InitialStateBuilder {
     pub beta_reserve: [Animal; 1],
 }
 impl InitialStateBuilder {
-    /// This validates the animal counts.
-    /// There must be exactly 2 of each animal, or else this returns `None`.
+    /// Validates that there are exactly 2 of each animal and that each player
+    /// starts with exactly 4 Major Animals.
     pub const fn build(self) -> Option<State> {
-        self.build_()
+        self.build_(true)
+    }
+
+    /// Builds an initial state without requiring each player to start with
+    /// exactly 4 Major Animals.
+    ///
+    /// This still validates that there are exactly 2 of each animal. Use it
+    /// only when a deliberately unbalanced initial deal is desired.
+    pub const fn build_without_major_balance_check(self) -> Option<State> {
+        self.build_(false)
     }
 }
 

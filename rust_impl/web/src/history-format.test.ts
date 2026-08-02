@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { Position, TurnMove } from "./engine/types";
+import type {
+  MoveStep,
+  Position,
+  RulesEngine,
+  TurnMove,
+} from "./engine/types";
 import {
   formatCompletedMove,
   formatDisplayPlyPrefix,
+  MajorAnimalImbalanceError,
+  parseHistory,
 } from "./history-format";
 
 const position: Position = {
@@ -24,6 +31,27 @@ const position: Position = {
     "row-6": [],
   },
 };
+
+const importEngine = {
+  canonicalizePosition: (candidate: Position) => ({
+    ...candidate,
+    positionKey: "canonical",
+  }),
+  legalMoves: () => [],
+  previewFirstStep: (candidate: Position, _step: MoveStep) => candidate,
+  applyMove: (candidate: Position, _move: TurnMove) => candidate,
+} satisfies Pick<
+  RulesEngine,
+  "canonicalizePosition" | "legalMoves" | "previewFirstStep" | "applyMove"
+>;
+
+const balancedHistory = [
+  "0b. =Rooster; Ram Frog Beta; Rat Ox Tiger Tiger Rabbit Dragon Snake Monkey Dog Elephant Squid Frog; Squid",
+  "0a. =Dragon; Snake Boar Alpha; Rat Ox Rabbit Horse Ram Monkey Rooster Dog Boar Fish Fish Elephant; Horse",
+].join("\n");
+const imbalancedHistory = balancedHistory
+  .replace("0b. =Rooster", "0b. =Dragon")
+  .replace("0a. =Dragon", "0a. =Rooster");
 
 function move(capture: TurnMove["captures"]): TurnMove {
   return {
@@ -74,5 +102,40 @@ describe("authoritative move annotations", () => {
     expect(
       formatCompletedMove(move({ animals: [], snipe: null }), "Alpha"),
     ).toBe("Snake 4+#0");
+  });
+});
+
+describe("initial Major Animal balance", () => {
+  it("rejects an imbalanced layout by default and reports both counts", () => {
+    let thrown: unknown;
+    try {
+      parseHistory(imbalancedHistory, importEngine);
+    } catch (reason) {
+      thrown = reason;
+    }
+
+    expect(thrown).toBeInstanceOf(MajorAnimalImbalanceError);
+    expect(thrown).toMatchObject({
+      alphaMajorCount: 3,
+      betaMajorCount: 5,
+    });
+  });
+
+  it("allows an explicit imbalance without bypassing creature conservation", () => {
+    expect(
+      parseHistory(imbalancedHistory, importEngine, {
+        allowMajorAnimalImbalance: true,
+      }),
+    ).toHaveLength(1);
+
+    const missingRooster = imbalancedHistory.replace(
+      "0a. =Rooster",
+      "0a. =Ox",
+    );
+    expect(() =>
+      parseHistory(missingRooster, importEngine, {
+        allowMajorAnimalImbalance: true,
+      }),
+    ).toThrow(/more than two Ox cards/);
   });
 });

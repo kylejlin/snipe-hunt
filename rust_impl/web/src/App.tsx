@@ -37,6 +37,7 @@ import {
   formatCompletedStep,
   formatDisplayPlyPrefix,
   formatInitialLines,
+  MajorAnimalImbalanceError,
   parseHistory,
   serializeHistory,
 } from "./history-format";
@@ -702,6 +703,12 @@ function GameApp() {
   const [pendingConfirmation, setPendingConfirmation] = useState<
     | { kind: "reset" }
     | { kind: "import"; timeline: TimelineEntry[] }
+    | {
+        kind: "major-imbalance";
+        timeline: TimelineEntry[];
+        alphaMajorCount: number;
+        betaMajorCount: number;
+      }
     | { kind: "use-alternative" }
     | null
   >(null);
@@ -1431,7 +1438,24 @@ function GameApp() {
       return;
     }
     try {
-      const timeline = parseHistory(await file.text(), engine);
+      const source = await file.text();
+      let timeline: TimelineEntry[];
+      try {
+        timeline = parseHistory(source, engine);
+      } catch (reason) {
+        if (!(reason instanceof MajorAnimalImbalanceError)) throw reason;
+
+        timeline = parseHistory(source, engine, {
+          allowMajorAnimalImbalance: true,
+        });
+        setPendingConfirmation({
+          kind: "major-imbalance",
+          timeline,
+          alphaMajorCount: reason.alphaMajorCount,
+          betaMajorCount: reason.betaMajorCount,
+        });
+        return;
+      }
       if (game.timeline.length > 1 || game.alternativeLine) {
         setPendingConfirmation({ kind: "import", timeline });
         return;
@@ -2194,18 +2218,24 @@ function GameApp() {
             aria-labelledby="confirmation-title"
             aria-describedby="confirmation-description"
           >
-            <span className="meta-label">Please confirm</span>
+            {pendingConfirmation.kind !== "major-imbalance" && (
+              <span className="meta-label">Please confirm</span>
+            )}
             <h2 id="confirmation-title">
               {pendingConfirmation.kind === "reset"
                 ? "Start a fresh game?"
                 : pendingConfirmation.kind === "import"
                   ? "Import this game history?"
-                  : "Use this as the main line?"}
+                  : pendingConfirmation.kind === "major-imbalance"
+                    ? "Warning: Major Animal Imbalance"
+                    : "Use this as the main line?"}
             </h2>
             <p id="confirmation-description">
               {pendingConfirmation.kind === "use-alternative"
                 ? "The main history after the branch point will be replaced by this alternative line."
-                : "The current game and its history will be replaced."}
+                : pendingConfirmation.kind === "major-imbalance"
+                  ? `In the initial position, Alpha has ${pendingConfirmation.alphaMajorCount} Major Animals and Beta has ${pendingConfirmation.betaMajorCount}. Standard deals give each player 4.`
+                  : "The current game and its history will be replaced."}
             </p>
             <div className="confirmation-dialog__actions">
               <button
@@ -2214,7 +2244,9 @@ function GameApp() {
                 type="button"
                 onClick={() => setPendingConfirmation(null)}
               >
-                Cancel
+                {pendingConfirmation.kind === "major-imbalance"
+                  ? "Cancel Import"
+                  : "Cancel"}
               </button>
               <button
                 className="button button--confirm-danger"
@@ -2224,7 +2256,10 @@ function GameApp() {
                   setPendingConfirmation(null);
                   if (confirmation.kind === "reset") {
                     performReset();
-                  } else if (confirmation.kind === "import") {
+                  } else if (
+                    confirmation.kind === "import" ||
+                    confirmation.kind === "major-imbalance"
+                  ) {
                     applyImportedHistory(confirmation.timeline);
                   } else {
                     useAlternativeAsMainLine();
@@ -2235,6 +2270,8 @@ function GameApp() {
                   ? "Reset game"
                   : pendingConfirmation.kind === "import"
                     ? "Import history"
+                    : pendingConfirmation.kind === "major-imbalance"
+                      ? "Import Anyway"
                     : "Use as main line"}
               </button>
             </div>

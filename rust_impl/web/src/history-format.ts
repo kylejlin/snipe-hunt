@@ -43,6 +43,23 @@ const ANIMAL_INDEX = new Map<string, number>(
   ANIMAL_NAMES.map((name, index) => [name, index]),
 );
 const RETREATERS = new Set(["Rat", "Rabbit", "Snake", "Ram", "Boar", "Squid"]);
+const MAJOR_ANIMALS = new Set(["Tiger", "Dragon", "Fish", "Elephant"]);
+
+export class MajorAnimalImbalanceError extends Error {
+  constructor(
+    readonly alphaMajorCount: number,
+    readonly betaMajorCount: number,
+  ) {
+    super(
+      `Initial layout gives Alpha ${alphaMajorCount} Major Animals and Beta ${betaMajorCount}; each player must have exactly 4.`,
+    );
+    this.name = "MajorAnimalImbalanceError";
+  }
+}
+
+export interface ParseHistoryOptions {
+  allowMajorAnimalImbalance?: boolean;
+}
 
 function rankOf(location: Location): number | null {
   return location.startsWith("row-") ? Number(location.slice(4)) : null;
@@ -263,6 +280,7 @@ function parseInitialPosition(
   betaLineNumber: number,
   alphaLine: string,
   alphaLineNumber: number,
+  allowMajorAnimalImbalance: boolean,
 ): Position {
   const beta = parseLayoutLine(betaLine, betaLineNumber, "Beta", "0b.");
   const alpha = parseLayoutLine(alphaLine, alphaLineNumber, "Alpha", "0a.");
@@ -294,6 +312,14 @@ function parseInitialPosition(
       throw new Error(`Initial layout must contain exactly two ${name} cards.`);
     }
   }
+  const alphaMajorCount = alpha.flat().filter((name) => MAJOR_ANIMALS.has(name)).length;
+  const betaMajorCount = beta.flat().filter((name) => MAJOR_ANIMALS.has(name)).length;
+  if (
+    !allowMajorAnimalImbalance &&
+    (alphaMajorCount !== 4 || betaMajorCount !== 4)
+  ) {
+    throw new MajorAnimalImbalanceError(alphaMajorCount, betaMajorCount);
+  }
   return position;
 }
 
@@ -303,6 +329,7 @@ export function parseHistory(
     RulesEngine,
     "canonicalizePosition" | "legalMoves" | "previewFirstStep" | "applyMove"
   >,
+  options: ParseHistoryOptions = {},
 ): TimelineEntry[] {
   const lines = source
     .replace(/\r\n?/g, "\n")
@@ -319,10 +346,12 @@ export function parseHistory(
         lines[0].lineNumber,
         lines[1].text,
         lines[1].lineNumber,
+        options.allowMajorAnimalImbalance ?? false,
       ),
     );
     engine.legalMoves(position);
   } catch (reason) {
+    if (reason instanceof MajorAnimalImbalanceError) throw reason;
     throw new Error(
       `Line ${lines[0].lineNumber}: invalid initial position${reason instanceof Error ? ` (${reason.message})` : ""}.`,
     );

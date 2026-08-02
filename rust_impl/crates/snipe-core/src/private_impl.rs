@@ -129,7 +129,22 @@ impl State {
 }
 
 impl InitialStateBuilder {
-    pub(crate) const fn build_(self) -> Option<State> {
+    pub(crate) const fn build_(self, validate_major_balance: bool) -> Option<State> {
+        if validate_major_balance
+            && (count_major_animals(&self.alpha_reserve)
+                + count_major_animals(&self.r1)
+                + count_major_animals(&self.r2)
+                + count_major_animals(&self.r3)
+                != 4
+                || count_major_animals(&self.r4)
+                    + count_major_animals(&self.r5)
+                    + count_major_animals(&self.r6)
+                    + count_major_animals(&self.beta_reserve)
+                    != 4)
+        {
+            return None;
+        }
+
         let mut reserves = CardMultiset::EMPTY;
         let mut r1 = CardMultiset::singleton(Card::Snipe, Player::Alpha);
         let mut r2 = CardMultiset::EMPTY;
@@ -220,6 +235,18 @@ impl InitialStateBuilder {
             leading_action: None,
         })
     }
+}
+
+const fn count_major_animals(animals: &[Animal]) -> usize {
+    let mut count = 0;
+    let mut index = 0;
+    while index < animals.len() {
+        if animals[index].ternary_element().is_some() {
+            count += 1;
+        }
+        index += 1;
+    }
+    count
 }
 
 impl CardMultiset {
@@ -1042,6 +1069,45 @@ mod tests {
         }
     }
 
+    fn valid_initial_state_builder() -> InitialStateBuilder {
+        InitialStateBuilder {
+            alpha_reserve: [Animal::Mouse],
+            r1: [Animal::Mouse, Animal::Ox],
+            r2: [
+                Animal::Ox,
+                Animal::Tiger,
+                Animal::Tiger,
+                Animal::Rabbit,
+                Animal::Rabbit,
+                Animal::Dragon,
+                Animal::Dragon,
+                Animal::Snake,
+                Animal::Snake,
+                Animal::Horse,
+                Animal::Horse,
+                Animal::Ram,
+            ],
+            r3: [Animal::Ram],
+            r4: [Animal::Monkey],
+            r5: [
+                Animal::Monkey,
+                Animal::Rooster,
+                Animal::Rooster,
+                Animal::Dog,
+                Animal::Dog,
+                Animal::Boar,
+                Animal::Boar,
+                Animal::Fish,
+                Animal::Fish,
+                Animal::Elephant,
+                Animal::Elephant,
+                Animal::Squid,
+            ],
+            r6: [Animal::Squid, Animal::Frog],
+            beta_reserve: [Animal::Frog],
+        }
+    }
+
     #[test]
     fn evaluation_estimates_enforce_the_public_range() {
         assert_eq!(
@@ -1195,42 +1261,7 @@ mod tests {
 
     #[test]
     fn initial_state_builder_validates_two_of_each_animal() {
-        let builder = InitialStateBuilder {
-            alpha_reserve: [Animal::Mouse],
-            r1: [Animal::Mouse, Animal::Ox],
-            r2: [
-                Animal::Ox,
-                Animal::Tiger,
-                Animal::Tiger,
-                Animal::Rabbit,
-                Animal::Rabbit,
-                Animal::Dragon,
-                Animal::Dragon,
-                Animal::Snake,
-                Animal::Snake,
-                Animal::Horse,
-                Animal::Horse,
-                Animal::Ram,
-            ],
-            r3: [Animal::Ram],
-            r4: [Animal::Monkey],
-            r5: [
-                Animal::Monkey,
-                Animal::Rooster,
-                Animal::Rooster,
-                Animal::Dog,
-                Animal::Dog,
-                Animal::Boar,
-                Animal::Boar,
-                Animal::Fish,
-                Animal::Fish,
-                Animal::Elephant,
-                Animal::Elephant,
-                Animal::Squid,
-            ],
-            r6: [Animal::Squid, Animal::Frog],
-            beta_reserve: [Animal::Frog],
-        };
+        let builder = valid_initial_state_builder();
 
         let state = builder.clone().build().unwrap();
         assert_eq!(state.active_player, Player::Beta);
@@ -1239,7 +1270,23 @@ mod tests {
 
         let mut invalid = builder;
         invalid.beta_reserve = [Animal::Mouse];
-        assert!(invalid.build().is_none());
+        assert!(invalid.clone().build().is_none());
+        assert!(invalid.build_without_major_balance_check().is_none());
+    }
+
+    #[test]
+    fn initial_state_builder_validates_major_animal_balance_unless_bypassed() {
+        let mut builder = valid_initial_state_builder();
+
+        assert!(builder.clone().build().is_some());
+
+        // Swap an Alpha minor for a Beta major while preserving two copies of
+        // every animal. Alpha now has 5 Major Animals and Beta has 3.
+        builder.alpha_reserve = [Animal::Fish];
+        builder.r5[7] = Animal::Mouse;
+
+        assert!(builder.clone().build().is_none());
+        assert!(builder.build_without_major_balance_check().is_some());
     }
 
     #[test]

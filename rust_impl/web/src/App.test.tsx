@@ -3,6 +3,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -150,8 +151,8 @@ import { gameReducer, newGame } from "./state/game-state";
 import { saveGame, STORAGE_KEY } from "./state/persistence";
 
 const imbalancedHistory = [
-  "0b. =Dragon; Ram Frog Beta; Rat Ox Tiger Tiger Rabbit Dragon Snake Monkey Dog Elephant Squid Frog; Squid",
-  "0a. =Rooster; Snake Boar Alpha; Rat Ox Rabbit Horse Ram Monkey Rooster Dog Boar Fish Fish Elephant; Horse",
+  "0b. (+1 major) =Dragon; Ram Frog Beta; Rat Ox Tiger Tiger Rabbit Dragon Snake Monkey Dog Elephant Squid Frog; Squid",
+  "0a. (-1 major) =Rooster; Snake Boar Alpha; Rat Ox Rabbit Horse Ram Monkey Rooster Dog Boar Fish Fish Elephant; Horse",
 ].join("\n");
 
 afterEach(cleanup);
@@ -256,7 +257,7 @@ describe("value-semantic card interaction", () => {
 describe("presentation contract", () => {
   it("shows the package version", () => {
     render(<App />);
-    expect(screen.getByText("Version 0.81.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.82.0")).toBeInTheDocument();
   });
 
   it("does not show a turn-status pill", () => {
@@ -771,7 +772,7 @@ describe("overlays", () => {
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   });
 
-  it("warns before importing a Major Animal imbalance", async () => {
+  it("imports an annotated Major Animal imbalance and shows it in the game log", async () => {
     render(<App />);
     const input = screen.getByLabelText("Choose a Snipe Hunt history file");
     const file = {
@@ -781,32 +782,14 @@ describe("overlays", () => {
 
     fireEvent.change(input, { target: { files: [file] } });
 
-    const dialog = await screen.findByRole("alertdialog");
-    expect(dialog).toHaveTextContent("Warning: Major Animal Imbalance");
-    expect(within(dialog).queryByText("Warning", { exact: true })).toBeNull();
-    expect(dialog).toHaveTextContent(
-      "In the initial position, Alpha has 3 Major Animals and Beta has 5. Standard deals give each player 4.",
-    );
-    expect(
-      screen.getByRole("button", { name: "Cancel Import" }),
-    ).toHaveFocus();
-    expect(
-      screen.getByRole("button", { name: "Import Anyway" }),
-    ).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Cancel Import" }));
+    await waitFor(() => {
+      expect(
+        screen.getAllByRole("button", { name: "Beta Dragon" }),
+      ).toHaveLength(2);
+    });
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
-    expect(
-      screen.getAllByRole("button", { name: "Alpha Rabbit, retreater" }),
-    ).toHaveLength(2);
-
-    fireEvent.change(input, { target: { files: [file] } });
-    await screen.findByRole("alertdialog");
-    fireEvent.click(screen.getByRole("button", { name: "Import Anyway" }));
-
-    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
-    expect(
-      screen.getAllByRole("button", { name: "Beta Dragon" }),
-    ).toHaveLength(2);
+    const gameLog = screen.getByRole("list", { name: "Game timeline" });
+    expect(gameLog).toHaveTextContent("0β. (+1 major) =Dragon");
+    expect(gameLog).toHaveTextContent("0α. (-1 major) =Rooster");
   });
 });

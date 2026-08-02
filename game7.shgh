@@ -5,8 +5,8 @@
 // Likewise, the Human only had 3 major animals.
 // Despite this, the Human still won.
 
-0b. =Dragon; Rooster Dog Beta; Rat Ox Tiger Rabbit Snake Ram Rooster Dog Boar Boar Fish Frog; Snake
-0a. =Horse; Dragon Fish Alpha; Rat Ox Tiger Rabbit Horse Ram Monkey Monkey Elephant Elephant Squid Squid; Frog
+0b. (-1 major) =Dragon; Rooster Dog Beta; Rat Ox Tiger Rabbit Snake Ram Rooster Dog Boar Boar Fish Frog; Snake
+0a. (+1 major) =Horse; Dragon Fish Alpha; Rat Ox Tiger Rabbit Horse Ram Monkey Monkey Elephant Elephant Squid Squid; Frog
 1b. Rabbit 4, Rat 4
 2a. Ox 3, Tiger 3
 3b. Ram 4, Snake 4

@@ -44,22 +44,7 @@ const ANIMAL_INDEX = new Map<string, number>(
 );
 const RETREATERS = new Set(["Rat", "Rabbit", "Snake", "Ram", "Boar", "Squid"]);
 const MAJOR_ANIMALS = new Set(["Tiger", "Dragon", "Fish", "Elephant"]);
-
-export class MajorAnimalImbalanceError extends Error {
-  constructor(
-    readonly alphaMajorCount: number,
-    readonly betaMajorCount: number,
-  ) {
-    super(
-      `Initial layout gives Alpha ${alphaMajorCount} Major Animals and Beta ${betaMajorCount}; each player must have exactly 4.`,
-    );
-    this.name = "MajorAnimalImbalanceError";
-  }
-}
-
-export interface ParseHistoryOptions {
-  allowMajorAnimalImbalance?: boolean;
-}
+const STANDARD_MAJOR_ANIMAL_COUNT = 4;
 
 function rankOf(location: Location): number | null {
   return location.startsWith("row-") ? Number(location.slice(4)) : null;
@@ -145,20 +130,43 @@ function formatLocation(position: Position, location: Location): string {
   return position.locations[location].map(cardNotation).join(" ");
 }
 
+function majorAnimalCount(
+  position: Position,
+  locations: readonly Location[],
+): number {
+  return locations.reduce(
+    (count, location) =>
+      count +
+      position.locations[location].filter(
+        (card) => !card.isSnipe && MAJOR_ANIMALS.has(card.animal),
+      ).length,
+    0,
+  );
+}
+
+function majorAnimalImbalanceAnnotation(majorCount: number): string {
+  const imbalance = majorCount - STANDARD_MAJOR_ANIMAL_COUNT;
+  return imbalance === 0
+    ? ""
+    : ` (${imbalance > 0 ? "+" : ""}${imbalance} major)`;
+}
+
 export function formatInitialLines(position: Position): [string, string] {
+  const betaLocations: Location[] = [
+    "beta-reserve",
+    "row-6",
+    "row-5",
+    "row-4",
+  ];
+  const alphaLocations: Location[] = [
+    "alpha-reserve",
+    "row-1",
+    "row-2",
+    "row-3",
+  ];
   return [
-    `0b. =${[
-      "beta-reserve",
-      "row-6",
-      "row-5",
-      "row-4",
-    ].map((location) => formatLocation(position, location as Location)).join("; ")}`,
-    `0a. =${[
-      "alpha-reserve",
-      "row-1",
-      "row-2",
-      "row-3",
-    ].map((location) => formatLocation(position, location as Location)).join("; ")}`,
+    `0b.${majorAnimalImbalanceAnnotation(majorAnimalCount(position, betaLocations))} =${betaLocations.map((location) => formatLocation(position, location)).join("; ")}`,
+    `0a.${majorAnimalImbalanceAnnotation(majorAnimalCount(position, alphaLocations))} =${alphaLocations.map((location) => formatLocation(position, location)).join("; ")}`,
   ];
 }
 
@@ -211,11 +219,28 @@ function parseLayoutLine(
   lineNumber: number,
   player: Player,
   expectedPrefix: string,
-): string[][] {
-  if (!line.startsWith(`${expectedPrefix} =`)) {
-    throw new Error(`Line ${lineNumber}: expected "${expectedPrefix} =".`);
+): { tokens: string[][]; annotatedMajorImbalance: number | null } {
+  if (!line.startsWith(`${expectedPrefix} `)) {
+    throw new Error(
+      `Line ${lineNumber}: expected "${expectedPrefix} =" with an optional signed Major Animal imbalance annotation.`,
+    );
   }
-  const groups = line.slice(expectedPrefix.length + 2).split(";").map((group) => group.trim());
+  const remainder = line.slice(expectedPrefix.length);
+  let layout: string;
+  let annotatedMajorImbalance: number | null = null;
+  if (remainder.startsWith(" =")) {
+    layout = remainder.slice(2);
+  } else {
+    const annotation = remainder.match(/^ \(([+-]\d+) major\) =/);
+    if (!annotation) {
+      throw new Error(
+        `Line ${lineNumber}: expected "${expectedPrefix} =" or "${expectedPrefix} (+N major) =".`,
+      );
+    }
+    annotatedMajorImbalance = Number(annotation[1]);
+    layout = remainder.slice(annotation[0].length);
+  }
+  const groups = layout.split(";").map((group) => group.trim());
   if (groups.length !== 4 || groups.some((group) => group.length === 0)) {
     throw new Error(`Line ${lineNumber}: the initial layout must contain four nonempty groups.`);
   }
@@ -244,7 +269,37 @@ function parseLayoutLine(
       throw new Error(`Line ${lineNumber}: unknown card "${name}".`);
     }
   }
-  return tokens;
+  return { tokens, annotatedMajorImbalance };
+}
+
+function validateMajorAnimalImbalanceAnnotation(
+  tokens: string[][],
+  annotatedImbalance: number | null,
+  player: Player,
+  lineNumber: number,
+): void {
+  const majorCount = tokens
+    .flat()
+    .filter((name) => MAJOR_ANIMALS.has(name)).length;
+  const actualImbalance = majorCount - STANDARD_MAJOR_ANIMAL_COUNT;
+  if (actualImbalance === 0 && annotatedImbalance !== null) {
+    throw new Error(
+      `Line ${lineNumber}: ${player} has exactly ${STANDARD_MAJOR_ANIMAL_COUNT} Major Animals, so an imbalance annotation is not allowed.`,
+    );
+  }
+  if (actualImbalance !== 0 && annotatedImbalance === null) {
+    throw new Error(
+      `Line ${lineNumber}: ${player} has ${majorCount} Major Animals; expected the annotation "${majorAnimalImbalanceAnnotation(majorCount).trim()}".`,
+    );
+  }
+  if (
+    annotatedImbalance !== null &&
+    annotatedImbalance !== actualImbalance
+  ) {
+    throw new Error(
+      `Line ${lineNumber}: the annotated Major Animal imbalance ${annotatedImbalance > 0 ? "+" : ""}${annotatedImbalance} does not match ${player}'s actual imbalance ${actualImbalance > 0 ? "+" : ""}${actualImbalance}.`,
+    );
+  }
 }
 
 function cardFromName(
@@ -280,10 +335,11 @@ function parseInitialPosition(
   betaLineNumber: number,
   alphaLine: string,
   alphaLineNumber: number,
-  allowMajorAnimalImbalance: boolean,
 ): Position {
-  const beta = parseLayoutLine(betaLine, betaLineNumber, "Beta", "0b.");
-  const alpha = parseLayoutLine(alphaLine, alphaLineNumber, "Alpha", "0a.");
+  const parsedBeta = parseLayoutLine(betaLine, betaLineNumber, "Beta", "0b.");
+  const parsedAlpha = parseLayoutLine(alphaLine, alphaLineNumber, "Alpha", "0a.");
+  const beta = parsedBeta.tokens;
+  const alpha = parsedAlpha.tokens;
   const occurrences = new Map<string, number>();
   const cards = (names: string[], owner: Player) =>
     names.map((name) => cardFromName(name, owner, occurrences));
@@ -312,14 +368,18 @@ function parseInitialPosition(
       throw new Error(`Initial layout must contain exactly two ${name} cards.`);
     }
   }
-  const alphaMajorCount = alpha.flat().filter((name) => MAJOR_ANIMALS.has(name)).length;
-  const betaMajorCount = beta.flat().filter((name) => MAJOR_ANIMALS.has(name)).length;
-  if (
-    !allowMajorAnimalImbalance &&
-    (alphaMajorCount !== 4 || betaMajorCount !== 4)
-  ) {
-    throw new MajorAnimalImbalanceError(alphaMajorCount, betaMajorCount);
-  }
+  validateMajorAnimalImbalanceAnnotation(
+    beta,
+    parsedBeta.annotatedMajorImbalance,
+    "Beta",
+    betaLineNumber,
+  );
+  validateMajorAnimalImbalanceAnnotation(
+    alpha,
+    parsedAlpha.annotatedMajorImbalance,
+    "Alpha",
+    alphaLineNumber,
+  );
   return position;
 }
 
@@ -329,7 +389,6 @@ export function parseHistory(
     RulesEngine,
     "canonicalizePosition" | "legalMoves" | "previewFirstStep" | "applyMove"
   >,
-  options: ParseHistoryOptions = {},
 ): TimelineEntry[] {
   const lines = source
     .replace(/\r\n?/g, "\n")
@@ -346,12 +405,10 @@ export function parseHistory(
         lines[0].lineNumber,
         lines[1].text,
         lines[1].lineNumber,
-        options.allowMajorAnimalImbalance ?? false,
       ),
     );
     engine.legalMoves(position);
   } catch (reason) {
-    if (reason instanceof MajorAnimalImbalanceError) throw reason;
     throw new Error(
       `Line ${lines[0].lineNumber}: invalid initial position${reason instanceof Error ? ` (${reason.message})` : ""}.`,
     );

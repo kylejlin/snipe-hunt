@@ -20,6 +20,12 @@ const ANIMALS: [Animal; 16] = [
     Animal::Frog,
 ];
 const RANKS: [Rank; 6] = [Rank::R1, Rank::R2, Rank::R3, Rank::R4, Rank::R5, Rank::R6];
+const MAJOR_ANIMALS: [Animal; 4] = [
+    Animal::Tiger,
+    Animal::Dragon,
+    Animal::Fish,
+    Animal::Elephant,
+];
 
 pub(crate) struct HistoryRecorder {
     lines: Vec<String>,
@@ -34,6 +40,13 @@ impl HistoryRecorder {
         alpha_time: Duration,
         beta_time: Duration,
     ) -> Self {
+        for player in [Player::Alpha, Player::Beta] {
+            assert_eq!(
+                initial_major_animal_count(state, player),
+                4,
+                "the native arena only records standard Major-balanced deals"
+            );
+        }
         let mut lines = vec![
             format!(
                 "// Beta: {beta} ({} seconds per ply)",
@@ -168,6 +181,22 @@ fn animal_count(cards: CardMultiset) -> u32 {
         .map(|animal| {
             u32::from(cards.count(Card::Animal(animal), Player::Alpha))
                 + u32::from(cards.count(Card::Animal(animal), Player::Beta))
+        })
+        .sum()
+}
+
+fn initial_major_animal_count(state: &State, player: Player) -> u32 {
+    let locations = match player {
+        Player::Alpha => [state.reserves, state.r1, state.r2, state.r3],
+        Player::Beta => [state.reserves, state.r4, state.r5, state.r6],
+    };
+    locations
+        .into_iter()
+        .map(|cards| {
+            MAJOR_ANIMALS
+                .into_iter()
+                .map(|animal| u32::from(cards.count(Card::Animal(animal), player)))
+                .sum::<u32>()
         })
         .sum()
 }

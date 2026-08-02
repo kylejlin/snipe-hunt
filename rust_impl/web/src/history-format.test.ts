@@ -8,8 +8,8 @@ import type {
 import {
   formatCompletedMove,
   formatDisplayPlyPrefix,
-  MajorAnimalImbalanceError,
   parseHistory,
+  serializeHistory,
 } from "./history-format";
 
 const position: Position = {
@@ -52,6 +52,9 @@ const balancedHistory = [
 const imbalancedHistory = balancedHistory
   .replace("0b. =Rooster", "0b. =Dragon")
   .replace("0a. =Dragon", "0a. =Rooster");
+const annotatedImbalancedHistory = imbalancedHistory
+  .replace("0b. =Dragon", "0b. (+1 major) =Dragon")
+  .replace("0a. =Rooster", "0a. (-1 major) =Rooster");
 
 function move(capture: TurnMove["captures"]): TurnMove {
   return {
@@ -106,36 +109,60 @@ describe("authoritative move annotations", () => {
 });
 
 describe("initial Major Animal balance", () => {
-  it("rejects an imbalanced layout by default and reports both counts", () => {
-    let thrown: unknown;
-    try {
-      parseHistory(imbalancedHistory, importEngine);
-    } catch (reason) {
-      thrown = reason;
-    }
-
-    expect(thrown).toBeInstanceOf(MajorAnimalImbalanceError);
-    expect(thrown).toMatchObject({
-      alphaMajorCount: 3,
-      betaMajorCount: 5,
-    });
+  it("rejects an imbalance without annotations", () => {
+    expect(() => parseHistory(imbalancedHistory, importEngine)).toThrow(
+      /Beta has 5 Major Animals; expected the annotation "\(\+1 major\)"/,
+    );
   });
 
-  it("allows an explicit imbalance without bypassing creature conservation", () => {
-    expect(
-      parseHistory(imbalancedHistory, importEngine, {
-        allowMajorAnimalImbalance: true,
-      }),
-    ).toHaveLength(1);
+  it("accepts exact annotations and preserves them when exporting", () => {
+    const timeline = parseHistory(annotatedImbalancedHistory, importEngine);
 
-    const missingRooster = imbalancedHistory.replace(
-      "0a. =Rooster",
-      "0a. =Ox",
+    expect(timeline).toHaveLength(1);
+    expect(serializeHistory(timeline)).toBe(`${annotatedImbalancedHistory}\n`);
+  });
+
+  it("rejects a false-positive annotation on a balanced layout", () => {
+    const falsePositive = balancedHistory.replace(
+      "0b. =Rooster",
+      "0b. (+1 major) =Rooster",
     );
-    expect(() =>
-      parseHistory(missingRooster, importEngine, {
-        allowMajorAnimalImbalance: true,
-      }),
-    ).toThrow(/more than two Ox cards/);
+
+    expect(() => parseHistory(falsePositive, importEngine)).toThrow(
+      /Beta has exactly 4 Major Animals, so an imbalance annotation is not allowed/,
+    );
+  });
+
+  it("rejects annotations whose amounts do not match the layout", () => {
+    const wrongAmount = annotatedImbalancedHistory.replace(
+      "0b. (+1 major)",
+      "0b. (+2 major)",
+    );
+
+    expect(() => parseHistory(wrongAmount, importEngine)).toThrow(
+      /annotated Major Animal imbalance \+2 does not match Beta's actual imbalance \+1/,
+    );
+  });
+
+  it("requires an annotation for each imbalanced player", () => {
+    const missingAlphaAnnotation = annotatedImbalancedHistory.replace(
+      "0a. (-1 major)",
+      "0a.",
+    );
+
+    expect(() => parseHistory(missingAlphaAnnotation, importEngine)).toThrow(
+      /Alpha has 3 Major Animals; expected the annotation "\(-1 major\)"/,
+    );
+  });
+
+  it("does not bypass creature conservation for an annotated imbalance", () => {
+    const missingRooster = annotatedImbalancedHistory.replace(
+      "0a. (-1 major) =Rooster",
+      "0a. (-1 major) =Ox",
+    );
+
+    expect(() => parseHistory(missingRooster, importEngine)).toThrow(
+      /more than two Ox cards/,
+    );
   });
 });

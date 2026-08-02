@@ -251,7 +251,7 @@ describe("value-semantic card interaction", () => {
 describe("presentation contract", () => {
   it("shows the package version", () => {
     render(<App />);
-    expect(screen.getByText("Version 0.64.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.65.0")).toBeInTheDocument();
   });
 
   it("plays suggested lines through an individual action", async () => {
@@ -284,10 +284,19 @@ describe("presentation contract", () => {
       "1α. Rabbit 2, …",
     );
     expect(screen.getByText("0.5 / 0.5")).toBeInTheDocument();
+    const partialSuggestion = screen.getByRole("list", {
+      name: "Suggested line",
+    });
+    expect(partialSuggestion).toHaveTextContent("1α. ..., Rabbit 2");
+    expect(
+      within(partialSuggestion).queryByRole("button", {
+        name: "Play suggested line through 1α. Rabbit 2",
+      }),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(
       await screen.findByRole("button", {
-        name: "Play suggested line through 1α. Rabbit 2, Rabbit 2",
+        name: "Play suggested line through 1α. ..., Rabbit 2",
       }),
     );
 

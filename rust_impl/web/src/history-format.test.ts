@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Position, TurnMove } from "./engine/types";
-import { formatCompletedMove } from "./history-format";
+import {
+  formatCompletedMove,
+  formatDisplayPlyPrefix,
+} from "./history-format";
 
 const position: Position = {
   schemaVersion: 1,
@@ -44,6 +47,11 @@ function move(capture: TurnMove["captures"]): TurnMove {
 }
 
 describe("authoritative move annotations", () => {
+  it("uses Greek player markers without half-ply notation in the UI", () => {
+    expect(formatDisplayPlyPrefix(3, "Alpha")).toBe("3α.");
+    expect(formatDisplayPlyPrefix(4, "Beta")).toBe("4β.");
+  });
+
   it("does not infer a capture from frontend card-array changes", () => {
     expect(
       formatCompletedMove(move({ animals: [], snipe: null }), null),

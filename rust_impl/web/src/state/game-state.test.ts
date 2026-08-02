@@ -97,6 +97,21 @@ describe("game-state invariants", () => {
     expect(rules.applyMove).toHaveBeenCalledWith(initial, move);
   });
 
+  it("persists a pending first step while browsing its base position", () => {
+    const rules = engine();
+    const pending = gameReducer(newGame(initial), {
+      type: "draft",
+      step: move.steps[0],
+    });
+    const browsing = { ...pending, subply: false };
+
+    const restored = restoreGame(saveGame(browsing), rules);
+
+    expect(restored.draftStep).toEqual(move.steps[0]);
+    expect(restored.subply).toBe(false);
+    expect(rules.previewFirstStep).toHaveBeenCalledWith(initial, move.steps[0]);
+  });
+
   it("persists Fajita as a selected strategy", () => {
     const rules = engine();
     const game = { ...newGame(initial), strategy: "fajita" as const };

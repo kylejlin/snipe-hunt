@@ -81,14 +81,27 @@ export function formatCompletedMove(
   move: TurnMove,
   resultingWinner: Player | null,
 ): string {
-  const notation = move.steps
-    .map(
-      (_, stepIndex) =>
-        `${stepNotation(move, stepIndex)}${
-          move.steps[stepIndex].capture.animals.length > 0 ? "x" : ""
-        }`,
+  return move.steps
+    .map((_, stepIndex) =>
+      formatCompletedStep(
+        move,
+        stepIndex,
+        stepIndex === move.steps.length - 1 ? resultingWinner : null,
+      ),
     )
     .join(", ");
+}
+
+export function formatCompletedStep(
+  move: TurnMove,
+  stepIndex: number,
+  resultingWinner: Player | null,
+): string {
+  const step = move.steps[stepIndex];
+  if (!step) throw new Error(`Move has no step ${stepIndex}.`);
+  const notation = `${stepNotation(move, stepIndex)}${
+    step.capture.animals.length > 0 ? "x" : ""
+  }`;
   const suffix =
     resultingWinner === "Alpha"
       ? "+#0"
@@ -106,10 +119,9 @@ export function formatPlyPrefix(timelineIndex: number, player: Player): string {
 export function formatDisplayPlyPrefix(
   plyNumber: number,
   player: Player,
-  firstSubplyPlayed = false,
 ): string {
   if (plyNumber < 0) throw new Error("Ply numbers cannot be negative.");
-  return `${plyNumber}${firstSubplyPlayed ? ".5" : ""}${player === "Alpha" ? "α" : "β"}.`;
+  return `${plyNumber}${player === "Alpha" ? "α" : "β"}.`;
 }
 
 function formatLocation(position: Position, location: Location): string {

@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AnalysisResult,
@@ -8,7 +14,17 @@ import type {
   TurnMove,
 } from "./engine/types";
 
-const { services, move, applyMove, analysisRun, result } = vi.hoisted(() => {
+const {
+  services,
+  initial,
+  after,
+  step,
+  move,
+  twoStepMove,
+  applyMove,
+  analysisRun,
+  result,
+} = vi.hoisted(() => {
   const rabbit = {
     pieceKey: "alpha:animal:3",
     animal: "Rabbit",
@@ -51,6 +67,18 @@ const { services, move, applyMove, analysisRun, result } = vi.hoisted(() => {
     label: "Rabbit 2",
     steps: [step],
     captures: { animals: [], snipe: null },
+  };
+  const twoStepMove: TurnMove = {
+    ...move,
+    id: "rabbit-pair",
+    label: "Rabbit 2, Rabbit 2",
+    steps: [
+      step,
+      {
+        ...step,
+        pieceKey: "alpha:animal:3:second",
+      },
+    ],
   };
   const after: Position = {
     ...initial,
@@ -99,7 +127,17 @@ const { services, move, applyMove, analysisRun, result } = vi.hoisted(() => {
       dispose: () => undefined,
     },
   } satisfies EngineServices;
-  return { services, move, applyMove, analysisRun, result };
+  return {
+    services,
+    initial,
+    after,
+    step,
+    move,
+    twoStepMove,
+    applyMove,
+    analysisRun,
+    result,
+  };
 });
 
 vi.mock("./engine/engine-services", () => ({
@@ -108,6 +146,8 @@ vi.mock("./engine/engine-services", () => ({
 }));
 
 import App, { formatAlphaScore, formatEvaluation } from "./App";
+import { gameReducer, newGame } from "./state/game-state";
+import { saveGame, STORAGE_KEY } from "./state/persistence";
 
 afterEach(cleanup);
 
@@ -211,7 +251,120 @@ describe("value-semantic card interaction", () => {
 describe("presentation contract", () => {
   it("shows the package version", () => {
     render(<App />);
-    expect(screen.getByText("Version 0.58.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 0.59.0")).toBeInTheDocument();
+  });
+
+  it("groups the initial layout into the position labeled 0", () => {
+    render(<App />);
+
+    expect(screen.getByLabelText("Current position")).toHaveTextContent("0");
+    const initialPosition = screen.getByRole("button", {
+      name: "Go to initial position",
+    });
+    expect(initialPosition).toHaveAttribute("aria-current", "true");
+    expect(initialPosition).toHaveTextContent("0β.");
+    expect(initialPosition).toHaveTextContent("0α.");
+  });
+
+  it("selects individual actions inside one two-action ply", () => {
+    const completed = gameReducer(
+      { ...newGame(initial), gameMode: "pass-and-play" },
+      {
+        type: "commit",
+        basePositionKey: initial.positionKey,
+        position: after,
+        move: twoStepMove,
+      },
+    );
+    localStorage.setItem(STORAGE_KEY, saveGame(completed));
+    render(<App />);
+
+    const currentPosition = screen.getByLabelText("Current position");
+    expect(currentPosition).toHaveTextContent(
+      "1α. Rabbit 2, Rabbit 2",
+    );
+    const firstAction = screen.getByRole("button", {
+      name: "Go to position after 1α. Rabbit 2",
+    });
+    const secondAction = screen.getByRole("button", {
+      name: "Go to position after 1α. Rabbit 2, Rabbit 2",
+    });
+    expect(secondAction).toHaveAttribute("aria-current", "step");
+
+    fireEvent.click(firstAction);
+
+    expect(currentPosition).toHaveTextContent("1α. Rabbit 2, …");
+    expect(screen.getByText("0.5 / 1")).toBeInTheDocument();
+    expect(firstAction).toHaveAttribute("aria-current", "step");
+    expect(secondAction).not.toHaveAttribute("aria-current");
+    expect(document.body).not.toHaveTextContent(".5α");
+
+    fireEvent.click(secondAction);
+
+    expect(currentPosition).toHaveTextContent(
+      "1α. Rabbit 2, Rabbit 2",
+    );
+    expect(screen.getByText("1 / 1")).toBeInTheDocument();
+  });
+
+  it("renders a live first step as an incomplete ply without half notation", () => {
+    const draft = gameReducer(
+      { ...newGame(initial), gameMode: "pass-and-play" },
+      { type: "draft", step },
+    );
+    localStorage.setItem(STORAGE_KEY, saveGame(draft));
+    render(<App />);
+
+    expect(screen.getByLabelText("Current position")).toHaveTextContent(
+      "1α. Rabbit 2, …",
+    );
+    expect(screen.getByText("0.5 / 0.5")).toBeInTheDocument();
+    expect(screen.getByText("0 plies")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(".5α");
+  });
+
+  it("navigates alternative lines at the action level", () => {
+    const actual = gameReducer(
+      { ...newGame(initial), gameMode: "pass-and-play" },
+      {
+        type: "commit",
+        basePositionKey: initial.positionKey,
+        position: after,
+        move,
+      },
+    );
+    const alternative = {
+      ...actual,
+      alternativeLine: {
+        divergenceIndex: 0,
+        entries: [{ position: after, move: twoStepMove }],
+      },
+      activeLine: "alternative" as const,
+    };
+    localStorage.setItem(STORAGE_KEY, saveGame(alternative));
+    render(<App />);
+
+    const alternativeLog = within(
+      screen.getByRole("list", { name: "Alternative line" }),
+    );
+    const firstAction = alternativeLog.getByRole("button", {
+      name: "Go to position after 1α. Rabbit 2",
+    });
+
+    fireEvent.click(firstAction);
+
+    expect(firstAction).toHaveAttribute("aria-current", "step");
+    expect(screen.getByLabelText("Current position")).toHaveTextContent(
+      "1α. Rabbit 2, …",
+    );
+    expect(screen.getByText("0.5 / 1")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "← Back" }));
+
+    expect(screen.getByLabelText("Current position")).toHaveTextContent("0");
+    expect(
+      screen.getByRole("button", { name: "Go to initial position" }),
+    ).toHaveAttribute("aria-current", "true");
   });
 
   it("shows the last completed result after the analyzer reaches its memory ceiling", async () => {

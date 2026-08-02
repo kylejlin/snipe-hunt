@@ -29,12 +29,17 @@ export function restoreGame(
     }
     if (parsed.subply) {
       const committedStep = displayed[parsed.cursor + 1]?.move?.steps[0] ?? null;
-      if (Boolean(committedStep) === Boolean(parsed.draftStep)) {
-        throw new Error("ambiguous turn prefix");
+      if (committedStep) {
+        engine.previewFirstStep(
+          displayed[parsed.cursor].position,
+          committedStep,
+        );
+      } else if (!parsed.draftStep) {
+        throw new Error("missing turn prefix");
       }
-      const step = committedStep ?? parsed.draftStep;
-      if (!step) throw new Error("missing turn prefix");
-      engine.previewFirstStep(displayed[parsed.cursor].position, step);
+    }
+    if (parsed.draftStep) {
+      engine.previewFirstStep(displayed.at(-1)!.position, parsed.draftStep);
     }
     return parsed;
   } catch {
@@ -136,7 +141,6 @@ function assertGameState(value: unknown): asserts value is GameState {
   assertSeconds(game.thinkingTimeSeconds, "thinking time");
   assertSeconds(game.analysisTimeSeconds, "analysis time");
   if (typeof game.subply !== "boolean") throw new Error("invalid subply");
-  if (game.draftStep && !game.subply) throw new Error("orphaned draft");
 }
 
 function assertSeconds(value: unknown, label: string): asserts value is number {

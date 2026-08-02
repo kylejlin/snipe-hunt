@@ -157,6 +157,11 @@ button {
   font-size: 1rem;
 }
 
+.table-panel__current-action {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .history-controls {
   display: flex;
   align-items: center;
@@ -802,8 +807,8 @@ input[type="text"] {
   user-select: text;
 }
 
-.move-list button,
-.move-list__pending > div {
+.move-list__layout > button,
+.move-list__ply-content {
   width: 100%;
   display: block;
   padding: 7px;
@@ -812,11 +817,24 @@ input[type="text"] {
   color: inherit;
   background: transparent;
   text-align: left;
+}
+
+.move-list__layout > button {
   cursor: pointer;
 }
 
-.move-list__pending > div {
-  cursor: text;
+.move-list__action {
+  display: inline;
+  width: auto;
+  margin: -2px;
+  padding: 2px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
 }
 
 .move-list__alternative {
@@ -859,22 +877,30 @@ input[type="text"] {
   flex: 1 1 150px;
 }
 
-.move-list__alternative .move-list__pending {
-  flex-basis: 100%;
-}
-
 .move-list button,
 .move-list button *,
-.move-list__pending,
-.move-list__pending * {
+.move-list__ply-content,
+.move-list__ply-content * {
   -webkit-user-select: text;
   user-select: text;
 }
 
-.move-list button:hover,
-.move-list .move-list__active {
+.move-list__layout > button:hover,
+.move-list__layout > .move-list__active {
   border-color: var(--line);
   background: rgba(45, 49, 55, 0.05);
+}
+
+.move-list__action:hover,
+.move-list__action.move-list__active {
+  border-color: currentColor;
+  background: rgba(45, 49, 55, 0.08);
+}
+
+.move-list__action:focus-visible,
+.move-list__layout > button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
 }
 
 .move-list small {

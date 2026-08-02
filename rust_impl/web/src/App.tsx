@@ -29,6 +29,7 @@ import {
 } from "./engine/types";
 import {
   formatCompletedMove,
+  formatCompletedStep,
   formatDisplayPlyPrefix,
   formatInitialLines,
   parseHistory,
@@ -463,6 +464,151 @@ export function formatEvaluation(evaluation: EngineEvaluation): string {
   return `${points >= 0 ? "+" : ""}${points.toFixed(1)}`;
 }
 
+type HistoryActionNavigation = (
+  timelineIndex: number,
+  stepIndex: number,
+  line: ActiveLine,
+) => void;
+
+function historyLineContainsPly(
+  game: GameState,
+  line: ActiveLine,
+  timelineIndex: number,
+): boolean {
+  return (
+    game.activeLine === line ||
+    (line === "actual" &&
+      game.activeLine === "alternative" &&
+      Boolean(
+        game.alternativeLine &&
+          timelineIndex <= game.alternativeLine.divergenceIndex,
+      ))
+  );
+}
+
+function historyActionIsCurrent(
+  game: GameState,
+  line: ActiveLine,
+  timelineIndex: number,
+  stepIndex: number,
+  stepCount: number,
+): boolean {
+  if (!historyLineContainsPly(game, line, timelineIndex)) return false;
+  if (stepIndex === stepCount - 1) {
+    return !game.subply && game.cursor === timelineIndex;
+  }
+  return game.subply && game.cursor === timelineIndex - 1;
+}
+
+function MoveLogPly({
+  timelineIndex,
+  move,
+  resultingWinner,
+  line,
+  game,
+  onNavigate,
+}: {
+  timelineIndex: number;
+  move: TurnMove;
+  resultingWinner: Player | null;
+  line: ActiveLine;
+  game: GameState;
+  onNavigate: HistoryActionNavigation;
+}) {
+  return (
+    <li
+      className={`move-list__ply move-list__ply--${move.player.toLowerCase()}`}
+    >
+      <small className="move-list__ply-content">
+        <span className="move-list__prefix">
+          {formatDisplayPlyPrefix(timelineIndex, move.player)}{" "}
+        </span>
+        {move.steps.map((step, stepIndex) => {
+          const selected = historyActionIsCurrent(
+            game,
+            line,
+            timelineIndex,
+            stepIndex,
+            move.steps.length,
+          );
+          const notation = formatCompletedStep(
+            move,
+            stepIndex,
+            stepIndex === move.steps.length - 1 ? resultingWinner : null,
+          );
+          const positionNotation = move.steps
+            .slice(0, stepIndex + 1)
+            .map((_, completedStepIndex) =>
+              formatCompletedStep(
+                move,
+                completedStepIndex,
+                completedStepIndex === move.steps.length - 1
+                  ? resultingWinner
+                  : null,
+              ),
+            )
+            .join(", ");
+          return (
+            <span key={`${step.pieceKey}-${step.from}-${step.to}-${stepIndex}`}>
+              {stepIndex > 0 && <span aria-hidden="true">, </span>}
+              <button
+                type="button"
+                className={`move-list__action${selected ? " move-list__active" : ""}`}
+                aria-current={selected ? "step" : undefined}
+                aria-label={`Go to position after ${formatDisplayPlyPrefix(
+                  timelineIndex,
+                  move.player,
+                )} ${positionNotation}`}
+                onClick={() => onNavigate(timelineIndex, stepIndex, line)}
+              >
+                {notation}
+              </button>
+            </span>
+          );
+        })}
+      </small>
+    </li>
+  );
+}
+
+function IncompleteMoveLogPly({
+  timelineIndex,
+  move,
+  selected,
+  onNavigate,
+}: {
+  timelineIndex: number;
+  move: TurnMove;
+  selected: boolean;
+  onNavigate: () => void;
+}) {
+  const notation = formatCompletedStep(move, 0, null);
+  return (
+    <li
+      className={`move-list__ply move-list__ply--${move.player.toLowerCase()}`}
+    >
+      <small className="move-list__ply-content">
+        <span className="move-list__prefix">
+          {formatDisplayPlyPrefix(timelineIndex, move.player)}{" "}
+        </span>
+        <button
+          type="button"
+          className={`move-list__action${selected ? " move-list__active" : ""}`}
+          aria-current={selected ? "step" : undefined}
+          aria-label={`Go to position after ${formatDisplayPlyPrefix(
+            timelineIndex,
+            move.player,
+          )} ${notation}`}
+          onClick={onNavigate}
+        >
+          {notation}
+        </button>
+        <span aria-hidden="true">, …</span>
+      </small>
+    </li>
+  );
+}
+
 function GameApp() {
   const [game, dispatch] = useReducer(
     gameReducer,
@@ -504,8 +650,11 @@ function GameApp() {
   const displayedTimeline = useMemo(() => activeTimeline(game), [game]);
   const entry = displayedTimeline[game.cursor];
   const position = entry.position;
+  const committedMidpointMove = game.subply
+    ? (displayedTimeline[game.cursor + 1]?.move ?? null)
+    : null;
   const midpointStep = game.subply
-    ? (displayedTimeline[game.cursor + 1]?.move?.steps[0] ?? game.draftStep)
+    ? (committedMidpointMove?.steps[0] ?? game.draftStep)
     : null;
   const movePrefix = midpointStep ? [midpointStep] : [];
   const boardPosition = useMemo(
@@ -514,13 +663,44 @@ function GameApp() {
     [midpointStep, position],
   );
   const boardRef = useCardMovementAnimation(boardPosition, movementOrigin);
+  const completedPlyCount = displayedTimeline.length - 1;
   const totalPlyCount =
-    displayedTimeline.length - 1 + (game.draftStep ? 0.5 : 0);
+    completedPlyCount + (game.draftStep ? 0.5 : 0);
   const currentPlyCount = game.cursor + (game.subply ? 0.5 : 0);
   const atPresent = currentPlyCount === totalPlyCount;
   const canMoveForward = game.subply
     ? game.cursor < displayedTimeline.length - 1
     : game.cursor < displayedTimeline.length - 1 || Boolean(game.draftStep);
+  const draftBasePosition = displayedTimeline.at(-1)?.position ?? position;
+  const draftMove: TurnMove | null = game.draftStep
+    ? {
+        id: "draft-ply",
+        positionKey: draftBasePosition.positionKey,
+        player: draftBasePosition.turn,
+        label: "",
+        steps: [game.draftStep],
+        captures: game.draftStep.capture,
+      }
+    : null;
+  const currentActionLabel = (() => {
+    if (game.subply && midpointStep) {
+      const partialMove = committedMidpointMove ?? draftMove;
+      if (partialMove) {
+        return `${formatDisplayPlyPrefix(
+          game.cursor + 1,
+          partialMove.player,
+        )} ${formatCompletedStep(partialMove, 0, null)}, …`;
+      }
+    }
+    if (game.cursor === 0) return "0";
+    const completedMove = entry.move;
+    return completedMove
+      ? `${formatDisplayPlyPrefix(
+          game.cursor,
+          completedMove.player,
+        )} ${formatCompletedMove(completedMove, entry.position.winner)}`
+      : "0";
+  })();
   const computerTurn =
     game.activeLine === "actual" &&
     computerControls(game.gameMode, position.turn);
@@ -847,7 +1027,7 @@ function GameApp() {
     }
   };
 
-  const moveCursor = (nextCursor: number, activeLine: ActiveLine) => {
+  const moveToPosition = (nextCursor: number, activeLine: ActiveLine) => {
     agentRequestSequence.current += 1;
     analysisRequestSequence.current += 1;
     setAgentThinking(false);
@@ -876,6 +1056,63 @@ function GameApp() {
         subply: false,
         draftStep:
           current.activeLine === nextActiveLine ? current.draftStep : null,
+      };
+    });
+  };
+
+  const moveToHistoryAction: HistoryActionNavigation = (
+    timelineIndex,
+    stepIndex,
+    activeLine,
+  ) => {
+    agentRequestSequence.current += 1;
+    analysisRequestSequence.current += 1;
+    setAgentThinking(false);
+    setAnalysisRunning(false);
+    setAnalysis(null);
+    setSelectedPieceKey(null);
+    setGame((current) => {
+      const nextActiveLine =
+        activeLine === "alternative" && current.alternativeLine
+          ? "alternative"
+          : "actual";
+      const nextTimeline =
+        nextActiveLine === "alternative" && current.alternativeLine
+          ? [
+              ...current.timeline.slice(
+                0,
+                current.alternativeLine.divergenceIndex + 1,
+              ),
+              ...current.alternativeLine.entries,
+            ]
+          : current.timeline;
+      const move = nextTimeline[timelineIndex]?.move;
+      if (!move || !move.steps[stepIndex]) return current;
+      const partial = stepIndex < move.steps.length - 1;
+      return {
+        ...current,
+        activeLine: nextActiveLine,
+        cursor: partial ? timelineIndex - 1 : timelineIndex,
+        subply: partial,
+        draftStep:
+          current.activeLine === nextActiveLine ? current.draftStep : null,
+      };
+    });
+  };
+
+  const moveToDraftAction = (activeLine: ActiveLine) => {
+    agentRequestSequence.current += 1;
+    analysisRequestSequence.current += 1;
+    setAgentThinking(false);
+    setAnalysisRunning(false);
+    setAnalysis(null);
+    setSelectedPieceKey(null);
+    setGame((current) => {
+      if (!current.draftStep || current.activeLine !== activeLine) return current;
+      return {
+        ...current,
+        cursor: activeTimeline(current).length - 1,
+        subply: true,
       };
     });
   };
@@ -1165,89 +1402,52 @@ function GameApp() {
         ? " history-analysis__score--positive"
         : " history-analysis__score--negative";
 
-  const pendingSubplyItem =
-    game.subply && midpointStep ? (
-      <li
-        key="pending-subply"
-        className={`move-list__pending move-list__ply--${position.turn.toLowerCase()}`}
-        aria-label="Subply position"
-      >
-        <div className="move-list__active">
-          <small>
-            {`${formatDisplayPlyPrefix(
-              position.turnNumber,
-              position.turn,
-              true,
-            )} ${formatCompletedMove(
-              {
-                id: "pending-subply",
-                positionKey: position.positionKey,
-                player: position.turn,
-                label: "",
-                steps: movePrefix,
-                captures: {
-                  animals: movePrefix.flatMap((step) => step.capture.animals),
-                  snipe:
-                    movePrefix.find((step) => step.capture.snipe)?.capture
-                      .snipe ?? null,
-                },
-              },
-              boardPosition.winner,
-            )}, …`}
-          </small>
-        </div>
-      </li>
-    ) : null;
+  const renderDraftPly = (line: ActiveLine, timelineIndex: number) => {
+    if (!draftMove || game.activeLine !== line) return null;
+    const selected =
+      game.subply &&
+      game.cursor === timelineIndex - 1 &&
+      committedMidpointMove === null;
+    return (
+      <IncompleteMoveLogPly
+        key={`draft-${line}-${timelineIndex}`}
+        timelineIndex={timelineIndex}
+        move={draftMove}
+        selected={selected}
+        onNavigate={() => moveToDraftAction(line)}
+      />
+    );
+  };
 
   const renderAlternativeBranch = (divergenceIndex: number) => {
     const alternative = game.alternativeLine;
     if (!alternative || alternative.divergenceIndex !== divergenceIndex) {
       return null;
     }
-    const items = alternative.entries.flatMap((timelineEntry, index) => {
-      const timelineIndex = divergenceIndex + index + 1;
-      const move = timelineEntry.move;
-      if (!move) return [];
-      const completedPly = (
-        <li
-          key={`${move.id}-${timelineIndex}`}
-          className={`move-list__ply--${move.player.toLowerCase()}`}
-        >
-          <button
-            type="button"
-            className={
-              game.activeLine === "alternative" &&
-              game.cursor === timelineIndex &&
-              !game.subply
-                ? "move-list__active"
-                : ""
-            }
-            onClick={() => moveCursor(timelineIndex, "alternative")}
-          >
-            <small>
-              {`${formatDisplayPlyPrefix(
-                timelineIndex,
-                move.player,
-              )} ${formatCompletedMove(
-                move,
-                timelineEntry.position.winner,
-              )}`}
-            </small>
-          </button>
-        </li>
-      );
-      return game.activeLine === "alternative" &&
-        game.cursor === timelineIndex &&
-        pendingSubplyItem
-        ? [completedPly, pendingSubplyItem]
-        : [completedPly];
-    });
-    if (
-      game.activeLine === "alternative" &&
-      game.cursor === divergenceIndex &&
-      pendingSubplyItem
-    ) {
-      items.unshift(pendingSubplyItem);
+    const items: ReactNode[] = alternative.entries.flatMap(
+      (timelineEntry, index) => {
+        const timelineIndex = divergenceIndex + index + 1;
+        const move = timelineEntry.move;
+        if (!move) return [];
+        return [
+          <MoveLogPly
+            key={`${move.id}-${timelineIndex}`}
+            timelineIndex={timelineIndex}
+            move={move}
+            resultingWinner={timelineEntry.position.winner}
+            line="alternative"
+            game={game}
+            onNavigate={moveToHistoryAction}
+          />,
+        ];
+      },
+    );
+    const draftPly = renderDraftPly(
+      "alternative",
+      divergenceIndex + alternative.entries.length + 1,
+    );
+    if (draftPly) {
+      items.push(draftPly);
     }
 
     return (
@@ -1279,15 +1479,11 @@ function GameApp() {
       <main className="game-layout">
         <section className="table-panel" aria-label="Snipe Hunt board">
           <div className="table-panel__topline">
-            <div>
-              <strong>
-                Ply{" "}
-                {formatDisplayPlyPrefix(
-                  position.turnNumber,
-                  position.turn,
-                  game.subply,
-                ).slice(0, -1)}
-              </strong>
+            <div
+              className="table-panel__current-action"
+              aria-label="Current position"
+            >
+              <strong aria-live="polite">{currentActionLabel}</strong>
             </div>
             <div className="history-controls" aria-label="History navigation">
               <button
@@ -1377,7 +1573,7 @@ function GameApp() {
                     moveHistoryBackward();
                   }}
                 >
-                  Undo first subply
+                  Undo first step
                 </button>
               </div>
             </div>
@@ -1400,7 +1596,8 @@ function GameApp() {
               <h2>Game Log</h2>
               <div className="history-heading-actions">
                 <span className="move-count">
-                  {totalPlyCount} {totalPlyCount === 1 ? "ply" : "plies"}
+                  {completedPlyCount}{" "}
+                  {completedPlyCount === 1 ? "ply" : "plies"}
                 </span>
                 <div className="history-menu" ref={historyMenu}>
                   <button
@@ -1582,80 +1779,66 @@ function GameApp() {
             </div>
             <ol className="move-list">
               {game.timeline.flatMap((timelineEntry, timelineIndex) => {
-                const pendingSubply =
-                  game.activeLine === "actual" &&
-                  timelineIndex === game.cursor &&
-                  game.subply &&
-                  pendingSubplyItem;
+                const draftPly =
+                  timelineIndex === game.timeline.length - 1
+                    ? renderDraftPly("actual", game.timeline.length)
+                    : null;
                 if (timelineIndex === 0) {
                   const initialLines = formatInitialLines(
                     timelineEntry.position,
-                  ).map((line, index) => {
-                    const player: Player = index === 0 ? "Beta" : "Alpha";
-                    return (
-                      <li
-                        key={`initial-layout-${player.toLowerCase()}`}
-                        className={`move-list__layout move-list__ply--${player.toLowerCase()}`}
+                  );
+                  const initialSelected =
+                    historyLineContainsPly(game, "actual", 0) &&
+                    game.cursor === 0 &&
+                    !game.subply;
+                  const initialPosition = (
+                    <li key="initial-layout" className="move-list__layout">
+                      <button
+                        type="button"
+                        className={initialSelected ? "move-list__active" : ""}
+                        aria-current={initialSelected ? "true" : undefined}
+                        aria-label="Go to initial position"
+                        onClick={() => moveToPosition(0, "actual")}
                       >
-                        <button
-                          type="button"
-                          className={
-                            game.activeLine === "actual" &&
-                            game.cursor === 0 &&
-                            !game.subply
-                              ? "move-list__active"
-                              : ""
-                          }
-                          onClick={() => moveCursor(0, "actual")}
-                        >
-                          <small>
-                            {`${formatDisplayPlyPrefix(0, player)} ${line.slice(4)}`}
-                          </small>
-                        </button>
-                      </li>
-                    );
-                  });
+                        {initialLines.map((line, index) => {
+                          const player: Player =
+                            index === 0 ? "Beta" : "Alpha";
+                          return (
+                            <small
+                              key={player}
+                              className={`move-list__ply--${player.toLowerCase()}`}
+                            >
+                              {`${formatDisplayPlyPrefix(0, player)} ${line.slice(4)}`}
+                            </small>
+                          );
+                        })}
+                      </button>
+                    </li>
+                  );
                   const branch = renderAlternativeBranch(0);
                   return [
-                    ...initialLines,
-                    ...(pendingSubply ? [pendingSubply] : []),
+                    initialPosition,
+                    ...(draftPly ? [draftPly] : []),
                     ...(branch ? [branch] : []),
                   ];
                 }
                 const move = timelineEntry.move;
                 if (!move) return [];
                 const completedPly = (
-                  <li
+                  <MoveLogPly
                     key={`${move.id}-${timelineIndex}`}
-                    className={`move-list__ply--${move.player.toLowerCase()}`}
-                  >
-                    <button
-                      type="button"
-                      className={
-                        game.activeLine === "actual" &&
-                        game.cursor === timelineIndex &&
-                        !game.subply
-                          ? "move-list__active"
-                          : ""
-                      }
-                      onClick={() => moveCursor(timelineIndex, "actual")}
-                    >
-                      <small>
-                        {`${formatDisplayPlyPrefix(
-                          timelineIndex,
-                          move.player,
-                        )} ${formatCompletedMove(
-                          move,
-                          timelineEntry.position.winner,
-                        )}`}
-                      </small>
-                    </button>
-                  </li>
+                    timelineIndex={timelineIndex}
+                    move={move}
+                    resultingWinner={timelineEntry.position.winner}
+                    line="actual"
+                    game={game}
+                    onNavigate={moveToHistoryAction}
+                  />
                 );
                 const branch = renderAlternativeBranch(timelineIndex);
                 return [
                   completedPly,
-                  ...(pendingSubply ? [pendingSubply] : []),
+                  ...(draftPly ? [draftPly] : []),
                   ...(branch ? [branch] : []),
                 ];
               })}

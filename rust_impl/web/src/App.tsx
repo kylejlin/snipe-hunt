@@ -2057,18 +2057,13 @@ function GameApp() {
                   </svg>
                 </button>
               </div>
-              <div className="history-navigation-status">
-                <strong
-                  className="history-current-action"
-                  aria-label="Current position"
-                  aria-live="polite"
-                >
-                  {currentActionLabel}
-                </strong>
-                <span className="history-position-count" aria-live="polite">
-                  {currentPlyCount}/{totalPlyCount}
-                </span>
-              </div>
+              <strong
+                className="visually-hidden"
+                aria-label="Current position"
+                aria-live="polite"
+              >
+                {currentActionLabel}
+              </strong>
             </div>
           </section>
 

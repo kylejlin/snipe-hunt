@@ -53,5 +53,8 @@ npm install
 npm run dev
 ```
 
-The displayed application version comes from `package.json`. Do not deploy
-this app as part of normal development.
+The displayed application version comes from `package.json`. Cherry, Fajita,
+and Kiwi's trainer `publish` commands update the embedded model, `package.json`,
+and `package-lock.json` as one release operation; each successful publication
+advances the minor version and resets the patch to zero. Do not deploy this app
+as part of normal development.

@@ -125,6 +125,7 @@ fn help() {
          audit         [--run-dir PATH] [--simulations N] [--pairs N]\n\
          publish       [--run-dir PATH]\n\
          \n\
+         Publishing advances the browser's minor version and resets its patch to zero.\n\
          Simulations is a base; wide positions automatically receive at least 3x legal actions.\n\
          Weights and optimizer checkpoint after every completed game; compact replay every 25.\n\
          Timestamped progress reports are on by default and print every 500 games.\n\
@@ -892,6 +893,14 @@ fn evaluate_command(run_dir: &Path, arguments: &[String]) -> io::Result<()> {
 }
 
 fn publish(run_dir: &Path) -> io::Result<()> {
+    publish_to(
+        run_dir,
+        Path::new("crates/agent-cherry/model/cherry.bin"),
+        Path::new("web"),
+    )
+}
+
+fn publish_to(run_dir: &Path, destination: &Path, web_directory: &Path) -> io::Result<()> {
     let (_, _, _, validated_protocol) = load_meta(&run_dir.join("state.txt"))?;
     if !validated_protocol {
         return Err(io::Error::other(
@@ -901,18 +910,20 @@ fn publish(run_dir: &Path) -> io::Result<()> {
     let source = run_dir.join("champion.bin");
     let champion = Model::load(&source)?;
     let latest = Model::load(run_dir.join("latest.bin"))?;
-    let destination = PathBuf::from("crates/agent-cherry/model/cherry.bin");
     let Some(parent) = destination.parent() else {
         return Err(io::Error::other("invalid publication path"));
     };
     fs::create_dir_all(parent)?;
-    atomic_write(&destination, &champion.to_bytes())?;
+    let publication =
+        agent_publisher::publish_model(destination, &champion.to_bytes(), web_directory)?;
     println!(
-        "Published validated Cherry champion step {} from {} to {} (latest unvalidated training step {})",
+        "Published validated Cherry champion step {} from {} to {} (latest unvalidated training step {}); web version {} -> {}",
         champion.training_steps,
         source.display(),
         destination.display(),
         latest.training_steps,
+        publication.previous_version,
+        publication.version,
     );
     println!("Rebuild WASM to load the new checkpoint.");
     Ok(())
@@ -1477,6 +1488,54 @@ mod tests {
         fs::remove_file(&path).unwrap();
         assert_eq!((games, promotions, rng), (80, 0, 9));
         assert!(!validated_protocol);
+    }
+
+    #[test]
+    fn publish_exports_the_validated_champion_and_advances_the_web_version() {
+        let root = temporary_dir("publish");
+        let run_dir = root.join("run");
+        let web_directory = root.join("web");
+        let destination = root.join("published/cherry.bin");
+        fs::create_dir_all(&run_dir).unwrap();
+        write_test_web_manifests(&web_directory);
+
+        let mut champion = Model::seeded(7);
+        champion.training_steps = 80_000;
+        champion.save(run_dir.join("champion.bin")).unwrap();
+        let mut latest = Model::seeded(7);
+        latest.training_steps = 80_100;
+        latest.save(run_dir.join("latest.bin")).unwrap();
+        fs::write(
+            run_dir.join("state.txt"),
+            "games=100\nvalidated_promotions=2\npromotion_protocol=2\nrng=9\n",
+        )
+        .unwrap();
+
+        publish_to(&run_dir, &destination, &web_directory).unwrap();
+
+        let published = Model::load(destination).unwrap();
+        assert_eq!(published.training_steps, champion.training_steps);
+        assert_eq!(published.to_bytes(), champion.to_bytes());
+        assert!(
+            fs::read_to_string(web_directory.join("package.json"))
+                .unwrap()
+                .contains("\"version\": \"0.2.0\"")
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    fn write_test_web_manifests(web_directory: &Path) {
+        fs::create_dir_all(web_directory).unwrap();
+        fs::write(
+            web_directory.join("package.json"),
+            "{\n  \"name\": \"web\",\n  \"version\": \"0.1.7\"\n}\n",
+        )
+        .unwrap();
+        fs::write(
+            web_directory.join("package-lock.json"),
+            "{\n  \"name\": \"web\",\n  \"version\": \"0.1.7\",\n  \"packages\": {\n    \"\": {\n      \"name\": \"web\",\n      \"version\": \"0.1.7\"\n    }\n  }\n}\n",
+        )
+        .unwrap();
     }
 
     fn strings(values: &[&str]) -> Vec<String> {

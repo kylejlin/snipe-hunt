@@ -10,6 +10,7 @@ members = [
     "crates/agent-fajita",
     "crates/agent-kiwi",
     "crates/agent-arena",
+    "crates/agent-publisher",
     "crates/cherry-train",
     "crates/fajita-train",
     "crates/kiwi-train",

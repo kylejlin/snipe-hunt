@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 agent-kiwi = { path = "../agent-kiwi", features = ["training"] }
+agent-publisher = { path = "../agent-publisher" }
 ctrlc = "3.4"
 snipe-core = { path = "../snipe-core" }
 snipe-prng = { path = "../snipe-prng" }

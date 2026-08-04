@@ -153,6 +153,7 @@ fn help() {
          recover       [--run-dir PATH]\n\
          publish       [--run-dir PATH]\n\
          \n\
+         Publishing advances the browser's minor version and resets its patch to zero.\n\
          A new run always starts from deterministic fresh weights. Training consumes only\n\
          legal self-play positions, MCTS visit policies, and final game outcomes.\n\
          The default 512 base and wide-root scaling exactly match Cherry's trainer.\n\
@@ -927,10 +928,14 @@ fn recover(run_dir: &Path) -> io::Result<()> {
 }
 
 fn publish(run_dir: &Path) -> io::Result<()> {
-    publish_to(run_dir, Path::new("crates/agent-fajita/model/fajita.bin"))
+    publish_to(
+        run_dir,
+        Path::new("crates/agent-fajita/model/fajita.bin"),
+        Path::new("web"),
+    )
 }
 
-fn publish_to(run_dir: &Path, destination: &Path) -> io::Result<()> {
+fn publish_to(run_dir: &Path, destination: &Path, web_directory: &Path) -> io::Result<()> {
     let state_path = run_dir.join("state.txt");
     let state = fs::read_to_string(&state_path)?;
     if !state
@@ -971,14 +976,17 @@ fn publish_to(run_dir: &Path, destination: &Path) -> io::Result<()> {
         return Err(io::Error::other("invalid publication path"));
     };
     fs::create_dir_all(parent)?;
-    atomic_write(destination, &champion.to_bytes())?;
+    let publication =
+        agent_publisher::publish_model(destination, &champion.to_bytes(), web_directory)?;
     println!(
-        "Published validated Fajita champion step {} from {} to {} (latest training step {}, promotions {})",
+        "Published validated Fajita champion step {} from {} to {} (latest training step {}, promotions {}); web version {} -> {}",
         champion.training_steps,
         source.display(),
         destination.display(),
         latest.training_steps,
         promotions,
+        publication.previous_version,
+        publication.version,
     );
     println!("Rebuild WASM to load the new checkpoint.");
     Ok(())
@@ -1394,7 +1402,9 @@ mod tests {
         let root = test_directory("publish-champion");
         let run_dir = root.join("run");
         let destination = root.join("published/fajita.bin");
+        let web_directory = root.join("web");
         fs::create_dir_all(&run_dir).unwrap();
+        write_test_web_manifests(&web_directory);
 
         let mut champion = Model::seeded(INITIAL_SEED);
         champion.training_steps = 560_000;
@@ -1408,11 +1418,16 @@ mod tests {
         )
         .unwrap();
 
-        publish_to(&run_dir, &destination).unwrap();
+        publish_to(&run_dir, &destination, &web_directory).unwrap();
 
         let published = Model::load(destination).unwrap();
         assert_eq!(published.training_steps, champion.training_steps);
         assert_eq!(published.to_bytes(), champion.to_bytes());
+        assert!(
+            fs::read_to_string(web_directory.join("package.json"))
+                .unwrap()
+                .contains("\"version\": \"0.2.0\"")
+        );
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -1430,7 +1445,12 @@ mod tests {
         )
         .unwrap();
 
-        let error = publish_to(&run_dir, &root.join("published/fajita.bin")).unwrap_err();
+        let error = publish_to(
+            &run_dir,
+            &root.join("published/fajita.bin"),
+            &root.join("web"),
+        )
+        .unwrap_err();
 
         assert!(
             error
@@ -1449,6 +1469,20 @@ mod tests {
             "fajita-train-{label}-{}-{nonce}",
             std::process::id()
         ))
+    }
+
+    fn write_test_web_manifests(web_directory: &Path) {
+        fs::create_dir_all(web_directory).unwrap();
+        fs::write(
+            web_directory.join("package.json"),
+            "{\n  \"name\": \"web\",\n  \"version\": \"0.1.7\"\n}\n",
+        )
+        .unwrap();
+        fs::write(
+            web_directory.join("package-lock.json"),
+            "{\n  \"name\": \"web\",\n  \"version\": \"0.1.7\",\n  \"packages\": {\n    \"\": {\n      \"name\": \"web\",\n      \"version\": \"0.1.7\"\n    }\n  }\n}\n",
+        )
+        .unwrap();
     }
 
     fn strings(values: &[&str]) -> Vec<String> {

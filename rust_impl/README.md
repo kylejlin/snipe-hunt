@@ -261,6 +261,11 @@ cargo run --release -p cherry-train -- publish --run-dir training/cherry-main
 npm --prefix web run build:wasm
 ```
 
+The publish command commits the browser checkpoint together with a minor web
+version increment (resetting the patch to zero) in both `web/package.json` and
+`web/package-lock.json`. The GUI reads that package version, so a successful
+model publication cannot retain the preceding release's displayed version.
+
 ## Train Fajita
 
 Fajita has a 256-unit trunk and four residual layers. Its model, optimizer,
@@ -366,7 +371,7 @@ archive on the original computer.
 
 Publishing validates the run's fresh-seed purity marker and requires at least
 one promoted champion. It always embeds `champion.bin`, never the potentially
-unvalidated `latest.bin`:
+unvalidated `latest.bin`. It also advances the web version as described above:
 
 ```sh
 cargo run --release -p fajita-train -- publish \
@@ -471,7 +476,8 @@ Move a stopped run between computers with the Kiwi-specific checksummed scripts:
 Publishing intentionally copies `latest.bin`; there is no champion artifact to
 select. Until a Kiwi checkpoint is published, the browser's Kiwi option uses
 the same deterministic fresh random initialization as a new Kiwi training run.
-It does not load Fajita's trained checkpoint or any other training state.
+It does not load Fajita's trained checkpoint or any other training state. As
+with Cherry and Fajita, publication advances the web version.
 
 ```sh
 cargo run --release -p kiwi-train -- publish \

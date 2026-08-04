@@ -1,0 +1,45 @@
+// After "26a. Alpha 3", Garlic finds -#5 in less than 1 second.
+// However, Iceberg (the specialize mate-finder) cannot find any forced mate even after 30 seconds.
+// The same goes for after "27b. Boar &3"--Garlic finds -#4 in less than 1 second,
+// while Iceberg cannot find anything even after 30 seconds.
+//
+// It's sad that the specialized mate-finder is losing to a general-purpose agent.
+// When we build the next mate-finder, I think we need a stronger suite.
+// One idea might be to scrape each existing game's last 10 or so plies,
+// and see which ones Garlic can find mates for in under 30 seconds.
+// Then, we can require the mate-finder candidate to also find mates (in those positions) in under 30 seconds.
+// That should be a necessary, but obviously not sufficient acceptance condition.
+// It's not sufficient because if the mate-finder can only do what Garlic does, then there's no point.
+// The whole point of a mate-finder is to find mates in the 10-20 ply range in under 30 seconds.
+//
+// Export Date: 2026-08-03
+
+0b. =Rabbit; Horse Ram Beta; Rat Ox Tiger Dragon Horse Monkey Rooster Boar Fish Elephant Squid Frog; Ram
+0a. =Dog; Dog Elephant Alpha; Rat Ox Tiger Rabbit Snake Snake Monkey Rooster Boar Fish Squid Frog; Dragon
+1b. Dragon 4, Monkey 4x
+2a. Rabbit 3, Frog 3x
+3b. Dragon &1
+4a. Alpha 2
+5b. Squid 4, Monkey 3
+6a. Fish 3, Ox 3x
+7b. Horse 4, Squid 3
+8a. Tiger 3, Rat 3x
+9b. Rabbit &3
+10a. Boar *1, Snake *1x
+11b. Fish 4, Ox 4
+12a. Rat *2, Squid *1
+13b. Fish 3, Rabbit 2
+14a. Alpha *1
+15b. Ox 3, Fish 2x
+16a. Rabbit &2
+17b. Fish 1, Boar 4
+18a. Alpha 2
+19b. Snake &3
+20a. Squid 2, Rabbit *1x
+21b. Snake 2, Elephant 4
+22a. Snake &2
+23b. Tiger 4x, Snake 1
+24a. Boar &4
+25b. Elephant &2
+26a. Alpha 3
+27b. Boar &3

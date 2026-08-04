@@ -264,7 +264,10 @@ npm --prefix web run build:wasm
 The publish command commits the browser checkpoint together with a minor web
 version increment (resetting the patch to zero) in both `web/package.json` and
 `web/package-lock.json`. The GUI reads that package version, so a successful
-model publication cannot retain the preceding release's displayed version.
+model publication cannot retain the preceding release's displayed version. By
+default, publication first requires the entire Git worktree to be clean and
+aborts before inspecting the training run when it is not. For an intentional
+exception, pass `--allow-when-dirty` to the `publish` command.
 
 ## Train Fajita
 

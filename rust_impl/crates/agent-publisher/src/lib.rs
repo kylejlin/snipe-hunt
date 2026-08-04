@@ -3,6 +3,7 @@ use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
     path::{Path, PathBuf},
+    process::Command,
     sync::atomic::{AtomicU64, Ordering},
 };
 
@@ -12,6 +13,39 @@ static NEXT_TEMPORARY_FILE: AtomicU64 = AtomicU64::new(0);
 pub struct Publication {
     pub previous_version: String,
     pub version: String,
+}
+
+/// Rejects publication from a dirty Git worktree unless the caller explicitly opts out.
+pub fn require_clean_worktree(
+    repository_directory: &Path,
+    allow_when_dirty: bool,
+) -> io::Result<()> {
+    if allow_when_dirty {
+        return Ok(());
+    }
+
+    let output = Command::new("git")
+        .args(["status", "--porcelain=v1", "--untracked-files=normal"])
+        .current_dir(repository_directory)
+        .output()
+        .map_err(|error| io::Error::other(format!("failed to inspect Git worktree: {error}")))?;
+    if !output.status.success() {
+        let detail = String::from_utf8_lossy(&output.stderr);
+        return Err(io::Error::other(format!(
+            "failed to inspect Git worktree{}",
+            if detail.trim().is_empty() {
+                String::new()
+            } else {
+                format!(": {}", detail.trim())
+            }
+        )));
+    }
+    if !output.stdout.is_empty() {
+        return Err(io::Error::other(
+            "refusing to publish from a dirty Git worktree; commit or stash the changes, or pass --allow-when-dirty",
+        ));
+    }
+    Ok(())
 }
 
 /// Publishes an embedded browser model and advances the version displayed by the web app.
@@ -329,6 +363,50 @@ mod tests {
         assert_eq!(restored_package.as_bytes(), original_package);
         assert_eq!(restored_lock.as_bytes(), original_lock);
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn dirty_worktrees_are_rejected_unless_explicitly_allowed() {
+        let root = test_directory("dirty-worktree");
+        fs::create_dir_all(&root).unwrap();
+        git(&root, &["init", "--quiet"]);
+        fs::write(root.join("tracked.txt"), "clean\n").unwrap();
+        git(&root, &["add", "tracked.txt"]);
+        git(
+            &root,
+            &[
+                "-c",
+                "user.name=Agent publisher test",
+                "-c",
+                "user.email=agent-publisher@example.invalid",
+                "commit",
+                "--quiet",
+                "-m",
+                "Initial",
+            ],
+        );
+        require_clean_worktree(&root, false).unwrap();
+
+        fs::write(root.join("tracked.txt"), "dirty\n").unwrap();
+        let error = require_clean_worktree(&root, false).unwrap_err();
+        assert!(error.to_string().contains("dirty Git worktree"));
+        require_clean_worktree(&root, true).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn override_skips_git_inspection_entirely() {
+        let missing = test_directory("missing");
+        require_clean_worktree(&missing, true).unwrap();
+    }
+
+    fn git(directory: &Path, arguments: &[&str]) {
+        let status = Command::new("git")
+            .args(arguments)
+            .current_dir(directory)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {arguments:?} failed");
     }
 
     fn test_directory(label: &str) -> PathBuf {

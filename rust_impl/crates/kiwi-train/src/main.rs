@@ -87,7 +87,12 @@ fn run() -> io::Result<bool> {
             Ok(true)
         }
         "publish" => {
-            publish(&run_dir)?;
+            publish(
+                &run_dir,
+                arguments
+                    .iter()
+                    .any(|argument| argument == "--allow-when-dirty"),
+            )?;
             Ok(true)
         }
         "help" | "--help" | "-h" => {
@@ -151,8 +156,9 @@ fn help() {
          status        [--run-dir PATH]\n\
          evaluate      [--run-dir PATH] --against CHECKPOINT [--pairs N]\n\
                        [--simulations N]\n\
-         publish       [--run-dir PATH]\n\
+         publish       [--run-dir PATH] [--allow-when-dirty]\n\
          \n\
+         Publishing requires a clean Git worktree unless --allow-when-dirty is present.\n\
          Publishing advances the browser's minor version and resets its patch to zero.\n\
          A new run always starts from deterministic fresh weights. Training consumes only\n\
          legal self-play positions, MCTS visit policies, and final game outcomes.\n\
@@ -789,7 +795,8 @@ fn status(run_dir: &Path) -> io::Result<()> {
     Ok(())
 }
 
-fn publish(run_dir: &Path) -> io::Result<()> {
+fn publish(run_dir: &Path, allow_when_dirty: bool) -> io::Result<()> {
+    agent_publisher::require_clean_worktree(Path::new("."), allow_when_dirty)?;
     publish_to(
         run_dir,
         Path::new("crates/agent-kiwi/model/kiwi.bin"),

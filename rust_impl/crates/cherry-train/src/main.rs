@@ -72,7 +72,12 @@ fn run() -> io::Result<()> {
                 progress_reports,
             )
         }
-        "publish" => publish(&run_dir),
+        "publish" => publish(
+            &run_dir,
+            arguments
+                .iter()
+                .any(|argument| argument == "--allow-when-dirty"),
+        ),
         "status" => status(&run_dir),
         "evaluate" => evaluate_command(&run_dir, &arguments),
         "audit" => audit_command(&run_dir, &arguments),
@@ -123,8 +128,9 @@ fn help() {
          status        [--run-dir PATH]\n\
          evaluate      [--run-dir PATH] [--simulations N]\n\
          audit         [--run-dir PATH] [--simulations N] [--pairs N]\n\
-         publish       [--run-dir PATH]\n\
+         publish       [--run-dir PATH] [--allow-when-dirty]\n\
          \n\
+         Publishing requires a clean Git worktree unless --allow-when-dirty is present.\n\
          Publishing advances the browser's minor version and resets its patch to zero.\n\
          Simulations is a base; wide positions automatically receive at least 3x legal actions.\n\
          Weights and optimizer checkpoint after every completed game; compact replay every 25.\n\
@@ -892,7 +898,8 @@ fn evaluate_command(run_dir: &Path, arguments: &[String]) -> io::Result<()> {
     Ok(())
 }
 
-fn publish(run_dir: &Path) -> io::Result<()> {
+fn publish(run_dir: &Path, allow_when_dirty: bool) -> io::Result<()> {
+    agent_publisher::require_clean_worktree(Path::new("."), allow_when_dirty)?;
     publish_to(
         run_dir,
         Path::new("crates/agent-cherry/model/cherry.bin"),

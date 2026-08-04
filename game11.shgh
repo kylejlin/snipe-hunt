@@ -1,0 +1,41 @@
+// Beta: Computer (Fajita) (10 seconds of thinking time per ply)
+// Alpha: Human
+// Export Date: 2026-08-03
+// https://kylejlin.github.io/snipe-hunt/ (v0.82.0)
+//
+// The human made a blunder on "24a. Fish &3".
+// He thought that the Ox would be trapped (due to the no-empty-ranks rule).
+// He forgot about the fact that in dropping the Fish, he put a second animal (the Fish) on that rank,
+// which meant Ox could then move without emptying the rank.
+
+0b. =Rabbit; Horse Ram Beta; Rat Ox Tiger Dragon Horse Monkey Rooster Boar Fish Elephant Squid Frog; Ram
+0a. =Dog; Dog Elephant Alpha; Rat Ox Tiger Rabbit Snake Snake Monkey Rooster Boar Fish Squid Frog; Dragon
+1b. Dragon 4, Monkey 4x
+2a. Rabbit 3, Frog 3x
+3b. Dragon &1
+4a. Alpha 2
+5b. Squid 4, Monkey 3
+6a. Fish 3, Ox 3x
+7b. Horse 4, Squid 3
+8a. Tiger 3, Rat 3x
+9b. Rabbit &3
+10a. Boar *1, Snake *1x
+11b. Fish 4, Ox 4
+12a. Rat *2, Squid *1
+13b. Fish 3, Rabbit 2
+14a. Alpha *1
+15b. Ox 3, Fish 2x
+16a. Rabbit &2
+17b. Fish 1, Boar 4
+18a. Alpha 2
+19b. Snake &3
+20a. Squid 2, Rabbit *1x
+21b. Snake 2, Elephant 4
+22a. Snake &2
+23b. Tiger 4x, Snake 1
+24a. Fish &3
+25b. Ox 2, Rat 4
+26a. Squid 3, Fish 4
+27b. Elephant &2
+28a. Alpha 3
+29b. Tiger 3, Rat 3x-#0

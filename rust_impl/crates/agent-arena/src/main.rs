@@ -11,8 +11,10 @@ use snipe_prng::initial_state;
 use std::{
     collections::BTreeMap,
     env, fs,
+    io::{self, Write},
     path::{Path, PathBuf},
     process::ExitCode,
+    sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -23,11 +25,10 @@ const DEFAULT_PAIRS: u64 = 10;
 const DEFAULT_MILLISECONDS: u64 = 10_000;
 const DEFAULT_MAX_PLIES: u32 = 256;
 const DEFAULT_OUTPUT_ROOT: &str = "agent-arena-results";
-const DEFAULT_AGENTS: [AgentKind; 5] = [
-    AgentKind::Avocado,
+const DEFAULT_AGENTS: [AgentKind; 4] = [
     AgentKind::Cherry,
-    AgentKind::Fajita,
     AgentKind::Garlic,
+    AgentKind::Fajita,
     AgentKind::Kiwi,
 ];
 
@@ -155,7 +156,7 @@ struct Config {
     time_per_ply: Duration,
     seed_start: u64,
     max_plies: u32,
-    save_games: SaveMode,
+    save_results: SaveMode,
     output_root: PathBuf,
     matchups: Vec<Matchup>,
 }
@@ -174,7 +175,7 @@ impl SaveMode {
             "per-ply" | "per_ply" | "perply" => Ok(Self::PerPly),
             "per-game" | "per_game" | "pergame" => Ok(Self::PerGame),
             _ => Err(format!(
-                "invalid value `{value}` for `--save-games`; expected off, per-ply, or per-game"
+                "invalid value `{value}` for `--save-results`; expected off, per-ply, or per-game"
             )),
         }
     }
@@ -216,6 +217,45 @@ struct Standing {
     wins: u64,
     losses: u64,
     draws: u64,
+}
+
+struct TournamentLogger {
+    file: Mutex<Option<fs::File>>,
+}
+
+impl TournamentLogger {
+    fn create(tournament_directory: Option<&Path>) -> Result<Arc<Self>, String> {
+        let file = tournament_directory
+            .map(|directory| {
+                let path = directory.join("log.txt");
+                fs::File::create(&path).map_err(|error| {
+                    format!("cannot create tournament log {}: {error}", path.display())
+                })
+            })
+            .transpose()?;
+        Ok(Arc::new(Self {
+            file: Mutex::new(file),
+        }))
+    }
+
+    fn line(&self, message: impl AsRef<str>) -> Result<(), String> {
+        let message = message.as_ref();
+        let mut file = self
+            .file
+            .lock()
+            .map_err(|_| "tournament log lock is poisoned".to_owned())?;
+        if let Some(file) = file.as_mut() {
+            writeln!(file, "{message}")
+                .and_then(|()| file.flush())
+                .map_err(|error| format!("cannot write tournament log: {error}"))?;
+        }
+
+        let stdout = io::stdout();
+        let mut stdout = stdout.lock();
+        writeln!(stdout, "{message}")
+            .and_then(|()| stdout.flush())
+            .map_err(|error| format!("cannot write tournament output: {error}"))
+    }
 }
 
 impl Standing {
@@ -265,7 +305,7 @@ where
         time_per_ply: Duration::from_millis(DEFAULT_MILLISECONDS),
         seed_start: 0,
         max_plies: DEFAULT_MAX_PLIES,
-        save_games: SaveMode::PerPly,
+        save_results: SaveMode::PerPly,
         output_root: PathBuf::from(DEFAULT_OUTPUT_ROOT),
         matchups: Vec::new(),
     };
@@ -283,7 +323,7 @@ where
             "--milliseconds" => config.time_per_ply = Duration::from_millis(parse(&flag, &value)?),
             "--seed-start" => config.seed_start = parse(&flag, &value)?,
             "--max-plies" => config.max_plies = parse(&flag, &value)?,
-            "--save-games" => config.save_games = SaveMode::parse(&value)?,
+            "--save-results" => config.save_results = SaveMode::parse(&value)?,
             "--output-root" => config.output_root = PathBuf::from(value),
             "--matchup" => {
                 let matchup = parse_matchup(&value)?;
@@ -353,37 +393,38 @@ fn parse<T: std::str::FromStr>(flag: &str, value: &str) -> Result<T, String> {
 fn usage() -> &'static str {
     "usage: agent-arena [--pairs 10] [--milliseconds 10000] \
      [--seed-start 0] [--max-plies 256] \
-     [--save-games off|per-ply|per-game] [--output-root agent-arena-results] \
+     [--save-results off|per-ply|per-game] [--output-root agent-arena-results] \
      [--matchup AGENT-vs-AGENT]...\n\
      agents: avocado, cherry, fajita, garlic, iceberg, kiwi\n\
      omit --matchup to run the default round robin; repeat it to select multiple matchups"
 }
 
 fn run(config: Config) -> Result<(), String> {
+    let tournament_directory = create_tournament_directory(&config)?;
+    let logger = TournamentLogger::create(tournament_directory.as_deref())?;
     let matchup_labels = config
         .matchups
         .iter()
         .map(|(first, second)| format!("{}–{}", first.label(), second.label()))
         .collect::<Vec<_>>()
         .join(", ");
-    println!(
+    logger.line(format!(
         "matchups: {matchup_labels}; {} paired seeds; {:.3}s/ply",
         config.pairs,
         config.time_per_ply.as_secs_f64(),
-    );
-    println!(
+    ))?;
+    logger.line(format!(
         "seeds: {} through {}; each matchup swaps sides on every seed",
         config.seed_start,
         config.seed_start.wrapping_add(config.pairs - 1),
-    );
-    let tournament_directory = create_tournament_directory(&config)?;
+    ))?;
     match &tournament_directory {
-        Some(path) => println!(
-            "game saving: {}; tournament directory: {}",
-            config.save_games.label(),
+        Some(path) => logger.line(format!(
+            "result saving: {}; tournament directory: {}",
+            config.save_results.label(),
             path.display()
-        ),
-        None => println!("game saving: off"),
+        ))?,
+        None => logger.line("result saving: off")?,
     }
     let started = Instant::now();
     let mut handles = Vec::with_capacity(config.matchups.len());
@@ -393,8 +434,15 @@ fn run(config: Config) -> Result<(), String> {
             .map(|directory| create_matchup_directory(directory, first, second))
             .transpose()?;
         let worker_config = config.clone();
+        let worker_logger = Arc::clone(&logger);
         handles.push(thread::spawn(move || {
-            run_matchup(worker_config, first, second, matchup_directory)
+            run_matchup(
+                worker_config,
+                first,
+                second,
+                matchup_directory,
+                worker_logger,
+            )
         }));
     }
     let mut results = Vec::with_capacity(config.matchups.len());
@@ -405,7 +453,7 @@ fn run(config: Config) -> Result<(), String> {
         results.push(result);
     }
     results.sort_by_key(|result| (result.first, result.second));
-    print_summary(&results, started.elapsed());
+    print_summary(&results, started.elapsed(), &logger)?;
     Ok(())
 }
 
@@ -414,6 +462,7 @@ fn run_matchup(
     first: AgentKind,
     second: AgentKind,
     matchup_directory: Option<PathBuf>,
+    logger: Arc<TournamentLogger>,
 ) -> Result<MatchupResult, String> {
     let started = Instant::now();
     let mut result = MatchupResult {
@@ -448,7 +497,7 @@ fn run_matchup(
                 beta,
                 config.time_per_ply,
                 config.max_plies,
-                config.save_games,
+                config.save_results,
                 history_path,
             )
             .map_err(|error| {
@@ -463,33 +512,67 @@ fn run_matchup(
                 Outcome::Winner(_) => result.second_wins += 1,
                 Outcome::Draw => result.draws += 1,
             }
-            println!(
-                "{}–{} seed {seed:>4}, {} as {first_side:?}: {:?} in {} plies \
-                 (ticks alpha={}, beta={}, game={:.1}s)",
-                first.label(),
-                second.label(),
-                first.label(),
-                report.outcome,
-                report.plies,
-                report.alpha_ticks,
-                report.beta_ticks,
-                game_started.elapsed().as_secs_f64(),
-            );
+            logger.line(format_game_result(
+                first,
+                second,
+                seed,
+                first_side,
+                &report,
+                game_started.elapsed(),
+            ))?;
         }
     }
     result.elapsed = started.elapsed();
-    println!(
-        "{}–{} result: {}–{}–{} ({} wins, {} wins, draws) in {:.1}s",
+    Ok(result)
+}
+
+fn format_game_result(
+    first: AgentKind,
+    second: AgentKind,
+    seed: u64,
+    first_side: Player,
+    report: &GameReport,
+    elapsed: Duration,
+) -> String {
+    let (alpha, beta) = if first_side == Player::Alpha {
+        (first, second)
+    } else {
+        (second, first)
+    };
+    format!(
+        "{}–{} seed {seed:>4}, {} as {first_side:?} -- {} in {} plies \
+         (ticks alpha={}, beta={}, game={:.1}s)",
         first.label(),
         second.label(),
+        first.label(),
+        format_outcome(report.outcome, alpha, beta),
+        report.plies,
+        report.alpha_ticks,
+        report.beta_ticks,
+        elapsed.as_secs_f64(),
+    )
+}
+
+fn format_outcome(outcome: Outcome, alpha: AgentKind, beta: AgentKind) -> String {
+    match outcome {
+        Outcome::Winner(Player::Alpha) => format!("Winner: {}(Alpha)", alpha.label()),
+        Outcome::Winner(Player::Beta) => format!("Winner: {}(Beta)", beta.label()),
+        Outcome::Draw => "Draw".to_owned(),
+    }
+}
+
+fn format_matchup_result(result: &MatchupResult) -> String {
+    format!(
+        "{}–{} result: {}–{}–{} ({} wins, {} wins, draws) in {:.1}s",
+        result.first.label(),
+        result.second.label(),
         result.first_wins,
         result.second_wins,
         result.draws,
-        first.label(),
-        second.label(),
+        result.first.label(),
+        result.second.label(),
         result.elapsed.as_secs_f64(),
-    );
-    Ok(result)
+    )
 }
 
 fn play_game(
@@ -669,11 +752,10 @@ impl GameHistory {
         let path = self
             .path
             .as_ref()
-            .ok_or_else(|| "history path is missing while game saving is enabled".to_owned())?;
-        let recorder = self
-            .recorder
-            .as_ref()
-            .ok_or_else(|| "history recorder is missing while game saving is enabled".to_owned())?;
+            .ok_or_else(|| "history path is missing while result saving is enabled".to_owned())?;
+        let recorder = self.recorder.as_ref().ok_or_else(|| {
+            "history recorder is missing while result saving is enabled".to_owned()
+        })?;
         let temporary = path.with_extension("shgh.tmp");
         fs::write(&temporary, recorder.render(incomplete))
             .map_err(|error| format!("cannot write {}: {error}", temporary.display()))?;
@@ -688,7 +770,7 @@ impl GameHistory {
 }
 
 fn create_tournament_directory(config: &Config) -> Result<Option<PathBuf>, String> {
-    if config.save_games == SaveMode::Off {
+    if config.save_results == SaveMode::Off {
         return Ok(None);
     }
     fs::create_dir_all(&config.output_root).map_err(|error| {
@@ -760,7 +842,11 @@ const fn player_slug(player: Player) -> &'static str {
     }
 }
 
-fn print_summary(results: &[MatchupResult], elapsed: Duration) {
+fn print_summary(
+    results: &[MatchupResult],
+    elapsed: Duration,
+    logger: &TournamentLogger,
+) -> Result<(), String> {
     let mut standings = BTreeMap::new();
     for result in results {
         standings.entry(result.first).or_insert(Standing::default());
@@ -790,11 +876,15 @@ fn print_summary(results: &[MatchupResult], elapsed: Duration) {
             .then_with(|| left_agent.cmp(right_agent))
     });
 
-    println!();
-    println!("FINAL STANDINGS");
-    println!("rank  agent       W   L   D   points   score");
+    logger.line("")?;
+    for result in results {
+        logger.line(format_matchup_result(result))?;
+    }
+    logger.line("")?;
+    logger.line("FINAL STANDINGS")?;
+    logger.line("rank  agent       W   L   D   points   score")?;
     for (index, (agent, standing)) in ranked.iter().enumerate() {
-        println!(
+        logger.line(format!(
             "{:>4}  {:<9} {:>3} {:>3} {:>3}   {:>5.1}   {:>5.1}%",
             index + 1,
             agent.label(),
@@ -803,9 +893,9 @@ fn print_summary(results: &[MatchupResult], elapsed: Duration) {
             standing.draws,
             standing.points(),
             standing.percentage(),
-        );
+        ))?;
     }
-    println!("elapsed: {:.1}s", elapsed.as_secs_f64());
+    logger.line(format!("elapsed: {:.1}s", elapsed.as_secs_f64()))
 }
 
 #[cfg(test)]
@@ -840,13 +930,55 @@ mod tests {
         let config = parse_args_from(Vec::<String>::new())
             .unwrap()
             .expect("default arguments should run the arena");
-        assert_eq!(config.matchups, default_matchups());
-        assert_eq!(config.matchups.len(), 10);
-        assert!(
-            config.matchups.iter().all(
-                |(first, second)| *first != AgentKind::Iceberg && *second != AgentKind::Iceberg
-            )
+        assert_eq!(
+            DEFAULT_AGENTS,
+            [
+                AgentKind::Cherry,
+                AgentKind::Garlic,
+                AgentKind::Fajita,
+                AgentKind::Kiwi,
+            ]
         );
+        assert_eq!(config.matchups, default_matchups());
+        assert_eq!(config.matchups.len(), 6);
+        assert!(config.matchups.iter().all(|(first, second)| {
+            !matches!(first, AgentKind::Avocado | AgentKind::Iceberg)
+                && !matches!(second, AgentKind::Avocado | AgentKind::Iceberg)
+        }));
+    }
+
+    #[test]
+    fn game_result_names_the_winning_agent_and_side() {
+        let report = GameReport {
+            outcome: Outcome::Winner(Player::Beta),
+            plies: 21,
+            alpha_ticks: 811_950_793,
+            beta_ticks: 16_229_932,
+        };
+        assert_eq!(
+            format_game_result(
+                AgentKind::Avocado,
+                AgentKind::Fajita,
+                9,
+                Player::Alpha,
+                &report,
+                Duration::from_millis(213_100),
+            ),
+            "Avocado–Fajita seed    9, Avocado as Alpha -- Winner: Fajita(Beta) in 21 plies (ticks alpha=811950793, beta=16229932, game=213.1s)"
+        );
+    }
+
+    #[test]
+    fn renamed_save_results_flag_is_accepted() {
+        let config = parse_args_from(["--save-results", "off"])
+            .unwrap()
+            .expect("save-results should be accepted");
+        assert_eq!(config.save_results, SaveMode::Off);
+
+        let error = parse_args_from(["--save-games", "off"])
+            .err()
+            .expect("the old save-games spelling should be rejected");
+        assert!(error.contains("unknown option `--save-games`"));
     }
 
     #[test]

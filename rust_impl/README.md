@@ -60,18 +60,18 @@ npm run build
 
 ## Run the browser-agent arena
 
-From `rust_impl`, run the published Avocado, Cherry, Fajita, Garlic, and Kiwi agents
-in the default round robin:
+From `rust_impl`, run the published Cherry, Garlic, Fajita, and Kiwi agents in
+the default round robin:
 
 ```sh
 cargo run --release -p agent-arena -- \
   --pairs 10 \
   --milliseconds 10000 \
-  --save-games per-ply
+  --save-results per-ply
 ```
 
-Each of the ten matchups runs concurrently. A matchup plays every seed twice,
-with the agents swapping Alpha and Beta, so the command above plays 200 games.
+Each of the six matchups runs concurrently. A matchup plays every seed twice,
+with the agents swapping Alpha and Beta, so the command above plays 120 games.
 The final table awards one point per win and half a point per draw.
 
 To run only selected matchups, pass `--matchup AGENT-vs-AGENT` once per matchup.
@@ -84,26 +84,26 @@ cargo run --release -p agent-arena -- \
   --matchup avocado-vs-garlic \
   --pairs 10 \
   --milliseconds 10000 \
-  --save-games per-ply
+  --save-results per-ply
 ```
 
-Omitting `--matchup` runs the default five-agent round robin. Iceberg is excluded
-because it is a mate-finding specialist with weak opening play, but it remains
-available through an explicit `--matchup`. Repeat the flag to include multiple
-selected matchups.
+Omitting `--matchup` runs the default four-agent round robin. Avocado and Iceberg
+remain available through an explicit `--matchup`. Repeat the flag to include
+multiple selected matchups.
 
-`--save-games` has three modes:
+`--save-results` controls all tournament file output and has three modes:
 
 - `per-ply` is the default. The arena creates the game file before the first
   ply, prefixes it with `// INCOMPLETE`, and atomically replaces it after every
   ply. Normal game completion removes the marker. If the process is interrupted,
   the marker and the last fully recorded ply remain.
 - `per-game` writes one complete `.shgh` file after each game finishes.
-- `off` does not create history directories or files.
+- `off` does not create a tournament directory or write any files.
 
-Saved histories default to `agent-arena-results/`. Every invocation creates a
-new `tournament-*` directory with one subdirectory for each selected pairing.
-Use `--output-root PATH` to select another parent directory.
+Saved results default to `agent-arena-results/`. When result saving is enabled,
+the arena creates a new `tournament-*` directory containing `log.txt` and one
+subdirectory for each selected pairing. Terminal output is duplicated to the
+log. Use `--output-root PATH` to select another parent directory.
 `--seed-start` changes the first paired seed, and `--max-plies` changes the draw
 limit.
 

@@ -1,0 +1,30 @@
+// Beta: Garlic (10 seconds per ply)
+// Alpha: Fajita (10 seconds per ply)
+// Seed: 1
+
+0b. =Snake; Tiger Dog Beta; Rat Ox Tiger Dragon Snake Horse Monkey Monkey Rooster Boar Elephant Squid; Horse
+0a. =Frog; Ox Rabbit Alpha; Rat Rabbit Dragon Ram Ram Rooster Dog Boar Fish Fish Squid Frog; Elephant
+1b. Boar 4, Tiger 5x
+2a. Rat 3, Elephant 4
+3b. Dog 5, Tiger 4x
+4a. Squid 3, Dog 3
+5b. Horse &1
+6a. Dog 4, Squid 4x
+7b. Monkey &1
+8a. Dog &5
+9b. Ox &1
+10a. Tiger &6
+11b. Horse &1
+12a. Fish 3, Boar 3
+13b. Tiger &6
+14a. Rat 4, Boar 4
+15b. Boar &4
+16a. Boar 5, Dog 6
+17b. Beta 5
+18a. Boar 6x, Rat 5
+19b. Dragon &1
+20a. Tiger &5
+21b. Beta 4
+22a. Rabbit 3, Fish 3
+23b. Dog 4, Boar *5x
+24a. Fish 4x+#0

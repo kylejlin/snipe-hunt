@@ -1,0 +1,110 @@
+// Beta: Fajita (10 seconds per ply)
+// Alpha: Kiwi (10 seconds per ply)
+// Seed: 5
+
+0b. =Tiger; Dragon Fish Beta; Rabbit Horse Horse Ram Monkey Rooster Dog Boar Boar Elephant Squid Squid; Rat
+0a. =Rat; Rooster Fish Alpha; Ox Ox Tiger Rabbit Dragon Snake Snake Ram Monkey Elephant Frog Frog; Dog
+1b. Dog 4, Boar 4
+2a. Dragon 3, Snake 3
+3b. Rooster 4, Elephant 4x
+4a. Frog 3, Rabbit 3x
+5b. Boar &3
+6a. Monkey 3, Elephant 3x
+7b. Tiger &1
+8a. Frog &6
+9b. Dog &2
+10a. Snake 3, Rooster 2x
+11b. Rat &3
+12a. Ox &5
+13b. Ram *6, Fish 5x
+14a. Boar &4
+15b. Rat 2, Dragon 5
+16a. Dragon &6
+17b. Boar &3
+18a. Snake 4x, Fish 2
+19b. Fish 4, Boar 2
+20a. Alpha 2
+21b. Rabbit &5
+22a. Monkey &5
+23b. Rabbit 4x, Ram 5x
+24a. Rabbit &4
+25b. Dragon &2
+26a. Rabbit 5, Fish 3
+27b. Beta 5
+28a. Fish 4, Rooster 3
+29b. Snake &3
+30a. Fish 5, Rooster 4
+31b. Boar *3x, Ram 4
+32a. Snake &4
+33b. Beta 4
+34a. Boar &2
+35b. Ram 3, Rabbit 3
+36a. Alpha 3
+37b. Snake &4
+38a. Boar 3, Rabbit 6x
+39b. Fish &4
+40a. Alpha 4
+41b. Beta 3
+42a. Alpha *3
+43b. Snake 3, Rabbit *4x
+44a. Ram &4
+45b. Fish &4
+46a. Dog &3
+47b. Rabbit 3, Ram 2
+48a. Frog &5
+49b. Snake &3
+50a. Ox &6
+51b. Beta 2
+52a. Alpha *2
+53b. Snake 2, Fish 3x
+54a. Rat &4
+55b. Horse &6
+56a. Elephant &2
+57b. Beta *3
+58a. Elephant 3, Fish 6
+59b. Beta 2
+60a. Tiger &2
+61b. Rooster &4
+62a. Dragon &2
+63b. Dog &4
+64a. Rat *3, Ram *3x
+65b. Elephant &4
+66a. Dog &1
+67b. Elephant 3, Snake *3x
+68a. Rat &3
+69b. Elephant &4
+70a. Frog &2
+71b. Ram &3
+72a. Fish &2
+73b. Beta *3
+74a. Alpha 3
+75b. Beta *4
+76a. Alpha 4
+77b. Rat 1, Ram 1
+78a. Alpha 5
+79b. Dog 3, Elephant 3x
+80a. Frog 3, Rabbit *5
+81b. Dog &4
+82a. Dragon 3, Frog 4
+83b. Beta 3
+84a. Frog 6x, Rabbit *4
+85b. Monkey &2
+86a. Horse &3
+87b. Beta 2
+88a. Tiger 3, Rabbit *3x
+89b. Rat *2, Dragon 1
+90a. Dragon &3
+91b. Monkey 1x, Rat 1
+92a. Tiger &1
+93b. Ram &3
+94a. Rabbit *2, Dragon 4x
+95b. Tiger &6
+96a. Frog &1
+97b. Beta *3
+98a. Horse &3
+99b. Dragon &4
+100a. Rooster &3
+101b. Squid &5
+102a. Tiger 2, Rabbit 3
+103b. Tiger 5, Ram 2
+104a. Tiger 3x+#0

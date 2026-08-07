@@ -1,0 +1,34 @@
+// Beta: Garlic (10 seconds per ply)
+// Alpha: Kiwi (10 seconds per ply)
+// Seed: 4
+
+0b. =Fish; Rat Rabbit Beta; Rat Tiger Dragon Snake Horse Monkey Monkey Rooster Dog Boar Elephant Squid; Horse
+0a. =Ram; Ox Rabbit Alpha; Ox Tiger Dragon Snake Ram Rooster Dog Boar Fish Elephant Frog Frog; Squid
+1b. Dragon 4, Elephant 4
+2a. Ox 3, Boar 3
+3b. Boar 4, Rabbit 5
+4a. Tiger 3, Dog 3x
+5b. Squid 4, Rat 5x
+6a. Ram 3, Dog 4
+7b. Fish &6
+8a. Dog 5, Dragon 3
+9b. Fish 5, Squid *5x
+10a. Boar &4
+11b. Rat &5
+12a. Boar 5, Frog 3
+13b. Monkey &1
+14a. Boar 6, Frog 4
+15b. Tiger &6
+16a. Ox &5
+17b. Rat 4x, Tiger 5
+18a. Ox 6, Snake 3
+19b. Beta 5
+20a. Ram 4, Elephant 3
+21b. Tiger 4, Squid 4x
+22a. Snake 4, Elephant 4
+23b. Rabbit &6
+24a. Snake 5, Rabbit 2x
+25b. Beta *6
+26a. Fish &6
+27b. Tiger &2
+28a. Snake 6x+#0
